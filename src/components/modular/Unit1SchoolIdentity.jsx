@@ -1164,11 +1164,22 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     <option value="Teacher I">Teacher I</option>
                                                     <option value="Teacher II">Teacher II</option>
                                                     <option value="Teacher III">Teacher III</option>
+                                                    <option value="Teacher IV">Teacher IV</option>
+                                                    <option value="Teacher V">Teacher V</option>
+                                                    <option value="Teacher VI">Teacher VI</option>
+                                                    <option value="Teacher VII">Teacher VII</option>
                                                     <option value="Master Teacher I">Master Teacher I</option>
                                                     <option value="Master Teacher II">Master Teacher II</option>
+                                                    <option value="Master Teacher III">Master Teacher III</option>
+                                                    <option value="Master Teacher IV">Master Teacher IV</option>
+                                                    <option value="Master Teacher V">Master Teacher V</option>
+                                                    <option value="Master Teacher VI">Master Teacher VI</option>
                                                     <option value="Head Teacher I">Head Teacher I</option>
                                                     <option value="Head Teacher II">Head Teacher II</option>
                                                     <option value="Head Teacher III">Head Teacher III</option>
+                                                    <option value="Head Teacher IV">Head Teacher IV</option>
+                                                    <option value="Head Teacher V">Head Teacher V</option>
+                                                    <option value="Head Teacher VI">Head Teacher VI</option>
                                                     <option value="School Principal I">School Principal I</option>
                                                     <option value="School Principal II">School Principal II</option>
                                                     <option value="School Principal III">School Principal III</option>
@@ -1186,9 +1197,12 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     <div className="grid grid-cols-3 gap-3">
                                                         <select name="head_hired_month" value={formData.head_hired_month} onChange={handleChange} className={chunkySelect + " !text-sm text-left px-4"}>
                                                             <option value="" disabled hidden>Month</option>
-                                                            {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map(m => (
-                                                                <option key={m} value={m}>{m}</option>
-                                                            ))}
+                                                            {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, idx) => {
+                                                                const currentYear = new Date().getFullYear();
+                                                                const currentMonth = new Date().getMonth(); // 0-indexed
+                                                                const isFuture = formData.head_hired_year === currentYear.toString() && idx > currentMonth;
+                                                                return <option key={m} value={m} disabled={isFuture}>{m}</option>;
+                                                            })}
                                                         </select>
                                                         <select name="head_hired_day" value={formData.head_hired_day} onChange={handleChange} className={chunkySelect + " !text-sm text-left px-4"}>
                                                             <option value="" disabled hidden>Day</option>
@@ -1241,9 +1255,12 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     className={chunkySelect}
                                                 >
                                                     <option value="" disabled hidden style={{color: '#999'}}>Month...</option>
-                                                    {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
-                                                        <option key={m} value={m}>{m}</option>
-                                                    ))}
+                                                    {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((m, idx) => {
+                                                        const currentYear = new Date().getFullYear();
+                                                        const currentMonth = new Date().getMonth();
+                                                        const isFuture = formData.established_year === currentYear.toString() && idx > currentMonth;
+                                                        return <option key={m} value={m} disabled={isFuture}>{m}</option>;
+                                                    })}
                                                 </select>
                                                 <select
                                                     name="established_year"
@@ -1460,16 +1477,18 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 <div className="fixed bottom-0 left-0 w-full p-6 bg-white/80 backdrop-blur-xl border-t border-gray-100 z-50">
                     <div className="max-w-md mx-auto flex gap-3">
                         {currentStep === 0 ? (
-                            <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all">
+                            <button onClick={() => setShowDraftModal(true)} className="flex-none h-16 px-6 rounded-3xl bg-gray-100 flex items-center justify-center gap-2 text-gray-500 hover:text-gray-900 active:scale-95 transition-all">
                                 <FiSave className="w-6 h-6" />
+                                <span className="text-sm font-bold">Save Draft</span>
                             </button>
                         ) : (
                             <>
                                 <button onClick={handleBack} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-900 active:scale-95 transition-all">
                                     <FiArrowLeft className="w-6 h-6" />
                                 </button>
-                                <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center text-blue-500 hover:text-blue-700 active:scale-95 transition-all">
+                                <button onClick={() => setShowDraftModal(true)} className="flex-none h-16 px-6 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center gap-2 text-blue-500 hover:text-blue-700 active:scale-95 transition-all">
                                     <FiSave className="w-6 h-6" />
+                                    <span className="text-sm font-bold">Save Draft</span>
                                 </button>
                             </>
                         )}

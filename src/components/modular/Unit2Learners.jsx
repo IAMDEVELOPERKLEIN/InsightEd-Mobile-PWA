@@ -86,6 +86,8 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
     // Step 4: Gender Breakdown (Per-grade logic)
     const [gradeGenderMap, setGradeGenderMap] = useState({}); // { [gradeId]: { male: "0", female: "0" } }
+    const [mgSubStep, setMgSubStep] = useState('manager'); // 'manager' | 'selection' | 'population'
+    const [activeCombinationId, setActiveCombinationId] = useState(null);
 
     // --- Derived State ---
     const lockedGrades = useMemo(() => {
@@ -520,6 +522,20 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
         // Back from MG Builder
         else if (currentStep === 3) {
+            if (mgSubStep === 'population') {
+                setMgSubStep('selection');
+                return;
+            }
+            if (mgSubStep === 'selection') {
+                // Remove newly-added combo if it was left empty
+                const activeCombo = mgCombinations.find(c => c.id === activeCombinationId);
+                if (activeCombo && activeCombo.grades.length === 0) {
+                    setMgCombinations(prev => prev.filter(c => c.id !== activeCombinationId));
+                }
+                setMgSubStep('manager');
+                setActiveCombinationId(null);
+                return;
+            }
             setCurrentStep(2);
             return;
         }
@@ -1183,221 +1199,305 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         </motion.div>
                     )}
 
-                    {/* STEP 3: Multigrade Builder */}
-                    {currentStep === 3 && (
-                        <motion.div key="mg-builder" variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
+                    {/* STEP 3a: Multigrade Combination Manager */}
+                    {currentStep === 3 && mgSubStep === 'manager' && (
+                        <motion.div key="mg-manager" variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
                             <div className="text-center mb-10">
                                 <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-600 text-xs font-black uppercase tracking-[0.2em] mb-4 shadow-sm">
-                                    Step 3 • Combination Builder
+                                    Step 3 • Combination Manager
                                 </span>
                                 <h1 className="text-4xl font-black text-slate-800 mb-2 leading-tight">
-                                    Build your multigrade classes
+                                    Multigrade Combinations
                                 </h1>
-                                <p className="text-slate-500 font-medium">Create Grade 1-6 combinations and enter totals.</p>
+                                <p className="text-slate-500 font-medium">Manage your grade groupings, then fill in each one.</p>
                             </div>
 
-                            <div className="bg-white rounded-[2.5rem] p-8 shadow-xl border-4 border-indigo-100/50 mb-8">
-                                <div className="flex justify-between items-center mb-6">
-                                    <h2 className="text-xl font-black text-slate-800">Combinations</h2>
-                                    <button 
-                                        onClick={() => setMgCombinations(prev => [...prev, { id: Date.now(), grades: [], enrollment: 0 }])}
-                                        className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2"
-                                    >
-                                        + Add Combo
-                                    </button>
-                                </div>
-
-                                <div className="space-y-6">
-                                    {mgCombinations.length === 0 && (
-                                        <div className="text-center py-16 bg-slate-50 rounded-[2rem] border-4 border-dashed border-slate-100">
-                                            <p className="text-slate-400 font-black italic">No combinations added yet.</p>
-                                        </div>
-                                    )}
-                                    {mgCombinations.map((c, idx) => (
-                                        <div key={c.id} className="p-6 bg-slate-50 rounded-[2rem] border-2 border-slate-100 relative shadow-inner">
-                                            <button 
-                                                onClick={() => setMgCombinations(prev => prev.filter(x => x.id !== c.id))}
-                                                className="absolute top-6 right-6 text-slate-300 hover:text-rose-500 transition-colors bg-white p-2 rounded-xl"
-                                            >
-                                                ✕
-                                            </button>
-                                            <div className="space-y-6">
-                                                <div>
-                                                    <label className="text-xs font-black uppercase text-indigo-500 tracking-widest block mb-4">G1-G6 Included</label>
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {ELEM_GRADES.map(lvl => {
-                                                            const g = ALL_GRADES.find(x => x.id === lvl);
-                                                            const isSelected = c.grades.includes(lvl);
-                                                            const isLockedByOther = mgCombinations.some(other => other.id !== c.id && other.grades.includes(lvl));
-                                                            
-                                                            return (
-                                                                <button
-                                                                    key={lvl}
-                                                                    disabled={isLockedByOther}
-                                                                    onClick={() => {
-                                                                        setMgCombinations(prev => prev.map(p => {
-                                                                            if (p.id !== c.id) return p;
-                                                                            const newG = isSelected ? p.grades.filter(x => x !== lvl) : [...p.grades, lvl];
-                                                                            return { ...p, grades: newG };
-                                                                        }));
-                                                                    }}
-                                                                    className={`px-4 py-2 rounded-xl text-sm font-black transition-all ${isSelected ? 'bg-indigo-600 text-white shadow-lg' : isLockedByOther ? 'bg-slate-200 text-slate-400 cursor-not-allowed grayscale' : 'bg-white text-slate-400 border-2 border-slate-200 hover:border-indigo-300'}`}
-                                                                >
-                                                                    {g?.label}
-                                                                </button>
-                                                            )
-                                                        })}
-                                                    </div>
-                                                </div>
-                                                {c.grades.length > 0 && (
-                                                    <div className="mt-4 pt-4 border-t-2 border-slate-100">
-                                                        <label className="text-xs font-black uppercase text-slate-400 tracking-widest block mb-4 italic">Individual Grade Populations</label>
-                                                        <div className="space-y-6">
-                                                            {c.grades.map(lvl => {
-                                                                const gName = ALL_GRADES.find(x => x.id === lvl)?.label || lvl;
-                                                                const grTotal = parseInt(gradeTotals[lvl]) || 0;
-                                                                
-                                                                return (
-                                                                    <div key={`mg-gender-${lvl}`} className="bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm">
-                                                                        <div className="flex justify-between items-center mb-4">
-                                                                            <label className="text-xs font-black uppercase text-indigo-600 tracking-widest">{gName}</label>
-                                                                            <span className="bg-indigo-50 px-3 py-1 rounded-lg text-[10px] font-black text-indigo-600 uppercase italic">Entry Required</span>
-                                                                        </div>
-                                                                        
-                                                                        {/* Total Enrollment for this grade */}
-                                                                        <div className="mb-6">
-                                                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 block mb-2 text-center">Total Enrollment</label>
-                                                                            <input 
-                                                                                type="number"
-                                                                                placeholder="0"
-                                                                                value={gradeTotals[lvl] === "0" ? "" : (gradeTotals[lvl] || "")}
-                                                                                onChange={(e) => handleGradeChange(lvl, e.target.value)}
-                                                                                className={chunkyInput + " !h-16 !text-3xl border-indigo-100 focus:border-indigo-500 bg-indigo-50/30"}
-                                                                            />
-                                                                        </div>
-
-                                                                        <div className="grid grid-cols-2 gap-4">
-                                                                            <div>
-                                                                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 block mb-2 text-center">Male</label>
-                                                                                <input 
-                                                                                    type="number"
-                                                                                    placeholder="0"
-                                                                                    value={gradeGenderMap[lvl]?.male === "0" ? "" : (gradeGenderMap[lvl]?.male || "")}
-                                                                                    onChange={(e) => handleGradeGenderChange(lvl, gradeTotals[lvl], e.target.value)}
-                                                                                    className={chunkyInput + " !h-14 !text-2xl border-blue-50 focus:border-blue-500"}
-                                                                                />
-                                                                            </div>
-                                                                            <div>
-                                                                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 block mb-2 text-center">Female</label>
-                                                                                <input 
-                                                                                    type="number"
-                                                                                    placeholder="0"
-                                                                                    value={gradeGenderMap[lvl]?.female === "0" ? "" : (gradeGenderMap[lvl]?.female || "")}
-                                                                                    onChange={(e) => handleFemaleGenderChange(lvl, gradeTotals[lvl], e.target.value)}
-                                                                                    className={chunkyInput + " !h-14 !text-2xl border-rose-50 focus:border-rose-500"}
-                                                                                />
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                        <div className="mt-6 flex items-center justify-between bg-slate-900 p-6 rounded-[2rem] text-white shadow-xl">
-                                                            <div>
-                                                                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-300 mb-1">Total Combination Enrollment</p>
-                                                                <span className="text-4xl font-black italic tracking-tighter">
-                                                                    {c.grades.reduce((sum, g) => {
-                                                                        const m = parseInt(gradeGenderMap[g]?.male) || 0;
-                                                                        const f = parseInt(gradeGenderMap[g]?.female) || 0;
-                                                                        return sum + m + f;
-                                                                    }, 0)}
-                                                                </span>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">M / F Split</p>
-                                                                <p className="text-lg font-black tracking-tight leading-none">
-                                                                    <span className="text-blue-400">{c.grades.reduce((sum, g) => sum + (parseInt(gradeGenderMap[g]?.male) || 0), 0)}</span>
-                                                                    <span className="text-slate-500 mx-2">/</span>
-                                                                    <span className="text-rose-400">{c.grades.reduce((sum, g) => sum + (parseInt(gradeGenderMap[g]?.female) || 0), 0)}</span>
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                 </div>
-
-                                {orgType === 'pure_mg' && (
-                                    <div className="mt-8 p-6 rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/50">
-                                        <div className="flex items-center gap-3 mb-4">
-                                            <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-xl">📋</div>
-                                            <div>
-                                                <h4 className="text-sm font-black text-slate-700 leading-none">Grade Assignment Tracker</h4>
-                                                <p className="text-[10px] font-medium text-slate-500 mt-1 uppercase tracking-widest italic">
-                                                    Ensure all offered elementary grades are combined.
-                                                    <span className="text-rose-600 block sm:inline sm:ml-2 font-black NOT-italic underline decoration-rose-200 decoration-4">Click DISABLE if a grade level is not offered.</span>
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {availableGrades
-                                                .filter(g => g.type === 'elem' && g.id !== 'kinder')
-                                                .map(g => {
-                                                    const isAssigned = mgCombinations.some(c => c.grades.includes(g.id));
-                                                    const isAvailable = gradeAvailability[g.id] !== false;
-                                                    
-                                                    return (
-                                                        <div 
-                                                            key={`tracker-${g.id}`} 
-                                                            className={`px-4 py-2 rounded-xl text-[11px] font-black border-2 transition-all flex items-center gap-2 
-                                                                ${isAssigned ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 
-                                                                  !isAvailable ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-60 font-medium' : 
-                                                                  'bg-white border-rose-100 text-rose-400'}
-                                                            `}
-                                                        >
-                                                            <div className="flex items-center gap-2">
-                                                                <span>{isAssigned ? '✅' : !isAvailable ? '🚫' : '⏳'}</span>
-                                                                <span>{g.label}</span>
-                                                                
-                                                                {!isAssigned && (
-                                                                    <button 
-                                                                        onClick={() => toggleAvailability(g.id)}
-                                                                        className={`ml-1 px-2 py-1 rounded-lg transition-all flex items-center justify-center text-[8px] font-black
-                                                                            ${isAvailable ? 'bg-rose-50 text-rose-400 hover:bg-rose-500 hover:text-white' : 'bg-indigo-50 text-indigo-500 hover:bg-indigo-500 hover:text-white'}
-                                                                        `}
-                                                                        title={isAvailable ? "Mark as Not Offered" : "Mark as Offered"}
-                                                                    >
-                                                                        {isAvailable ? "DISABLE" : "RESTORE"}
-                                                                    </button>
-                                                                )}
-                                                                
-                                                                {!isAssigned && isAvailable && (
-                                                                    <span className="ml-1 px-2 py-0.5 bg-rose-50 text-[9px] rounded-lg border border-rose-100 animate-pulse">Required</span>
-                                                                )}
-                                                                {!isAssigned && !isAvailable && (
-                                                                    <span className="ml-1 px-2 py-0.5 bg-slate-200 text-[9px] rounded-lg text-slate-500 italic">Excluded</span>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    )
-                                                })
-                                            }
-                                        </div>
-                                        {availableGrades.filter(g => g.type === 'elem' && g.id !== 'kinder' && gradeAvailability[g.id] !== false).some(g => !mgCombinations.some(c => c.grades.includes(g.id))) && (
-                                            <div className="mt-6 p-4 bg-amber-50 rounded-2xl border-2 border-amber-100 flex items-start gap-3">
-                                                <FiAlertTriangle className="text-amber-500 w-5 h-5 mt-0.5 shrink-0" />
-                                                <p className="text-xs font-bold text-amber-800 leading-relaxed">
-                                                    Because you selected <span className="underline decoration-2 text-amber-900">Purely Multi-Grade</span>, you must assign all offered elementary grades to a combination (or mark them as not offered) before you can continue.
-                                                </p>
-                                            </div>
-                                        )}
+                            <div className="space-y-3 mb-6">
+                                {mgCombinations.length === 0 && (
+                                    <div className="text-center py-16 bg-slate-50 rounded-[2rem] border-4 border-dashed border-slate-100">
+                                        <p className="text-slate-400 font-black italic">No combinations yet. Add one below.</p>
                                     </div>
                                 )}
+                                {mgCombinations.map(c => {
+                                    const comboLabel = c.grades.length > 0
+                                        ? c.grades.map(g => ALL_GRADES.find(x => x.id === g)?.label || g).join(' + ')
+                                        : 'Empty Combination';
+                                    const comboTotal = c.grades.reduce((sum, g) => sum + (parseInt(gradeGenderMap[g]?.male) || 0) + (parseInt(gradeGenderMap[g]?.female) || 0), 0);
+                                    const isComplete = c.grades.length > 0 && c.grades.every(lvl => {
+                                        const total = parseInt(gradeTotals[lvl]) || 0;
+                                        return total > 0 && gradeGenderMap[lvl]?.male !== undefined && gradeGenderMap[lvl]?.male !== "";
+                                    });
+                                    return (
+                                        <div key={c.id} className={`bg-white p-6 rounded-[2rem] border-2 flex items-center justify-between shadow-sm transition-all ${isComplete ? 'border-emerald-100' : 'border-indigo-100'}`}>
+                                            <div className="flex items-center gap-4">
+                                                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg ${isComplete ? 'bg-emerald-50 text-emerald-500' : 'bg-indigo-50 text-indigo-400'}`}>
+                                                    {isComplete ? '✅' : '🔢'}
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-black text-slate-800 leading-tight">{comboLabel}</h3>
+                                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                                                        {isComplete ? `${comboTotal} learners` : c.grades.length === 0 ? 'No grades selected' : 'Enrollment needed'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => { setActiveCombinationId(c.id); setMgSubStep('selection'); }}
+                                                    className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-sm hover:bg-indigo-100 transition-colors"
+                                                >
+                                                    Edit
+                                                </button>
+                                                <button
+                                                    onClick={() => setMgCombinations(prev => prev.filter(x => x.id !== c.id))}
+                                                    className="p-2 text-slate-300 hover:text-rose-500 transition-colors rounded-xl hover:bg-rose-50"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
+
+                            <button
+                                onClick={() => {
+                                    const newId = Date.now();
+                                    setMgCombinations(prev => [...prev, { id: newId, grades: [], enrollment: 0 }]);
+                                    setActiveCombinationId(newId);
+                                    setMgSubStep('selection');
+                                }}
+                                className="w-full py-5 rounded-[2rem] border-4 border-dashed border-indigo-200 text-indigo-600 font-black text-lg hover:bg-indigo-50 hover:border-indigo-300 transition-all flex items-center justify-center gap-2 mb-8"
+                            >
+                                + Add Combination
+                            </button>
+
+                            {orgType === 'pure_mg' && (
+                                <div className="p-6 rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/50">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-xl">📋</div>
+                                        <div>
+                                            <h4 className="text-sm font-black text-slate-700 leading-none">Grade Assignment Tracker</h4>
+                                            <p className="text-[10px] font-medium text-slate-500 mt-1 uppercase tracking-widest italic">
+                                                Ensure all offered elementary grades are combined.
+                                                <span className="text-rose-600 block font-black underline decoration-rose-200 decoration-4">Click DISABLE if a grade level is not offered.</span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {availableGrades
+                                            .filter(g => g.type === 'elem' && g.id !== 'kinder')
+                                            .map(g => {
+                                                const isAssigned = mgCombinations.some(c => c.grades.includes(g.id));
+                                                const isAvailable = gradeAvailability[g.id] !== false;
+                                                return (
+                                                    <div
+                                                        key={`tracker-${g.id}`}
+                                                        className={`px-4 py-2 rounded-xl text-[11px] font-black border-2 transition-all flex items-center gap-2
+                                                            ${isAssigned ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
+                                                              !isAvailable ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-60' :
+                                                              'bg-white border-rose-100 text-rose-400'}
+                                                        `}
+                                                    >
+                                                        <span>{isAssigned ? '✅' : !isAvailable ? '🚫' : '⏳'}</span>
+                                                        <span>{g.label}</span>
+                                                        {!isAssigned && (
+                                                            <button
+                                                                onClick={() => toggleAvailability(g.id)}
+                                                                className={`ml-1 px-2 py-1 rounded-lg text-[8px] font-black transition-all ${isAvailable ? 'bg-rose-50 text-rose-400 hover:bg-rose-500 hover:text-white' : 'bg-indigo-50 text-indigo-500 hover:bg-indigo-500 hover:text-white'}`}
+                                                            >
+                                                                {isAvailable ? 'DISABLE' : 'RESTORE'}
+                                                            </button>
+                                                        )}
+                                                        {!isAssigned && isAvailable && (
+                                                            <span className="ml-1 px-2 py-0.5 bg-rose-50 text-[9px] rounded-lg border border-rose-100 animate-pulse">Required</span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })
+                                        }
+                                    </div>
+                                    {availableGrades.filter(g => g.type === 'elem' && g.id !== 'kinder' && gradeAvailability[g.id] !== false).some(g => !mgCombinations.some(c => c.grades.includes(g.id))) && (
+                                        <div className="mt-6 p-4 bg-amber-50 rounded-2xl border-2 border-amber-100 flex items-start gap-3">
+                                            <FiAlertTriangle className="text-amber-500 w-5 h-5 mt-0.5 shrink-0" />
+                                            <p className="text-xs font-bold text-amber-800 leading-relaxed">
+                                                Because you selected <span className="underline decoration-2 text-amber-900">Purely Multi-Grade</span>, you must assign all offered elementary grades to a combination (or mark them as not offered) before you can continue.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </motion.div>
                     )}
+
+                    {/* STEP 3b: Grade Level Selection */}
+                    {currentStep === 3 && mgSubStep === 'selection' && (() => {
+                        const activeCombo = mgCombinations.find(c => c.id === activeCombinationId);
+                        if (!activeCombo) return null;
+                        return (
+                            <motion.div key="mg-selection" variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
+                                <div className="text-center mb-10">
+                                    <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-600 text-xs font-black uppercase tracking-[0.2em] mb-4 shadow-sm">
+                                        Step 3 • Grade Selection
+                                    </span>
+                                    <h1 className="text-4xl font-black text-slate-800 mb-2 leading-tight">
+                                        Select Grade Levels
+                                    </h1>
+                                    <p className="text-slate-500 font-medium">Choose which grades belong in this combination.</p>
+                                </div>
+
+                                {activeCombo.grades.length >= 4 && (
+                                    <div className="mb-6 p-5 bg-amber-50 border-2 border-amber-200 rounded-[2rem] flex items-start gap-4">
+                                        <FiAlertTriangle className="text-amber-500 w-6 h-6 mt-0.5 shrink-0" />
+                                        <div>
+                                            <p className="text-sm font-black text-amber-900 mb-1 uppercase tracking-widest">Are you sure?</p>
+                                            <p className="text-sm font-medium text-amber-800 leading-snug">
+                                                Including <strong>4 or more grade levels</strong> in a single combination is unusual and may indicate a data entry error. Please verify before continuing.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="grid grid-cols-2 gap-3 mb-8">
+                                    {ELEM_GRADES.map(lvl => {
+                                        const g = ALL_GRADES.find(x => x.id === lvl);
+                                        const isSelected = activeCombo.grades.includes(lvl);
+                                        const isLockedByOther = mgCombinations.some(other => other.id !== activeCombinationId && other.grades.includes(lvl));
+                                        return (
+                                            <button
+                                                key={lvl}
+                                                disabled={isLockedByOther}
+                                                onClick={() => {
+                                                    setMgCombinations(prev => prev.map(p => {
+                                                        if (p.id !== activeCombinationId) return p;
+                                                        const newG = isSelected ? p.grades.filter(x => x !== lvl) : [...p.grades, lvl];
+                                                        return { ...p, grades: newG };
+                                                    }));
+                                                }}
+                                                className={`p-6 rounded-[2rem] border-4 transition-all flex flex-col items-center justify-center gap-3 text-center active:scale-95 ${
+                                                    isSelected
+                                                        ? 'border-indigo-500 bg-indigo-50/50 shadow-xl shadow-indigo-100 scale-[1.02]'
+                                                        : isLockedByOther
+                                                        ? 'border-slate-100 bg-slate-50 cursor-not-allowed opacity-50'
+                                                        : 'border-slate-100 bg-white hover:border-indigo-200'
+                                                }`}
+                                            >
+                                                <span className="text-2xl">{isSelected ? '✅' : isLockedByOther ? '🔒' : '⬜'}</span>
+                                                <span className="font-black text-lg text-slate-800">{g?.label}</span>
+                                                {isLockedByOther && <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">In another combo</span>}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                <button
+                                    disabled={activeCombo.grades.length === 0}
+                                    onClick={() => setMgSubStep('population')}
+                                    className="w-full py-5 rounded-[2rem] bg-indigo-600 text-white font-black text-lg shadow-xl shadow-indigo-100 active:scale-95 transition-all disabled:opacity-50 disabled:bg-slate-400 disabled:shadow-none flex items-center justify-center gap-2"
+                                >
+                                    Confirm Grade Selection <FiArrowRight className="w-5 h-5" />
+                                </button>
+                            </motion.div>
+                        );
+                    })()}
+
+                    {/* STEP 3c: Population Entry */}
+                    {currentStep === 3 && mgSubStep === 'population' && (() => {
+                        const activeCombo = mgCombinations.find(c => c.id === activeCombinationId);
+                        if (!activeCombo) return null;
+                        const comboLabel = activeCombo.grades.map(g => ALL_GRADES.find(x => x.id === g)?.label || g).join(' + ');
+                        const isSaveable = activeCombo.grades.length > 0 && activeCombo.grades.every(lvl => {
+                            const total = parseInt(gradeTotals[lvl]) || 0;
+                            const male = gradeGenderMap[lvl]?.male;
+                            const female = gradeGenderMap[lvl]?.female;
+                            return total > 0 && male !== undefined && male !== "" && female !== undefined && female !== "";
+                        });
+                        return (
+                            <motion.div key="mg-population" variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
+                                <div className="text-center mb-10">
+                                    <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-600 text-xs font-black uppercase tracking-[0.2em] mb-4 shadow-sm">
+                                        Step 3 • Population Entry
+                                    </span>
+                                    <h1 className="text-3xl font-black text-slate-800 mb-2 leading-tight">{comboLabel}</h1>
+                                    <p className="text-slate-500 font-medium">Enter Total, Male, and Female counts for each grade.</p>
+                                </div>
+
+                                <div className="space-y-6 mb-8">
+                                    {activeCombo.grades.map(lvl => {
+                                        const gName = ALL_GRADES.find(x => x.id === lvl)?.label || lvl;
+                                        return (
+                                            <div key={`mg-pop-${lvl}`} className="bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm">
+                                                <div className="flex justify-between items-center mb-4">
+                                                    <label className="text-xs font-black uppercase text-indigo-600 tracking-widest">{gName}</label>
+                                                    <span className="bg-indigo-50 px-3 py-1 rounded-lg text-[10px] font-black text-indigo-600 uppercase italic">Entry Required</span>
+                                                </div>
+                                                <div className="mb-6">
+                                                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 block mb-2 text-center">Total Enrollment</label>
+                                                    <input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        value={gradeTotals[lvl] === "0" ? "" : (gradeTotals[lvl] || "")}
+                                                        onChange={(e) => handleGradeChange(lvl, e.target.value)}
+                                                        className={chunkyInput + " !h-16 !text-3xl border-indigo-100 focus:border-indigo-500 bg-indigo-50/30"}
+                                                    />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 block mb-2 text-center">Male</label>
+                                                        <input
+                                                            type="number"
+                                                            placeholder="0"
+                                                            value={gradeGenderMap[lvl]?.male === "0" ? "" : (gradeGenderMap[lvl]?.male || "")}
+                                                            onChange={(e) => handleGradeGenderChange(lvl, gradeTotals[lvl], e.target.value)}
+                                                            className={chunkyInput + " !h-14 !text-2xl border-blue-50 focus:border-blue-500"}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 block mb-2 text-center">Female</label>
+                                                        <input
+                                                            type="number"
+                                                            placeholder="0"
+                                                            value={gradeGenderMap[lvl]?.female === "0" ? "" : (gradeGenderMap[lvl]?.female || "")}
+                                                            onChange={(e) => handleFemaleGenderChange(lvl, gradeTotals[lvl], e.target.value)}
+                                                            className={chunkyInput + " !h-14 !text-2xl border-rose-50 focus:border-rose-500"}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                <div className="flex items-center justify-between bg-slate-900 p-6 rounded-[2rem] text-white shadow-xl mb-8">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-indigo-300 mb-1">Total Combination Enrollment</p>
+                                        <span className="text-4xl font-black italic tracking-tighter">
+                                            {activeCombo.grades.reduce((sum, g) => {
+                                                const m = parseInt(gradeGenderMap[g]?.male) || 0;
+                                                const f = parseInt(gradeGenderMap[g]?.female) || 0;
+                                                return sum + m + f;
+                                            }, 0)}
+                                        </span>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">M / F Split</p>
+                                        <p className="text-lg font-black tracking-tight leading-none">
+                                            <span className="text-blue-400">{activeCombo.grades.reduce((sum, g) => sum + (parseInt(gradeGenderMap[g]?.male) || 0), 0)}</span>
+                                            <span className="text-slate-500 mx-2">/</span>
+                                            <span className="text-rose-400">{activeCombo.grades.reduce((sum, g) => sum + (parseInt(gradeGenderMap[g]?.female) || 0), 0)}</span>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <button
+                                    disabled={!isSaveable}
+                                    onClick={() => { setMgSubStep('manager'); setActiveCombinationId(null); }}
+                                    className="w-full py-5 rounded-[2rem] bg-emerald-600 text-white font-black text-lg shadow-xl shadow-emerald-100 active:scale-95 transition-all disabled:opacity-50 disabled:bg-slate-400 disabled:shadow-none flex items-center justify-center gap-2"
+                                >
+                                    <FiCheck className="w-5 h-5" /> Save Combination
+                                </button>
+                            </motion.div>
+                        );
+                    })()}
 
                     {/* STEP 4: Grade-by-Grade Enrollment */}
                     {currentStep === 4 && activeMonogrades[currentGradeIndex] && (
@@ -1935,20 +2035,22 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 <div className="fixed bottom-0 left-0 w-full p-6 bg-white/80 backdrop-blur-xl border-t border-gray-100 z-50">
                     <div className="max-w-md mx-auto flex gap-3">
                         {currentStep === 1 ? (
-                            <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all">
+                            <button onClick={() => setShowDraftModal(true)} className="flex-none h-16 px-6 rounded-3xl bg-gray-100 flex items-center justify-center gap-2 text-gray-400 hover:text-gray-900 active:scale-95 transition-all">
                                 <FiSave className="w-6 h-6" />
+                                <span className="text-sm font-bold text-gray-500">Save Draft</span>
                             </button>
                         ) : (
                             <>
                                 <button onClick={handleBack} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-900 active:scale-95 transition-all">
                                     <FiArrowLeft className="w-6 h-6" />
                                 </button>
-                                <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center text-blue-500 hover:text-blue-700 active:scale-95 transition-all">
+                                <button onClick={() => setShowDraftModal(true)} className="flex-none h-16 px-6 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center gap-2 text-blue-500 hover:text-blue-700 active:scale-95 transition-all">
                                     <FiSave className="w-6 h-6" />
+                                    <span className="text-sm font-bold text-blue-500">Save Draft</span>
                                 </button>
                             </>
                         )}
-                        <button 
+                        {!(currentStep === 3 && mgSubStep !== 'manager') && <button
                             onClick={currentStep === 7 ? handleSave : handleNext}
                             disabled={!canContinue || (currentStep === 7 && (isSaving || !isCertified))}
                             className={`flex-1 h-16 rounded-[2rem] ${currentStep === 7 ? 'bg-emerald-600 shadow-emerald-200' : 'bg-blue-600 shadow-blue-200'} text-white font-black text-[15px] shadow-xl active:scale-98 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:bg-slate-700 disabled:shadow-none uppercase tracking-widest`}
@@ -1965,7 +2067,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                             ) : (
                                 <>Continue <FiArrowRight className="w-5 h-5" /></>
                             )}
-                        </button>
+                        </button>}
                     </div>
                 </div>
             )}

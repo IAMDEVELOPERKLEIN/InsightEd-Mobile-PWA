@@ -1123,6 +1123,7 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS u7_wash_faucets_cond       TEXT,
             ADD COLUMN IF NOT EXISTS u7_confirm_no_grid         BOOLEAN DEFAULT FALSE,
             ADD COLUMN IF NOT EXISTS u7_confirm_no_piped        BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS u7_confirm_zero_wash       BOOLEAN DEFAULT FALSE,
             ADD COLUMN IF NOT EXISTS u7_confirm_no_wired        BOOLEAN DEFAULT FALSE,
             ADD COLUMN IF NOT EXISTS u7_utility_internet_type   TEXT,
             ADD COLUMN IF NOT EXISTS unit7                      INTEGER DEFAULT 0,

@@ -143,6 +143,7 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         attached_cr_seats: "",
         attached_cr_included_in_main: false,
         confirm_no_piped_text: "",
+        confirm_zero_wash_text: "",
     });
 
     // PHASE 5 State (Utilities & Hardship)
@@ -515,12 +516,16 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
     const handleGradeFormChange = (e) => {
         const { name, value } = e.target;
-        setCurrentGradeForm(prev => ({ ...prev, [name]: value }));
+        // Strip leading zeros unless it's just "0"
+        const cleanValue = value.replace(/^0+(?!$)/, '');
+        setCurrentGradeForm(prev => ({ ...prev, [name]: cleanValue }));
     };
 
     const handleGeneralChange = (e) => {
-        const { name, value } = e.target;
-        setGeneralRoomsData(prev => ({ ...prev, [name]: value }));
+        const { name, value, type } = e.target;
+        // Only strip leading zeros for numeric inputs
+        const cleanValue = type === 'number' ? value.replace(/^0+(?!$)/, '') : value;
+        setGeneralRoomsData(prev => ({ ...prev, [name]: cleanValue }));
     };
 
     const handleSaveGradeLevel = () => {
@@ -599,7 +604,8 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     // ── Phase 2 Handlers ────────────────────────────────────────────────────────
     const handleIctChange = (e) => {
         const { name, value } = e.target;
-        setIctData(prev => ({ ...prev, [name]: value }));
+        const cleanValue = value.replace(/^0+(?!$)/, '');
+        setIctData(prev => ({ ...prev, [name]: cleanValue }));
     };
 
     const ictStats = useMemo(() => {
@@ -619,8 +625,17 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             
             broken[cat.key] = total - func;
             
-            // Validation: Only require working count if we have more than 0 total items.
+            // STRICT VALIDATION: Do not allow blank (empty string) fields
+            // 1. Total must be provided for every category (can be 0)
+            if (tStr === "") isValid = false;
+            
+            // 2. Functional/Working count must be provided if Total > 0
             if (total > 0 && fStr === "") isValid = false;
+            
+            // 3. Teaching/Non-Teaching count must be provided if Total > 0 (Advanced only)
+            if (isAdvanced && total > 0 && teachStr === "") isValid = false;
+
+            // 4. Backward check: if sub-field is provided but total is blank
             if (tStr === "" && fStr !== "") isValid = false;
         });
         return { isValid, errors, broken };
@@ -630,8 +645,9 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
     // ── Phase 3 Handlers (eCart) ────────────────────────────────────────────────
     const handleEcartFormChange = (e) => {
-        const { name, value } = e.target;
-        setEcartForm(prev => ({ ...prev, [name]: value }));
+        const { name, value, type } = e.target;
+        const cleanValue = (type === 'number') ? value.replace(/^0+(?!$)/, '') : value;
+        setEcartForm(prev => ({ ...prev, [name]: cleanValue }));
     };
 
     const handleSaveEcart = () => {
@@ -654,9 +670,10 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     // ── Phase 4 Handlers (WASH) ─────────────────────────────────────────────────
     const handleWashChange = (e) => {
         const { name, value, type, checked } = e.target;
+        const cleanValue = (type === 'number') ? value.replace(/^0+(?!$)/, '') : value;
         setWashData(prev => ({ 
             ...prev, 
-            [name]: type === 'checkbox' ? checked : value 
+            [name]: type === 'checkbox' ? checked : cleanValue 
         }));
     };
 
@@ -667,20 +684,47 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             const func = parseInt(washData[`${cat.key}_func`]) || 0;
             const tStr = washData[`${cat.key}_total`];
             const fStr = washData[`${cat.key}_func`];
+
+            // 1. All total fields must be filled (no blanks)
+            if (tStr === "") isValid = false;
+
+            // 2. Functional check
             if (fStr !== "" && func > total) { isValid = false; errors[cat.key] = true; } 
             else { errors[cat.key] = false; }
+
+            // 3. Breakdown check (if total > 0, working count is required)
             const needsBreakdown = ["male_seats", "female_seats", "common_seats", "pwd_seats", "faucets", "male_urinals"].includes(cat.key);
             if (needsBreakdown && total > 0 && fStr === "") isValid = false;
+
+            // 4. Backward check
             if (tStr === "" && fStr !== "") isValid = false;
         });
+
+        // 5. Attached CR fields must be filled
+        if (washData.attached_cr_classrooms === "") isValid = false;
+        if (washData.attached_cr_seats === "") isValid = false;
+
         if (!washData.water_source) isValid = false;
         
         // Critical Status Validation for Water
         if (washData.water_source === "Natural resources (Deep well, Spring, Rainwater)" || washData.water_source === "No water source") {
             if ((washData.confirm_no_piped_text || "").toLowerCase() !== "confirm") isValid = false;
         }
+
+        // Critical Status Validation for Zero WASH Facilities
+        const hasZeroWash = WASH_CATEGORIES.some(cat => {
+            const total = parseInt(washData[`${cat.key}_total`]);
+            return total === 0;
+        });
+        let zeroWashError = false;
+        if (hasZeroWash) {
+            if ((washData.confirm_zero_wash_text || "").toLowerCase() !== "confirm") {
+                isValid = false;
+                zeroWashError = true;
+            }
+        }
         
-        return { isValid, errors };
+        return { isValid, errors, zeroWashError };
     }, [washData]);
 
     const handlePhase4Proceed = () => { setCurrentPhase(5); window.scrollTo({ top: 0, behavior: "smooth" }); };
@@ -761,6 +805,7 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 // STATUS CONFIRMATIONS (Derived from text input)
                 u7_confirm_no_grid: (utilitiesData.confirm_no_grid_text || "").toLowerCase() === "confirm",
                 u7_confirm_no_piped: (washData.confirm_no_piped_text || "").toLowerCase() === "confirm",
+                u7_confirm_zero_wash: (washData.confirm_zero_wash_text || "").toLowerCase() === "confirm",
                 u7_confirm_no_wired: (utilitiesData.confirm_no_wired_text || "").toLowerCase() === "confirm",
                 u7_utility_internet_type: utilitiesData.utility_internet_type,
                 iern: iern
@@ -1209,17 +1254,17 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-bold text-gray-700 mb-2">Armchair — Plastic / Steel 🪑</p>
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="armchair_plastic_steel_func" value={generalRoomsData.armchair_plastic_steel_func} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                                        <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="armchair_plastic_steel_broken" value={generalRoomsData.armchair_plastic_steel_broken} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
-                                                    </div>
-                                                </div>
-                                                <div>
                                                     <p className="text-sm font-bold text-gray-700 mb-2">Individual Table &amp; Chair 🪑</p>
                                                     <div className="grid grid-cols-2 gap-3">
                                                         <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="individual_table_chair_func" value={generalRoomsData.individual_table_chair_func} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
                                                         <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="individual_table_chair_broken" value={generalRoomsData.individual_table_chair_broken} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-gray-700 mb-2">Armchair — Plastic / Steel 🪑</p>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="armchair_plastic_steel_func" value={generalRoomsData.armchair_plastic_steel_func} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                                        <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="armchair_plastic_steel_broken" value={generalRoomsData.armchair_plastic_steel_broken} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
                                                     </div>
                                                 </div>
                                                 <div>
@@ -1276,9 +1321,9 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     <div>
                                         <p className="text-xs font-bold uppercase tracking-widest text-indigo-400">Phase 2</p>
                                         <h2 className="text-2xl font-black text-gray-800 leading-tight">School-Wide ICT</h2>
-                                                <p className="text-[11px] font-medium text-indigo-700 leading-relaxed">
-                                                    <b>Note:</b> This school was previously identified as having <b>Multigrade Classes</b>. This may affect SHA eligibility.
-                                                </p>
+                                        <p className="text-[11px] font-medium text-indigo-700 leading-relaxed">
+                                            <b>Note:</b> This school was previously identified as having <b>Multigrade Classes</b>. This may affect SHA eligibility.
+                                        </p>
                                     </div>
                                 </div>
                                 <p className="text-sm text-gray-400 mb-8">Count your campus-wide technology assets. Include all devices, regardless of location.</p>
@@ -1299,7 +1344,7 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 <div className="grid grid-cols-1 gap-3 mb-4">
                                                     <div>
                                                         <p className="text-[10px] font-black text-gray-400 uppercase text-center mb-1">Total Units</p>
-                                                        <input type="number" name={`${cat.key}_total`} value={ictData[`${cat.key}_total`]} onChange={handleIctChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0 !bg-gray-50 text-gray-800 focus:!border-gray-400 focus:!bg-white`} />
+                                                        <input type="number" name={`${cat.key}_total`} value={ictData[`${cat.key}_total`]} onChange={handleIctChange} min="0" placeholder="" className={`${chunkyInput} !mt-0 !bg-gray-50 text-gray-800 focus:!border-gray-400 focus:!bg-white`} />
                                                     </div>
                                                 </div>
 
@@ -1317,14 +1362,14 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                                             value={ictData[`${cat.key}_func`]} 
                                                                             onChange={handleIctChange} 
                                                                             min="0" 
-                                                                            placeholder="0" 
+                                                                            placeholder="" 
                                                                             className={`${chunkyInput} !mt-0 !bg-white focus:!border-emerald-400`} 
                                                                         />
                                                                     </div>
                                                                     <div>
                                                                         <p className="text-[9px] font-bold text-red-400 mb-1 ml-1">Not Working</p>
                                                                         <div className={`${chunkyInput} !mt-0 !bg-red-50 text-red-400 border-dashed flex items-center justify-center`}>
-                                                                            {Math.max(0, total - (parseInt(ictData[`${cat.key}_func`]) || 0))}
+                                                                            {ictData[`${cat.key}_total`] !== "" && ictData[`${cat.key}_func`] !== "" ? Math.max(0, total - (parseInt(ictData[`${cat.key}_func`]) || 0)) : "-"}
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -1342,12 +1387,12 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                                 <div className="grid grid-cols-2 gap-3">
                                                                     <div>
                                                                         <p className="text-[9px] font-bold text-indigo-600 mb-1 ml-1">Teaching</p>
-                                                                        <input type="number" name={`${cat.key}_teaching`} value={ictData[`${cat.key}_teaching`]} onChange={handleIctChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0 !bg-white focus:!border-indigo-400`} />
+                                                                        <input type="number" name={`${cat.key}_teaching`} value={ictData[`${cat.key}_teaching`]} onChange={handleIctChange} min="0" placeholder="" className={`${chunkyInput} !mt-0 !bg-white focus:!border-indigo-400`} />
                                                                     </div>
                                                                     <div>
                                                                         <p className="text-[9px] font-bold text-slate-400 mb-1 ml-1">Non-Teaching</p>
                                                                         <div className={`${chunkyInput} !mt-0 !bg-slate-50 text-slate-400 border-dashed flex items-center justify-center`}>
-                                                                            {Math.max(0, total - (parseInt(ictData[`${cat.key}_teaching`]) || 0))}
+                                                                            {ictData[`${cat.key}_total`] !== "" && ictData[`${cat.key}_teaching`] !== "" ? Math.max(0, total - (parseInt(ictData[`${cat.key}_teaching`]) || 0)) : "-"}
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -1359,12 +1404,12 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                                 <div className="grid grid-cols-2 gap-3">
                                                                     <div>
                                                                         <p className="text-[9px] font-bold text-emerald-700 mb-1 ml-1">Working</p>
-                                                                        <input type="number" name={`${cat.key}_working`} value={ictData[`${cat.key}_working`]} onChange={handleIctChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0 !bg-white focus:!border-indigo-400`} />
+                                                                        <input type="number" name={`${cat.key}_working`} value={ictData[`${cat.key}_working`]} onChange={handleIctChange} min="0" placeholder="" className={`${chunkyInput} !mt-0 !bg-white focus:!border-indigo-400`} />
                                                                     </div>
                                                                     <div>
                                                                         <p className="text-[9px] font-bold text-red-400 mb-1 ml-1">Not Working</p>
                                                                         <div className={`${chunkyInput} !mt-0 !bg-red-50 text-red-400 border-dashed flex items-center justify-center`}>
-                                                                            {Math.max(0, total - (parseInt(ictData[`${cat.key}_working`]) || 0))}
+                                                                            {ictData[`${cat.key}_total`] !== "" && ictData[`${cat.key}_working`] !== "" ? Math.max(0, total - (parseInt(ictData[`${cat.key}_working`]) || 0)) : "-"}
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -1534,7 +1579,7 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                                 value={washData[`${cat.key}_total`]} 
                                                                 onChange={handleWashChange} 
                                                                 min="0" 
-                                                                placeholder="0" 
+                                                                placeholder="" 
                                                                 className={`${chunkyInput} !mt-0 !bg-gray-50 text-gray-800 focus:!border-gray-400 focus:!bg-white`} 
                                                             />
                                                         </div>
@@ -1554,7 +1599,7 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                                                 value={washData[`${cat.key}_func`]} 
                                                                                 onChange={handleWashChange} 
                                                                                 min="0" 
-                                                                                placeholder="0" 
+                                                                                placeholder="" 
                                                                                 className={`${chunkyInput} !mt-0 !bg-white focus:!border-emerald-400`} 
                                                                             />
                                                                         </div>
@@ -1597,11 +1642,11 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <p className="text-xs font-bold text-indigo-800 mb-1 leading-tight">Classrooms with CR</p>
-                                            <input type="number" name="attached_cr_classrooms" value={washData.attached_cr_classrooms} onChange={handleWashChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0 !bg-white focus:!border-indigo-400`} />
+                                            <input type="number" name="attached_cr_classrooms" value={washData.attached_cr_classrooms} onChange={handleWashChange} min="0" placeholder="" className={`${chunkyInput} !mt-0 !bg-white focus:!border-indigo-400`} />
                                         </div>
                                         <div>
                                             <p className="text-xs font-bold text-indigo-800 mb-1 leading-tight">Total Attached Seats</p>
-                                            <input type="number" name="attached_cr_seats" value={washData.attached_cr_seats} onChange={handleWashChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0 !bg-white focus:!border-indigo-400`} />
+                                            <input type="number" name="attached_cr_seats" value={washData.attached_cr_seats} onChange={handleWashChange} min="0" placeholder="" className={`${chunkyInput} !mt-0 !bg-white focus:!border-indigo-400`} />
                                         </div>
                                     </div>
 
@@ -1814,8 +1859,9 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         {/* School-wide Status Confirmation removed as requested */}
                     </div>
                     <div className="w-full max-w-md flex items-center gap-3">
-                        <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
+                        <button onClick={() => setShowDraftModal(true)} className="flex-none h-16 px-6 rounded-3xl bg-gray-100 flex items-center justify-center gap-2 text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
                             <FiSave className="w-6 h-6" />
+                            <span className="text-sm font-bold text-gray-500">Save Draft</span>
                         </button>
                         {currentPhase === 1 ? (
                             <button disabled={!isPhase1Valid} onClick={handleMainProceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
@@ -1862,7 +1908,7 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 <p className="text-xs font-bold text-gray-500 mb-1 ml-1">Year Received</p>
                                                 <select name="year_received" value={ecartForm.year_received} onChange={handleEcartFormChange} className={`${chunkySelect} !mt-0 text-base py-4.5`}>
                                                     <option value="" disabled>Select Year...</option>
-                                                    {Array.from({ length: 2026 - 2000 + 1 }, (_, i) => 2026 - i).map(year => (
+                                                    {Array.from({ length: new Date().getFullYear() - 2000 + 1 }, (_, i) => new Date().getFullYear() - i).map(year => (
                                                         <option key={year} value={year}>{year}</option>
                                                     ))}
                                                 </select>
@@ -1881,9 +1927,9 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 <div className="pt-2">
                                     <h4 className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-3">Included Devices</h4>
                                     <div className="grid grid-cols-3 gap-3 mb-2">
-                                        <div><p className="text-[10px] font-bold text-gray-400 uppercase text-center mb-1">💻 Laptops</p><input type="number" name="ecart_laptops" value={ecartForm.ecart_laptops} onChange={handleEcartFormChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0`} /></div>
-                                        <div><p className="text-[10px] font-bold text-gray-400 uppercase text-center mb-1">📱 Tablets</p><input type="number" name="ecart_tablets" value={ecartForm.ecart_tablets} onChange={handleEcartFormChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0`} /></div>
-                                        <div><p className="text-[10px] font-bold text-gray-400 uppercase text-center mb-1">📺 Smart TVs</p><input type="number" name="ecart_tv" value={ecartForm.ecart_tv} onChange={handleEcartFormChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0`} /></div>
+                                        <div><p className="text-[10px] font-bold text-gray-400 uppercase text-center mb-1">💻 Laptops</p><input type="number" name="ecart_laptops" value={ecartForm.ecart_laptops} onChange={handleEcartFormChange} min="0" placeholder="" className={`${chunkyInput} !mt-0`} /></div>
+                                        <div><p className="text-[10px] font-bold text-gray-400 uppercase text-center mb-1">📱 Tablets</p><input type="number" name="ecart_tablets" value={ecartForm.ecart_tablets} onChange={handleEcartFormChange} min="0" placeholder="" className={`${chunkyInput} !mt-0`} /></div>
+                                        <div><p className="text-[10px] font-bold text-gray-400 uppercase text-center mb-1">📺 Smart TVs</p><input type="number" name="ecart_tv" value={ecartForm.ecart_tv} onChange={handleEcartFormChange} min="0" placeholder="" className={`${chunkyInput} !mt-0`} /></div>
                                     </div>
                                 </div>
 
@@ -1930,67 +1976,69 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
                                 <div>
                                     <h4 className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-3 pb-2 border-b border-gray-100">Learner Seating (Aggregated Totals)</h4>
-                                    <div>
-                                        <p className="text-sm font-bold text-gray-700 mb-2">Armchair — Wood 🪑</p>
-                                        <div className="grid grid-cols-2 gap-3 mb-4">
-                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="armchair_wood_func" value={currentGradeForm.armchair_wood_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="armchair_wood_broken" value={currentGradeForm.armchair_wood_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-700 mb-2">Armchair — Wood 🪑</p>
+                                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                                <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="armchair_wood_func" value={currentGradeForm.armchair_wood_func} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                                <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="armchair_wood_broken" value={currentGradeForm.armchair_wood_broken} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-gray-700 mb-2">Armchair — Plastic 🪑</p>
-                                        <div className="grid grid-cols-2 gap-3 mb-4">
-                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="armchair_plastic_func" value={currentGradeForm.armchair_plastic_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="armchair_plastic_broken" value={currentGradeForm.armchair_plastic_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-700 mb-2">Armchair — Plastic 🪑</p>
+                                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                                <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="armchair_plastic_func" value={currentGradeForm.armchair_plastic_func} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                                <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="armchair_plastic_broken" value={currentGradeForm.armchair_plastic_broken} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-gray-700 mb-2">Armchair — Plastic / Steel 🪑</p>
-                                        <div className="grid grid-cols-2 gap-3 mb-4">
-                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="armchair_plastic_steel_func" value={currentGradeForm.armchair_plastic_steel_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="armchair_plastic_steel_broken" value={currentGradeForm.armchair_plastic_steel_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-700 mb-2">Armchair — Plastic / Steel 🪑</p>
+                                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                                <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="armchair_plastic_steel_func" value={currentGradeForm.armchair_plastic_steel_func} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                                <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="armchair_plastic_steel_broken" value={currentGradeForm.armchair_plastic_steel_broken} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-gray-700 mb-2">Individual Table &amp; Chair 🪑</p>
-                                        <div className="grid grid-cols-2 gap-3 mb-4">
-                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="individual_table_chair_func" value={currentGradeForm.individual_table_chair_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="individual_table_chair_broken" value={currentGradeForm.individual_table_chair_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-700 mb-2">Individual Table &amp; Chair 🪑</p>
+                                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                                <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="individual_table_chair_func" value={currentGradeForm.individual_table_chair_func} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                                <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="individual_table_chair_broken" value={currentGradeForm.individual_table_chair_broken} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-gray-700 mb-2">2-Seater — Wood <span className="text-xs text-indigo-400 font-normal">(×2 capacity)</span></p>
-                                        <div className="grid grid-cols-2 gap-3 mb-4">
-                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="two_seater_wood_func" value={currentGradeForm.two_seater_wood_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="two_seater_wood_broken" value={currentGradeForm.two_seater_wood_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-700 mb-2">2-Seater — Wood <span className="text-xs text-indigo-400 font-normal">(×2 capacity)</span></p>
+                                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                                <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="two_seater_wood_func" value={currentGradeForm.two_seater_wood_func} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                                <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="two_seater_wood_broken" value={currentGradeForm.two_seater_wood_broken} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-gray-700 mb-2">2-Seater — Wood / Steel <span className="text-xs text-indigo-400 font-normal">(×2 capacity)</span></p>
-                                        <div className="grid grid-cols-2 gap-3 mb-4">
-                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="two_seater_wood_steel_func" value={currentGradeForm.two_seater_wood_steel_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="two_seater_wood_steel_broken" value={currentGradeForm.two_seater_wood_steel_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-700 mb-2">2-Seater — Wood / Steel <span className="text-xs text-indigo-400 font-normal">(×2 capacity)</span></p>
+                                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                                <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="two_seater_wood_steel_func" value={currentGradeForm.two_seater_wood_steel_func} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                                <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="two_seater_wood_steel_broken" value={currentGradeForm.two_seater_wood_steel_broken} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-gray-700 mb-2">Wooden Chair Only 🪑</p>
-                                        <div className="grid grid-cols-2 gap-3 mb-4">
-                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="wooden_chair_only_func" value={currentGradeForm.wooden_chair_only_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="wooden_chair_only_broken" value={currentGradeForm.wooden_chair_only_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-700 mb-2">Wooden Chair Only 🪑</p>
+                                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                                <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="wooden_chair_only_func" value={currentGradeForm.wooden_chair_only_func} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                                <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="wooden_chair_only_broken" value={currentGradeForm.wooden_chair_only_broken} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-gray-700 mb-2">Plastic Chair Only 🪑</p>
-                                        <div className="grid grid-cols-2 gap-3 mb-4">
-                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="plastic_chair_only_func" value={currentGradeForm.plastic_chair_only_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="plastic_chair_only_broken" value={currentGradeForm.plastic_chair_only_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-700 mb-2">Plastic Chair Only 🪑</p>
+                                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                                <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="plastic_chair_only_func" value={currentGradeForm.plastic_chair_only_func} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                                <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="plastic_chair_only_broken" value={currentGradeForm.plastic_chair_only_broken} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Magic Math Validation Banner */}
                                 <AnimatePresence>
-                                    {(currentGradeForm.armchair_wood_func !== "" || currentGradeForm.armchair_plastic_func !== "" || currentGradeForm.armchair_plastic_steel_func !== "" || currentGradeForm.individual_table_chair_func !== "" || currentGradeForm.two_seater_wood_func !== "" || currentGradeForm.two_seater_wood_steel_func !== "" || currentGradeForm.wooden_chair_only_func !== "" || currentGradeForm.plastic_chair_only_func !== "") && (
+                                    {Object.values(currentGradeForm).some(v => v !== "") && (
                                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`rounded-3xl p-5 border-2 mt-6 ${gradeStats.isOk ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
                                             <div className="flex items-center justify-between mb-3 border-b-2 border-white/40 pb-3">
                                                 <span className={`text-xs font-black uppercase tracking-widest ${gradeStats.isOk ? "text-emerald-600" : "text-red-500"}`}>Combined Capacity</span>
@@ -2076,3 +2124,4 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 };
 
 export default Unit6SchoolResources;
+
