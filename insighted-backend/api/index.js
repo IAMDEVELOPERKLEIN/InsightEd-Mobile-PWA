@@ -256,6 +256,31 @@ const initOtpTable = async () => {
         console.error('❌ Failed to migrate curricular_offering:', migErr.message);
       }
 
+      // --- MIGRATION: SCHOOL COMPLETION TABLE ---
+      try {
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS ph_school_completion (
+            iern VARCHAR(255) PRIMARY KEY,
+            school_id VARCHAR(255),
+            unit1_completion BOOLEAN DEFAULT false,
+            unit2_completion BOOLEAN DEFAULT false,
+            unit3_completion BOOLEAN DEFAULT false,
+            unit4_completion BOOLEAN DEFAULT false,
+            unit5_completion BOOLEAN DEFAULT false,
+            unit6_completion BOOLEAN DEFAULT false,
+            unit7_completion BOOLEAN DEFAULT false,
+            unit8_completion BOOLEAN DEFAULT false,
+            total_completion NUMERIC(5,2) DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
+        // Migration to add school_id if missing
+        await client.query(`ALTER TABLE ph_school_completion ADD COLUMN IF NOT EXISTS school_id VARCHAR(255)`);
+        console.log('✅ Checked/Created ph_school_completion table with school_id');
+      } catch (migErr) {
+        console.error('❌ Failed to init completion table:', migErr.message);
+      }
+
       // --- MIGRATION: EXTEND USERS TABLE (For Engineer/Generic Sync) ---
       try {
         await client.query(`
@@ -1282,6 +1307,21 @@ app.post('/api/register-school', async (req, res) => {
     ];
 
     await client.query(insertQuery, values);
+
+    // 5. INITIALIZE COMPLETION TRACKING (Unit 1 Complete on Reg)
+    await client.query(`
+        INSERT INTO ph_school_completion (iern, school_id, unit1_completion, total_completion)
+        VALUES ($1, $2, true, 12.5)
+        ON CONFLICT (iern) DO UPDATE SET unit1_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+    `, [newIern, schoolData.school_id]);
+
+    // 6. SYNC TO PH_SCHOOLS
+    await client.query(`
+        INSERT INTO ph_schools (school_id, iern, school_name, region, division, district, curricular_offering)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (school_id) DO UPDATE SET iern = EXCLUDED.iern, updated_at = CURRENT_TIMESTAMP
+    `, [schoolData.school_id, newIern, schoolData.school_name, schoolData.region, schoolData.division, schoolData.district, schoolData.curricular_offering]);
+
     await client.query('COMMIT');
 
     console.log(`[SUCCESS] Registered School: ${schoolData.school_name} (${newIern})`);
@@ -3069,6 +3109,19 @@ app.post('/api/save-school-resources', async (req, res) => {
       return res.status(404).json({ error: "School Profile not found" });
     }
     console.log("[Resources] Success");
+
+    // Update Progress in ph_school_completion (Unit 6)
+    const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [data.schoolId]);
+    if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
+        const iern = iernRes.rows[0].iern;
+        await pool.query(`
+            INSERT INTO ph_school_completion (iern, unit6_completion)
+            VALUES ($1, true)
+            ON CONFLICT (iern) DO UPDATE SET unit6_completion = true, updated_at = CURRENT_TIMESTAMP
+        `, [iern]);
+        await updateSchoolTotalCompletion(iern);
+    }
+
     res.json({ message: "Resources saved!" });
   } catch (err) {
     console.error(err);
@@ -3118,6 +3171,19 @@ app.post('/api/save-physical-facilities', async (req, res) => {
       data.build_classrooms_repair,
       data.build_classrooms_demolition
     ]);
+
+    // Update Progress in ph_school_completion (Unit 7)
+    const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [data.schoolId]);
+    if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
+        const iern = iernRes.rows[0].iern;
+        await pool.query(`
+            INSERT INTO ph_school_completion (iern, unit7_completion)
+            VALUES ($1, true)
+            ON CONFLICT (iern) DO UPDATE SET unit7_completion = true, updated_at = CURRENT_TIMESTAMP
+        `, [iern]);
+        await updateSchoolTotalCompletion(iern);
+    }
+
     res.json({ message: "Facilities saved!" });
   } catch (err) {
     console.error(err);
@@ -3179,24 +3245,13 @@ app.get('/api/monitoring/stats', async (req, res) => {
         COUNT(CASE WHEN head_last_name IS NOT NULL THEN 1 END) as head,
         COUNT(CASE WHEN total_enrollment > 0 THEN 1 END) as enrollment,
         COUNT(CASE WHEN classes_kinder IS NOT NULL THEN 1 END) as organizedclasses,
-        COUNT(CASE WHEN shift_kinder IS NOT NULL THEN 1 END) as shifting,
-        COUNT(CASE WHEN teach_kinder > 0 THEN 1 END) as personnel,
-        COUNT(CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 END) as specialization,
-        COUNT(CASE WHEN res_armchairs_good > 0 OR res_toilets_male > 0 THEN 1 END) as resources,
-        SUM(CASE WHEN (
-           (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
-        ) = 10 THEN 1 ELSE 0 END) as completed_schools_count
-      FROM school_profiles
-      WHERE TRIM(region) = TRIM($1)
+        COUNT(CASE WHEN psc.unit5_completion = true THEN 1 END) as personnel,
+        COUNT(CASE WHEN psc.unit6_completion = true THEN 1 END) as resources,
+        COUNT(CASE WHEN psc.unit7_completion = true THEN 1 END) as facilities,
+        SUM(CASE WHEN psc.total_completion = 100 THEN 1 ELSE 0 END) as completed_schools_count
+      FROM school_profiles sp
+      LEFT JOIN ph_school_completion psc ON sp.school_id = (SELECT school_id FROM ph_schools WHERE iern = psc.iern LIMIT 1)
+      WHERE TRIM(sp.region) = TRIM($1)
     `;
     let params = [region];
 
@@ -3444,52 +3499,43 @@ app.get('/api/leaderboard', async (req, res) => {
       params.push(filter);
     }
 
-    const calculation = `
-    (
-      (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + --Basic Profile
-        (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + --Enrollment
-          (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + --School Head
-            (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Classes
-              (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + --Learner Stats
-                (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Shifting
-                  (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Personnel
-                    (CASE WHEN spec_math_major > 0 THEN 1 ELSE 0 END) + --Specialization
-                      (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + --Resources
-                        (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END) --Physical Facilities
-                ) * 100.0 / 10.0`;
+    const calculation = `COALESCE(psc.total_completion, 0)`;
 
     let query = '';
 
     if (scope === 'national') {
       // Aggregate by Region
       query = `
-        SELECT region as name,
+        SELECT sp.region as name,
         CAST(AVG(${calculation}) AS DECIMAL(10,1)) as avg_completion
-        FROM school_profiles
-        WHERE region IS NOT NULL
-        GROUP BY region
+        FROM school_profiles sp
+        LEFT JOIN ph_school_completion psc ON sp.school_id = (SELECT school_id FROM ph_schools WHERE iern = psc.iern LIMIT 1)
+        WHERE sp.region IS NOT NULL
+        GROUP BY sp.region
         ORDER BY avg_completion DESC
       `;
     } else if (scope === 'national_divisions') {
       // Aggregate by Division (National)
       query = `
-        SELECT division as name, region,
+        SELECT sp.division as name, sp.region,
         CAST(AVG(${calculation}) AS DECIMAL(10,1)) as avg_completion
-        FROM school_profiles
-        WHERE division IS NOT NULL
-        GROUP BY division, region
+        FROM school_profiles sp
+        LEFT JOIN ph_school_completion psc ON sp.school_id = (SELECT school_id FROM ph_schools WHERE iern = psc.iern LIMIT 1)
+        WHERE sp.division IS NOT NULL
+        GROUP BY sp.division, sp.region
         ORDER BY avg_completion DESC
       `;
     } else {
       // School Level List (Division or Region Scope)
       query = `
         SELECT
-        school_id, school_name, division, region,
+        sp.school_id, sp.school_name, sp.division, sp.region,
         ${calculation} as completion_rate,
-        updated_at
-        FROM school_profiles
-        ${whereClause}
-        ORDER BY completion_rate DESC, updated_at DESC
+        sp.updated_at
+        FROM school_profiles sp
+        LEFT JOIN ph_school_completion psc ON sp.school_id = (SELECT school_id FROM ph_schools WHERE iern = psc.iern LIMIT 1)
+        ${whereClause.replace('WHERE ', 'WHERE sp.')}
+        ORDER BY completion_rate DESC, sp.updated_at DESC
       `;
     }
 
@@ -3530,33 +3576,26 @@ app.get('/api/schools/:schoolId/activity', async (req, res) => {
   const { schoolId } = req.params;
   try {
     // Shared completion calculation logic (aligned with leaderboard)
-    const calculation = `
-      (
-        (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
-        (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
-        (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
-        (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-        (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
-        (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-        (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-        (CASE WHEN spec_math_major > 0 THEN 1 ELSE 0 END) + 
-        (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
-        (CASE WHEN (build_classrooms_total IS NOT NULL OR EXISTS (SELECT 1 FROM engineer_form WHERE school_id = $1)) THEN 1 ELSE 0 END)
-      ) * 100.0 / 10.0`;
+    const calculation = `COALESCE(psc.total_completion, 0)`;
 
     // Fetch the school's own performance context
-    const profileRes = await pool.query(`SELECT school_name, division, region, ${calculation} as percentage FROM school_profiles WHERE school_id = $1`, [schoolId]);
+    const profileRes = await pool.query(`
+        SELECT sp.school_name, sp.division, sp.region, ${calculation} as percentage, psc.* 
+        FROM school_profiles sp 
+        LEFT JOIN ph_school_completion psc ON sp.school_id = (SELECT school_id FROM ph_schools WHERE iern = psc.iern LIMIT 1)
+        WHERE sp.school_id = $1
+    `, [schoolId]);
 
     const school = profileRes.rows[0] || { name: 'My School', percentage: 0, division: '', region: '' };
     const percentage = Math.round(parseFloat(school.percentage || 0));
 
     // Comparative Stats for the Chart
     const compQuery = `
-      SELECT 'District' as name, AVG(${calculation}) as completed FROM school_profiles WHERE division = $1
+      SELECT 'District' as name, AVG(${calculation}) as completed FROM school_profiles sp LEFT JOIN ph_school_completion psc ON sp.school_id = (SELECT school_id FROM ph_schools WHERE iern = psc.iern LIMIT 1) WHERE sp.division = $1
       UNION ALL
       SELECT 'My School' as name, ${percentage} as completed
       UNION ALL
-      SELECT 'Division' as name, AVG(${calculation}) as completed FROM school_profiles WHERE region = $2
+      SELECT 'Division' as name, AVG(${calculation}) as completed FROM school_profiles sp LEFT JOIN ph_school_completion psc ON sp.school_id = (SELECT school_id FROM ph_schools WHERE iern = psc.iern LIMIT 1) WHERE sp.region = $2
     `;
     const compRes = await pool.query(compQuery, [school.division, school.region]);
 
@@ -3570,13 +3609,17 @@ app.get('/api/schools/:schoolId/activity', async (req, res) => {
       data: {
         progress: {
           percentage,
-          completedUnits: Math.floor(percentage / 10),
-          totalUnits: 10,
+          completedUnits: Math.floor(percentage / (100 / 8)),
+          totalUnits: 8,
           flags: {
-            unit1: !!school.school_name,
-            unit2: !!m.enroll_kinder,
-            unit7: !!school.res_water_source,
-            unit8: !!school.build_classrooms_total
+            unit1: !!profileRes.rows[0]?.unit1_completion,
+            unit2: !!profileRes.rows[0]?.unit2_completion,
+            unit3: !!profileRes.rows[0]?.unit3_completion,
+            unit4: !!profileRes.rows[0]?.unit4_completion,
+            unit5: !!profileRes.rows[0]?.unit5_completion,
+            unit6: !!profileRes.rows[0]?.unit6_completion,
+            unit7: !!profileRes.rows[0]?.unit7_completion,
+            unit8: !!profileRes.rows[0]?.unit8_completion
           }
         },
         gamification: {
@@ -3596,11 +3639,30 @@ app.post('/api/user/progress', async (req, res) => {
     const { unitId, schoolId } = req.body;
     try {
         console.log(`[Sync] Updating progress for Unit ${unitId} in School ${schoolId}`);
+        
+        const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
+        if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
+            const iern = iernRes.rows[0].iern;
+            const unitCol = `unit${unitId}_completion`;
+            
+            // 1. Update Unit Flag
+            await pool.query(`
+                INSERT INTO ph_school_completion (iern, ${unitCol})
+                VALUES ($1, true)
+                ON CONFLICT (iern) DO UPDATE SET ${unitCol} = true, updated_at = CURRENT_TIMESTAMP
+            `, [iern]);
+
+            // 2. Recalculate Total Completion
+            await updateSchoolTotalCompletion(iern);
+        }
+
         // Log it to activity log so it counts towards 'recent activity'
         await pool.query('INSERT INTO audit_logs (school_id, action, details) VALUES ($1, $2, $3)', 
             [schoolId, 'UNIT_COMPLETE', `Completed Unit ${unitId}`]);
+            
         res.json({ success: true });
     } catch (err) {
+        console.error("Sync Progress Error:", err);
         res.status(500).json({ error: "Failed to sync progress" });
     }
 });
@@ -3620,6 +3682,21 @@ app.put('/api/ph_schools/:schoolId', async (req, res) => {
 
         await pool.query(`UPDATE school_profiles SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1`, values);
         
+        // Update Progress Tracking if unitId provided
+        if (data.unitId) {
+            const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
+            if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
+                const iern = iernRes.rows[0].iern;
+                const unitCol = `unit${data.unitId}_completion`;
+                await pool.query(`
+                    INSERT INTO ph_school_completion (iern, school_id, ${unitCol})
+                    VALUES ($1, $2, true)
+                    ON CONFLICT (iern) DO UPDATE SET ${unitCol} = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+                `, [iern, schoolId]);
+                await updateSchoolTotalCompletion(iern);
+            }
+        }
+
         // Also ensure record exists in ph_schools for secondary sync
         await pool.query('INSERT INTO ph_schools (school_id) VALUES ($1) ON CONFLICT (school_id) DO NOTHING', [schoolId]);
 
@@ -3641,19 +3718,9 @@ app.get('/api/monitoring/regions', async (req, res) => {
           COUNT(*) as total_schools,
           COUNT(CASE WHEN total_enrollment > 0 THEN 1 END) as with_enrollment,
           COUNT(CASE WHEN head_last_name IS NOT NULL THEN 1 END) as with_head,
-          SUM(CASE WHEN (
-            (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
-            (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
-            (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
-            (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-            (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
-            (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-            (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
-            (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
-            (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
-          ) = 10 THEN 1 ELSE 0 END) as completed_schools
-        FROM school_profiles
+          SUM(CASE WHEN psc.total_completion = 100 THEN 1 ELSE 0 END) as completed_schools
+        FROM school_profiles sp
+        LEFT JOIN ph_school_completion psc ON sp.school_id = (SELECT school_id FROM ph_schools WHERE iern = psc.iern LIMIT 1)
         GROUP BY region
       ),
       project_stats AS (
@@ -3880,23 +3947,33 @@ app.post('/api/save-learner-statistics', async (req, res) => {
 app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    const result = await pool.query('SELECT total_enrollment, enroll_kinder FROM ph_schools WHERE school_id = $1', [schoolId]);
+    const result = await pool.query(`
+      SELECT psc.* 
+      FROM ph_school_completion psc
+      JOIN ph_schools ps ON ps.iern = psc.iern
+      WHERE ps.school_id = $1
+    `, [schoolId]);
 
     let completedUnits = [];
     let xp = 0;
 
     if (result.rows.length > 0) {
-      // If the row exists, Unit 1 (School Identity) is completed
-      completedUnits.push(1);
-      xp += 150;
-
       const row = result.rows[0];
-      // If total_enrollment is not null and > 0 (or specifically enroll_kinder is saved as 0 or more indicating it was touched)
-      // We check if enroll_kinder is not null to prove the record was explicitly saved in Unit 2
-      if (row.enroll_kinder !== null) {
-        completedUnits.push(2);
-        xp += 250;
-      }
+      if (row.unit1_completion) { completedUnits.push(1); xp += 150; }
+      if (row.unit2_completion) { completedUnits.push(2); xp += 200; }
+      if (row.unit3_completion) { completedUnits.push(3); xp += 250; }
+      if (row.unit4_completion) { completedUnits.push(4); xp += 300; }
+      if (row.unit5_completion) { completedUnits.push(5); xp += 350; }
+      if (row.unit6_completion) { completedUnits.push(6); xp += 400; }
+      if (row.unit7_completion) { completedUnits.push(7); xp += 450; }
+      if (row.unit8_completion) { completedUnits.push(8); xp += 500; }
+    } else {
+        // Fallback: If no progress record, Unit 1 is technically done once a school exists in ph_schools
+        const schoolCheck = await pool.query('SELECT 1 FROM ph_schools WHERE school_id = $1', [schoolId]);
+        if (schoolCheck.rows.length > 0) {
+            completedUnits.push(1);
+            xp += 150;
+        }
     }
 
     res.json({ success: true, progress: { completedUnits, xp } });
@@ -3928,6 +4005,17 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.region, data.division, data.district, data.curricular_offering
     ];
     await pool.query(query, values);
+
+    // Update Completion Table for Unit 1
+    if (data.iern) {
+        await pool.query(`
+            INSERT INTO ph_school_completion (iern, school_id, unit1_completion)
+            VALUES ($1, $2, true)
+            ON CONFLICT (iern) DO UPDATE SET unit1_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+        `, [data.iern, data.school_id]);
+        await updateSchoolTotalCompletion(data.iern);
+    }
+
     res.json({ success: true, message: "Unit 1 saved successfully!" });
   } catch (err) {
     console.error("Save Unit 1 Error:", err);
@@ -3992,6 +4080,19 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
     const query = `UPDATE ph_schools SET ${fields.join(', ')} WHERE school_id = $13`;
 
     await pool.query(query, values);
+
+    // Update Progress in ph_school_completion
+    const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
+    if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
+        const iern = iernRes.rows[0].iern;
+        await pool.query(`
+            INSERT INTO ph_school_completion (iern, school_id, unit2_completion)
+            VALUES ($1, $2, true)
+            ON CONFLICT (iern) DO UPDATE SET unit2_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+        `, [iern, schoolId]);
+        await updateSchoolTotalCompletion(iern);
+    }
+
     res.json({ success: true, message: "Unit 2 Learner data saved successfully!" });
 
   } catch (err) {

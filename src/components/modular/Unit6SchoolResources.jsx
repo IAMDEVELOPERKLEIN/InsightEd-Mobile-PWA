@@ -62,7 +62,7 @@ const WATER_SOURCES = [
     "No water source"
 ];
 
-const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
+const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const navigate = useNavigate();
 
     const [loading, setLoading] = useState(true);
@@ -172,7 +172,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             }
 
             try {
-                const draft = await getUnitDraft(7, storedId);
+                const draft = await getUnitDraft(6, storedId);
                 const res = await fetch(`/api/ph_schools/${storedId}?t=${Date.now()}`);
                 
                 if (res.ok) {
@@ -505,7 +505,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     }
                 }
             } catch (e) {
-                console.warn("Could not fetch data for Unit 7", e);
+                console.warn("Could not fetch data for Unit 6", e);
             } finally {
                 setLoading(false);
             }
@@ -723,7 +723,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             washData,
             utilitiesData
         };
-        await saveUnitDraft(7, storedId, draftData);
+        await saveUnitDraft(6, storedId, draftData);
         navigate("/modular-dashboard");
     };
 
@@ -784,7 +784,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     fetch('/api/user/progress', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ unitId: 7, schoolId: storedId })
+                        body: JSON.stringify({ unitId: 6, schoolId: storedId })
                     }).catch(e => console.warn("Progress sync failed", e))
                 ];
 
@@ -792,8 +792,8 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 try {
                     const stored = localStorage.getItem('quest_progress');
                     let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
-                    if (!progress.completedUnits.includes(7)) {
-                        progress.completedUnits.push(7);
+                    if (!progress.completedUnits.includes(6)) {
+                        progress.completedUnits.push(6);
                         progress.xp = (progress.xp || 0) + 500;
                         localStorage.setItem('quest_progress', JSON.stringify(progress));
                     }
@@ -850,7 +850,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 <FiArrowLeft className="w-6 h-6" />
                             </button>
                             <div className="flex-1 text-center">
-                                <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 7</div>
+                                <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 6</div>
                                 <h1 className="text-sm font-black text-gray-800">School Resources</h1>
                             </div>
                             <div className="w-10" />
@@ -869,7 +869,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                             <span className="text-4xl text-white">🎒</span>
                         </motion.div>
                         <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-indigo-100">
-                            Unit 7 • Inventory Profile
+                            Unit 6 • Inventory Profile
                         </span>
                         <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight">Resources Summary</h1>
                         <p className="text-slate-500 font-medium mt-2 italic">"Physical assets and utility infrastructure report"</p>
@@ -2075,4 +2075,4 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     );
 };
 
-export default Unit7SchoolResources;
+export default Unit6SchoolResources;

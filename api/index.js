@@ -573,6 +573,43 @@ pool.on('error', (err) => {
 // Inject pool into chatbot module
 setPool(pool);
 
+/**
+ * Recalculates and updates the total completion percentage for a school.
+ * Considers 8 Modular Units.
+ */
+async function updateSchoolTotalCompletion(iern) {
+  if (!iern) return;
+  try {
+    const res = await pool.query('SELECT * FROM ph_school_completion WHERE iern = $1', [iern]);
+    if (res.rows.length === 0) return;
+
+    const row = res.rows[0];
+    let completedCount = 0;
+    // Check Unit 1 to 8
+    for (let i = 1; i <= 8; i++) {
+        if (row[`unit${i}_completion`] === true) completedCount++;
+    }
+
+    const totalStats = 8;
+    const percentage = parseFloat(((completedCount / totalStats) * 100).toFixed(2));
+
+    await pool.query(
+        'UPDATE ph_school_completion SET total_completion = $1, updated_at = CURRENT_TIMESTAMP WHERE iern = $2',
+        [percentage, iern]
+    );
+
+    // Also sync back to ph_schools for legacy compatibility (unit_completion column)
+    await pool.query(
+        'UPDATE ph_schools SET unit_completion = $1 WHERE iern = $2',
+        [percentage, iern]
+    );
+
+    console.log(`[SYNC] Updated completion for ${iern}: ${percentage}% (${completedCount}/8)`);
+  } catch (err) {
+    console.error(`[ERROR] updateSchoolTotalCompletion failed for ${iern}:`, err.message);
+  }
+}
+
 // --- SECONDARY DATABASE CONNECTION (Dual-Write) ---
 let poolNew = null;
 if (process.env.NEW_DATABASE_URL) {
@@ -716,8 +753,8 @@ const runAutoMigrations = async () => {
 
     await Promise.all(columnPromises);
 
-    await checkAndAddColumn('ownership_documents', 'ownership_document_type', 'TEXT', pool);
-    if (poolNew) columnPromises.push(checkAndAddColumn('ownership_documents', 'ownership_document_type', 'TEXT', poolNew));
+    await checkAndAddColumn('school_ownership_docs', 'ownership_document_type', 'TEXT', pool);
+    if (poolNew) columnPromises.push(checkAndAddColumn('school_ownership_docs', 'ownership_document_type', 'TEXT', poolNew));
 
     // --- IERN MIGRATION PHASE ---
     if (!(await hasMigrationRun('iern_migration_v2'))) {
@@ -737,9 +774,9 @@ const runAutoMigrations = async () => {
 
     // 3. Add iern column to all child tables and backfill
     const childTables = [
-      'ph_school_buildable_spaces',
+      'buildable_spaces',
       'school_location_profiles',
-      'ownership_documents',
+      'school_ownership_docs',
       'ph_buildings_repairs',
       'ph_buildings_inventory',
       'ph_buildings_demolition',
@@ -778,29 +815,29 @@ const runAutoMigrations = async () => {
     `).catch(() => {});
     await pool.query('ALTER TABLE school_location_profiles ADD CONSTRAINT school_location_profiles_iern_unique UNIQUE (iern)').catch(() => {});
 
-    // -- ph_school_buildable_spaces --
+    // -- buildable_spaces --
     // Deduplicate: Keep latest record per (IERN, space_name)
     await pool.query(`
-      DELETE FROM ph_school_buildable_spaces WHERE id NOT IN (
-        SELECT id FROM (
-          SELECT id, ROW_NUMBER() OVER (PARTITION BY iern, space_name ORDER BY created_at DESC) as rn
-          FROM ph_school_buildable_spaces WHERE iern IS NOT NULL AND space_name IS NOT NULL
+      DELETE FROM buildable_spaces WHERE space_id NOT IN (
+        SELECT space_id FROM (
+          SELECT space_id, ROW_NUMBER() OVER (PARTITION BY iern, space_number ORDER BY created_at DESC) as rn
+          FROM buildable_spaces WHERE iern IS NOT NULL AND space_number IS NOT NULL
         ) s WHERE s.rn = 1
       )
     `).catch(() => {});
-    await pool.query('ALTER TABLE ph_school_buildable_spaces ADD CONSTRAINT ph_school_buildable_spaces_iern_name_unique UNIQUE (iern, space_name)').catch(() => {});
+    await pool.query('ALTER TABLE buildable_spaces ADD CONSTRAINT buildable_spaces_iern_number_unique UNIQUE (iern, space_number)').catch(() => {});
 
-    // -- ownership_documents --
+    // -- school_ownership_docs --
     // Deduplicate: Keep latest record per IERN
     await pool.query(`
-      DELETE FROM ownership_documents WHERE id NOT IN (
+      DELETE FROM school_ownership_docs WHERE id NOT IN (
         SELECT id FROM (
-          SELECT id, ROW_NUMBER() OVER (PARTITION BY iern ORDER BY updated_at DESC) as rn
-          FROM ownership_documents WHERE iern IS NOT NULL
+          SELECT id, ROW_NUMBER() OVER (PARTITION BY iern ORDER BY created_at DESC) as rn
+          FROM school_ownership_docs WHERE iern IS NOT NULL
         ) s WHERE s.rn = 1
       )
     `).catch(() => {});
-    await pool.query('ALTER TABLE ownership_documents ADD CONSTRAINT ownership_documents_iern_unique UNIQUE (iern)').catch(() => {});
+    await pool.query('ALTER TABLE school_ownership_docs ADD CONSTRAINT school_ownership_docs_iern_unique UNIQUE (iern)').catch(() => {});
 
 
     // 4. Drop problematic Foreign Key constraints that rely on school_id
@@ -1072,7 +1109,7 @@ const initDB = async () => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS buildable_spaces (
         space_id SERIAL PRIMARY KEY,
-        school_id TEXT REFERENCES school_profiles(school_id),
+        school_id TEXT,
         iern TEXT,
         space_number INTEGER,
         latitude NUMERIC,
@@ -1083,12 +1120,11 @@ const initDB = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    await checkAndAddColumn('school_profiles', 'has_buildable_space', 'BOOLEAN');
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS facility_repairs (
         repair_id SERIAL PRIMARY KEY,
-        school_id TEXT REFERENCES school_profiles(school_id),
+        school_id TEXT,
         iern TEXT,
         building_no TEXT,
         remarks TEXT,
@@ -1096,7 +1132,7 @@ const initDB = async () => {
       );
       CREATE TABLE IF NOT EXISTS facility_demolitions (
         demolition_id SERIAL PRIMARY KEY,
-        school_id TEXT REFERENCES school_profiles(school_id),
+        school_id TEXT,
         iern TEXT,
         building_no TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -3013,107 +3049,9 @@ app.get('/api/school-profile/:schoolId', async (req, res) => {
   }
 });
 
-// --- DEBUG: SCANNER ENDPOINT ---
+// --- DEBUG: SCANNER ENDPOINT (REMOVED) ---
 app.get('/api/debug/scan/:uid', async (req, res) => {
-  const { uid } = req.params;
-  try {
-    // 1. Get School Profile
-    const spResult = await pool.query("SELECT * FROM school_profiles WHERE submitted_by = $1", [uid]);
-    if (spResult.rows.length === 0) return res.json({ error: "No school profile found for this user." });
-
-    const sp = spResult.rows[0];
-    const report = { school_id: sp.school_id, school_name: sp.school_name, forms: {} };
-    let completed = 0;
-
-    // Verbose Checks (Mirroring calculateSchoolProgress)
-
-    // F1
-    report.forms.f1_profile = { passed: !!sp.school_name, val: sp.school_name, reason: sp.school_name ? "OK" : "Missing School Name" };
-    if (report.forms.f1_profile.passed) completed++;
-
-    // F2
-    report.forms.f2_head = { passed: !!sp.head_last_name, val: sp.head_last_name, reason: sp.head_last_name ? "OK" : "Missing Head Last Name" };
-    if (report.forms.f2_head.passed) completed++;
-
-    // F3
-    report.forms.f3_enrollment = { passed: (sp.total_enrollment > 0), val: sp.total_enrollment, reason: "Must be > 0" };
-    if (report.forms.f3_enrollment.passed) completed++;
-
-    // F4
-    const totalClasses = (sp.classes_kinder || 0) + (sp.classes_grade_1 || 0) + (sp.classes_grade_2 || 0) + (sp.classes_grade_3 || 0) +
-      (sp.classes_grade_4 || 0) + (sp.classes_grade_5 || 0) + (sp.classes_grade_6 || 0) +
-      (sp.classes_grade_7 || 0) + (sp.classes_grade_8 || 0) + (sp.classes_grade_9 || 0) + (sp.classes_grade_10 || 0) +
-      (sp.classes_grade_11 || 0) + (sp.classes_grade_12 || 0);
-    report.forms.f4_classes = { passed: totalClasses > 0, val: totalClasses, reason: "Sum of classes must be > 0" };
-    if (report.forms.f4_classes.passed) completed++;
-
-    // F5
-    const totalTeachers = (sp.teach_kinder || 0) + (sp.teach_g1 || 0) + (sp.teach_g2 || 0) + (sp.teach_g3 || 0) +
-      (sp.teach_g4 || 0) + (sp.teach_g5 || 0) + (sp.teach_g6 || 0) +
-      (sp.teach_g7 || 0) + (sp.teach_g8 || 0) + (sp.teach_g9 || 0) + (sp.teach_g10 || 0) +
-      (sp.teach_g11 || 0) + (sp.teach_g12 || 0);
-    report.forms.f5_teachers = { passed: totalTeachers > 0, val: totalTeachers, reason: "Sum of teachers must be > 0" };
-    if (report.forms.f5_teachers.passed) completed++;
-
-    // F6
-    const specFields = [
-      'spec_general_major', 'spec_ece_major', 'spec_english_major', 'spec_filipino_major', 'spec_math_major',
-      'spec_science_major', 'spec_ap_major', 'spec_mapeh_major', 'spec_esp_major', 'spec_tle_major',
-      'spec_bio_sci_major', 'spec_phys_sci_major', 'spec_agri_fishery_major', 'spec_others_major'
-    ];
-    const specVals = specFields.map(f => sp[f] || 0);
-    const hasSpec = specVals.some(v => v > 0);
-    report.forms.f6_specialization = { passed: hasSpec, max_val: Math.max(...specVals), reason: "Any specialization > 0" };
-    if (report.forms.f6_specialization.passed) completed++;
-
-    // F7
-    const hasRes = (sp.res_electricity_source || sp.res_water_source || sp.res_buildable_space || sp.sha_category ||
-      (sp.res_armchair_func || 0) > 0 || (sp.res_armchairs_good || 0) > 0 ||
-      (sp.res_toilets_male || 0) > 0 ||
-      (sp.female_bowls_func || 0) > 0 || (sp.male_bowls_func || 0) > 0 ||
-      (sp.male_urinals_func || 0) > 0 || (sp.pwd_bowls_func || 0) > 0);
-    report.forms.f7_resources = { passed: !!hasRes, reason: "Utility/Infra set or Inventory > 0. Elec: " + sp.res_electricity_source };
-    if (report.forms.f7_resources.passed) completed++;
-
-    // F8
-    report.forms.f8_facilities = { passed: (sp.build_classrooms_total > 0), val: sp.build_classrooms_total, reason: "Total Classrooms > 0" };
-    if (report.forms.f8_facilities.passed) completed++;
-
-    // F9
-    const hasShift = (sp.shift_kinder || sp.shift_g1 || sp.adm_mdl || sp.adm_odl);
-    report.forms.f9_shifting = { passed: !!hasShift, reason: "Any shift or modality set" };
-    if (report.forms.f9_shifting.passed) completed++;
-
-    // F10
-    const statKeys = Object.keys(sp).filter(k => k.startsWith('stat_'));
-    const nonZeroStats = statKeys.filter(k => Number(sp[k]) > 0);
-    report.forms.f10_stats = {
-      passed: nonZeroStats.length > 0,
-      positive_keys: nonZeroStats,
-      count: nonZeroStats.length,
-      reason: "Any stat_ field > 0"
-    };
-    if (report.forms.f10_stats.passed) completed++;
-
-    report.total_score = completed;
-    report.percentage = Math.round((completed / 10) * 100);
-
-    // AUTO-HEAL: If the calculation here differs from DB, update DB
-    if (completed !== sp.forms_completed_count) {
-      report.fix_applied = true;
-      try {
-        await calculateSchoolProgress(sp.school_id, pool); // Force trigger the main function
-      } catch (e) {
-        console.error("Auto-heal calc error:", e.message);
-      }
-    }
-
-    res.json(report);
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
+  res.status(410).json({ error: "Scanner decommissioned. Use modern dashboard for progress tracking." });
 });
 
 // --- DEBUG: SEED SCHOOLS (For Production Fix) ---
@@ -3201,13 +3139,12 @@ app.get('/api/debug/seed-schools', async (req, res) => {
       batch.forEach((row, rIdx) => {
         const rowVals = Object.values(row);
         rowVals.forEach(v => batchValues.push(v));
-
         const rowPlaceholders = rowVals.map((_, cIdx) => `$${(rIdx * headers.length) + cIdx + 1}`);
         placeholders.push(`(${rowPlaceholders.join(',')})`);
       });
 
       const query = `
-                INSERT INTO schools (${headers.map(h => h.replace(/[^a-z0-9_]/gi, '_').toLowerCase()).join(',')})
+                INSERT INTO ph_schools_IERN (${headers.map(h => h.replace(/[^a-z0-9_]/gi, '_').toLowerCase()).join(',')})
                 VALUES ${placeholders.join(',')}
                 ON CONFLICT (school_id) DO UPDATE SET 
                     school_name = EXCLUDED.school_name,
@@ -3428,7 +3365,7 @@ specialization = EXCLUDED.specialization,
     // We update 'spec_general_teaching' with the total count of teachers, 
     // ensuring SchoolForms.jsx sees a value > 0 to mark the form as "Completed".
     await client.query(`
-      UPDATE school_profiles 
+      UPDATE ph_schools /* school_profiles decommissioned */ 
       SET spec_general_teaching = (
         SELECT COUNT(*)::int FROM teacher_specialization_details WHERE school_id = $1
       )
@@ -3436,7 +3373,7 @@ specialization = EXCLUDED.specialization,
     `, [schoolId]);
 
     // 5. UPDATE PROGRESS
-    await calculateSchoolProgress(schoolId, client);
+    /* Truly removed now */
 
     await client.query('COMMIT');
     res.json({ success: true, message: "Teacher personnel saved successfully." });
@@ -3481,12 +3418,12 @@ app.post('/api/save-teacher-specialization-legacy', async (req, res) => {
       values.push(data[field] ? parseInt(data[field]) : 0);
     });
 
-    const query = `UPDATE school_profiles SET ${updates.join(', ')} WHERE school_id = $1`;
+    const query = `UPDATE ph_schools /* school_profiles decommissioned */ SET ${updates.join(', ')} WHERE school_id = $1`;
 
     await client.query(query, values);
 
     // Trigger progress update just in case
-    await calculateSchoolProgress(schoolId, client);
+    /* Truly removed now */
 
     await client.query('COMMIT');
     res.json({ success: true, message: "Legacy specialization data saved." });
@@ -3510,7 +3447,7 @@ app.get('/api/debug/recalculate-all', async (req, res) => {
     let count = 0;
     for (const s of schools) {
       if (s.school_id) {
-        await calculateSchoolProgress(s.school_id, pool);
+        /* Truly removed now */
         count++;
       }
     }
@@ -4280,331 +4217,15 @@ VALUES($1, $2, $3, $4, $5, $6)
     }
 
     await pool.query(query, [userUid, userName, role, actionType, targetEntity, dbDetails]);
-    console.log(`“ Audit Logged: ${actionType} - ${targetEntity} `);
+    console.log(`“  Audit Logged: ${actionType} - ${targetEntity} `);
 
     // --- DUAL WRITE: LOG ACTIVITY ---
     if (poolNew) {
-      poolNew.query(query, [userUid, userName, role, actionType, targetEntity, details])
-        .catch(e => console.error("âŒ Dual-Write Log Error:", e.message));
+      poolNew.query(query, [userUid, userName, role, actionType, targetEntity, dbDetails])
+        .catch(e => console.error("â Œ Dual-Write Log Error:", e.message));
     }
   } catch (err) {
-    console.error("âŒ Failed to log activity:", err.message);
-  }
-};
-
-// --- HELPER: UPDATE SCHOOL SUMMARY (INSTANT) ---
-const updateSchoolSummary = async (schoolId, db) => {
-  console.log(`[InstantUpdate] Starting for ${schoolId}...`);
-  try {
-    // 1. Fetch School Profile
-    const res = await db.query('SELECT * FROM school_profiles WHERE school_id = $1', [schoolId]);
-    if (res.rows.length === 0) {
-      console.log(`[InstantUpdate] School ${schoolId} not found in profiles.`);
-      return;
-    }
-    const sp = res.rows[0];
-
-    // 2. Completeness Checks (Critical Missing Data)
-    const issues = [];
-    const totalEnrollment = parseInt(sp.total_enrollment || 0);
-    // Use the same sum logic as calculateSchoolProgress to be safe
-    const totalTeachers = parseInt(
-      (sp.teach_kinder || 0) + (sp.teach_g1 || 0) + (sp.teach_g2 || 0) + (sp.teach_g3 || 0) +
-      (sp.teach_g4 || 0) + (sp.teach_g5 || 0) + (sp.teach_g6 || 0) +
-      (sp.teach_g7 || 0) + (sp.teach_g8 || 0) + (sp.teach_g9 || 0) + (sp.teach_g10 || 0) +
-      (sp.teach_g11 || 0) + (sp.teach_g12 || 0) +
-      (sp.teach_multi_1_2 || 0) + (sp.teach_multi_3_4 || 0) + (sp.teach_multi_5_6 || 0) + (sp.teach_multi_3plus_count || 0) +
-      (sp.teachers_es || 0) + (sp.teachers_jhs || 0) + (sp.teachers_shs || 0)
-    );
-    const totalClassrooms = parseInt(sp.build_classrooms_total || 0);
-    const totalToilets = parseInt(
-      (sp.res_toilets_male || 0) + (sp.res_toilets_female || 0) + (sp.res_toilets_common || 0) + (sp.res_toilets_pwd || 0)
-    );
-    // Fix: Correct variable names for seats as per DB schema usually res_armchair_func etc
-    const totalSeats = parseInt(
-      (sp.res_armchair_func || 0) + (sp.res_desk_func || 0)
-    );
-
-    console.log(`[InstantUpdate] Stats for ${schoolId}: Learners = ${totalEnrollment}, Teachers = ${totalTeachers}, Rooms = ${totalClassrooms} `);
-
-    if (totalEnrollment > 0) {
-      if (totalTeachers === 0) issues.push("Critical missing data. No teachers have been reported.");
-      if (totalClassrooms === 0) issues.push("Critical missing data. No classrooms have been reported.");
-      if (totalToilets === 0) issues.push("Critical missing data. No toilets have been reported.");
-    }
-
-    // 3. Score & Description
-    // We default to 0 (Pending) instead of 100 to allow the Python script to run
-    let score = 0;
-    let description = "Pending Validation";
-    let formsToRecheck = "";
-
-    if (issues.length > 0) {
-      score = 40; // Critical
-      description = "Critical";
-      formsToRecheck = issues.join("; ");
-      console.log(`[InstantUpdate] Issues Found: ${formsToRecheck} `);
-    } else {
-      console.log(`[InstantUpdate] No Critical Issues. Awaiting Python Validation...`);
-    }
-
-    // 4. Update school_summary (Upsert)
-    // We update the core metrics + data_health columns
-    // NOTE: This query duplicates the Python fields to ensure instant sync.
-    // Python script will later overwrite this with more advanced analysis (Outliers, etc.)
-    const summaryQuery = `
-      INSERT INTO school_summary(
-    school_id, school_name, iern, region, division, district,
-    total_learners, total_teachers, total_classrooms, total_toilets, total_seats,
-    data_health_score, data_health_description, issues, last_updated
-  ) VALUES(
-    $1, $2, $3, $4, $5, $6,
-    $7, $8, $9, $10, $11,
-    $12, $13, $14, CURRENT_TIMESTAMP
-  )
-      ON CONFLICT(school_id) DO UPDATE SET
-school_name = EXCLUDED.school_name,
-  iern = EXCLUDED.iern,
-  region = EXCLUDED.region,
-  division = EXCLUDED.division,
-  district = EXCLUDED.district,
-  total_learners = EXCLUDED.total_learners,
-  total_teachers = EXCLUDED.total_teachers,
-  total_classrooms = EXCLUDED.total_classrooms,
-  total_toilets = EXCLUDED.total_toilets,
-  total_seats = EXCLUDED.total_seats,
-  data_health_score = EXCLUDED.data_health_score,
-  data_health_description = EXCLUDED.data_health_description,
-  issues = EXCLUDED.issues,
-  last_updated = CURRENT_TIMESTAMP
-    `;
-
-    // Simple implementation: Insert with Pending/Critical score, but DO NOT overwrite existing score on conflict
-    // unless there is a critical issue.
-    // Python will refine and overwrite it later.
-    await db.query(`
-      INSERT INTO school_summary(
-      school_id, school_name, iern, region, division, district,
-      total_learners, total_teachers, total_classrooms, total_toilets, total_seats,
-      data_health_score, data_health_description, issues, last_updated
-    ) VALUES(
-      $1, $2, $3, $4, $5, $6,
-      $7, $8, $9, $10, $11,
-      $12, $13, $14, CURRENT_TIMESTAMP
-    )
-      ON CONFLICT(school_id) DO UPDATE SET
-school_name = EXCLUDED.school_name,
-  iern = EXCLUDED.iern,
-  region = EXCLUDED.region,
-  division = EXCLUDED.division,
-  district = EXCLUDED.district,
-  total_learners = EXCLUDED.total_learners,
-  total_teachers = EXCLUDED.total_teachers,
-  total_classrooms = EXCLUDED.total_classrooms,
-  total_toilets = EXCLUDED.total_toilets,
-  total_seats = EXCLUDED.total_seats,
-  issues = EXCLUDED.issues,
-  last_updated = CURRENT_TIMESTAMP
-    `, [
-      sp.school_id, sp.school_name, sp.school_id, sp.region, sp.division, sp.district, // iern is usually ID
-      totalEnrollment, totalTeachers, totalClassrooms, totalToilets, totalSeats,
-      score, description, formsToRecheck
-    ]);
-
-    console.log(`… Instant School Summary Update for ${schoolId}: ${description} (${issues.length} issues)`);
-
-  } catch (err) {
-    console.error(" Instant Summary Update Error:", err.message);
-  }
-};
-
-// --- HELPER: CALCULATE SCHOOL PROGRESS (SNAPSHOT) ---
-const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
-  console.log(`TRIGGER: calculateSchoolProgress for ${schoolId}`);
-  if (!schoolId) return;
-  try {
-    // 1. Fetch current data
-    const res = await dbClientOrPool.query('SELECT * FROM school_profiles WHERE school_id = $1', [schoolId]);
-    if (res.rows.length === 0) return;
-    const sp = res.rows[0];
-
-    let completed = 0;
-    const total = 11;
-
-    // --- FORM 1: Profile ---
-    // Criteria: School ID exists (which it does if we found the row), and Name is set
-    const f1 = sp.school_name ? 1 : 0;
-    if (f1) completed++;
-
-    // --- FORM 2: School Head ---
-    // Criteria: Last Name is present
-    const f2 = sp.head_last_name ? 1 : 0;
-    if (f2) completed++;
-
-    // --- FORM 3: Enrollment ---
-    // Criteria: Total Enrollment > 0
-    const f3 = (sp.total_enrollment || 0) > 0 ? 1 : 0;
-    if (f3) completed++;
-
-    // --- FORM 4: Organized Classes ---
-    // Criteria: Sum of all class counts > 0
-    const totalClasses =
-      (sp.classes_kinder || 0) + (sp.classes_grade_1 || 0) + (sp.classes_grade_2 || 0) + (sp.classes_grade_3 || 0) +
-      (sp.classes_grade_4 || 0) + (sp.classes_grade_5 || 0) + (sp.classes_grade_6 || 0) +
-      (sp.classes_grade_7 || 0) + (sp.classes_grade_8 || 0) + (sp.classes_grade_9 || 0) + (sp.classes_grade_10 || 0) +
-      (sp.classes_grade_11 || 0) + (sp.classes_grade_12 || 0);
-    const f4 = totalClasses > 0 ? 1 : 0;
-    if (f4) completed++;
-
-    // --- FORM 5: Teachers ---
-    // Criteria: Sum of all teacher counts > 0
-    const totalTeachers =
-      (sp.teach_kinder || 0) + (sp.teach_g1 || 0) + (sp.teach_g2 || 0) + (sp.teach_g3 || 0) +
-      (sp.teach_g4 || 0) + (sp.teach_g5 || 0) + (sp.teach_g6 || 0) +
-      (sp.teach_g7 || 0) + (sp.teach_g8 || 0) + (sp.teach_g9 || 0) + (sp.teach_g10 || 0) +
-      (sp.teach_g11 || 0) + (sp.teach_g12 || 0) +
-      // Add Multigrade & Summary fields to catch schools with only these filled
-      (sp.teach_multi_1_2 || 0) + (sp.teach_multi_3_4 || 0) + (sp.teach_multi_5_6 || 0) + (sp.teach_multi_3plus_count || 0) +
-      (sp.teachers_es || 0) + (sp.teachers_jhs || 0) + (sp.teachers_shs || 0);
-    const f5 = totalTeachers > 0 ? 1 : 0;
-    if (f5) completed++;
-
-    // --- FORM 6: Specialization ---
-    // Criteria: At least one record in the new teacher_specialization_details table
-    // OR legacy aggregate columns have data
-    const resultSpec = await dbClientOrPool.query(
-      'SELECT id FROM teacher_specialization_details WHERE school_id = $1 LIMIT 1',
-      [schoolId]
-    );
-
-    let f6 = resultSpec.rows.length > 0 ? 1 : 0;
-
-    if (!f6) {
-      // Fallback: Check Legacy Columns
-      // Columns: spec_general_teaching, spec_english_major, etc.
-      // We check if ANY of them are greater than 0
-      const legacyCols = [
-        'spec_general_teaching', 'spec_ece_teaching', 'spec_english_major', 'spec_filipino_major',
-        'spec_math_major', 'spec_science_major', 'spec_ap_major', 'spec_tle_major',
-        'spec_mapeh_major', 'spec_esp_major', 'spec_bio_sci_major', 'spec_phys_sci_major',
-        'spec_agri_fishery_major', 'spec_others_major'
-      ];
-      // Check if any col in sp is > 0
-      const hasLegacy = legacyCols.some(col => (sp[col] || 0) > 0);
-      if (hasLegacy) f6 = 1;
-    }
-
-    if (f6) completed++;
-
-    // --- FORM 7: Resources ---
-    // Criteria: Any key infrastructure/utility field is set OR any inventory count > 0
-    const f7 = (sp.res_electricity_source || sp.res_water_source || sp.res_buildable_space || sp.sha_category ||
-      (sp.res_armchair_func || 0) > 0 || (sp.res_armchairs_good || 0) > 0 ||
-      (sp.res_toilets_male || 0) > 0 ||
-      (sp.female_bowls_func || 0) > 0 || (sp.male_bowls_func || 0) > 0 ||
-      (sp.male_urinals_func || 0) > 0 || (sp.pwd_bowls_func || 0) > 0) ? 1 : 0;
-    if (f7) completed++;
-
-    // --- FORM 8: Facilities ---
-    // Criteria: Total Classrooms > 0
-    const f8 = (sp.build_classrooms_total || 0) > 0 ? 1 : 0;
-    if (f8) completed++;
-
-
-    // --- FORM 9: Shifting ---
-    // Criteria: Any shift (K-12) OR any mode (K-12) OR any ADM defined
-    const hasShift =
-      (sp.shift_kinder || sp.shift_g1 || sp.shift_g2 || sp.shift_g3 || sp.shift_g4 || sp.shift_g5 || sp.shift_g6 ||
-        sp.shift_g7 || sp.shift_g8 || sp.shift_g9 || sp.shift_g10 || sp.shift_g11 || sp.shift_g12);
-    const hasMode =
-      (sp.mode_kinder || sp.mode_g1 || sp.mode_g2 || sp.mode_g3 || sp.mode_g4 || sp.mode_g5 || sp.mode_g6 ||
-        sp.mode_g7 || sp.mode_g8 || sp.mode_g9 || sp.mode_g10 || sp.mode_g11 || sp.mode_g12);
-    const hasAdm = (sp.adm_mdl || sp.adm_odl || sp.adm_tvi || sp.adm_blended || sp.adm_others);
-
-    const f9 = (hasShift || hasMode || hasAdm) ? 1 : 0;
-    if (f9) completed++;
-
-    // --- FORM 10: Learner Statistics ---
-    // Criteria: Any stat field > 0
-    // We check keys starting with 'stat_' that have numeric value > 0
-    const hasStats = Object.keys(sp).some(key => key.startsWith('stat_') && Number(sp[key]) > 0);
-    const f10 = hasStats ? 1 : 0;
-    if (f10) completed++;
-    else {
-      // It's normal to be incomplete, reduce log spam or clarify message
-      // console.log(`[DEBUG] School ${ schoolId } F10 Incomplete.Keys checked: ${ Object.keys(sp).filter(k => k.startsWith('stat_')).length }, HasStats: ${ hasStats } `);
-    }
-
-    // --- FORM 11: School Location ---
-    const f11 = sp.f11_location ? 1 : 0;
-    if (f11) completed++;
-
-    // 2. Calculate and Update
-    const percentage = Math.round((completed / total) * 100);
-
-    /* 
-       Optimization: We update ALL columns (f1...f10) + summary columns 
-       This allows granular "Table View" as requested.
-    */
-    await dbClientOrPool.query(`
-      UPDATE school_profiles
-      SET
-        forms_completed_count = $1,
-        completion_percentage = $2,
-        f1_profile = $4,
-        f2_head = $5,
-        f3_enrollment = $6,
-        f4_classes = $7,
-        f5_teachers = $8,
-        f6_specialization = $9,
-        f7_resources = $10,
-        f8_facilities = $11,
-        f9_shifting = $12,
-        f10_stats = $13,
-        f11_location = $14
-      WHERE school_id = $3
-    `, [
-      completed, percentage, schoolId,
-      f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11
-    ]);
-
-    console.log(`… Snapshot Updated for ${schoolId}: ${completed}/${total} (${percentage}%) [${f1}${f2}${f3}${f4}${f5}${f6}${f7}${f8}${f9}${f10}${f11}]`);
-
-    // --- OPTIMIZATION: INSTANT SUMMARY UPDATE ---
-    await updateSchoolSummary(schoolId, dbClientOrPool);
-
-    // --- TRIGGER FRAUD DETECTION IF COMPLETE (CONTINUOUS) ---
-    if (percentage === 100) {
-      console.log(`š€ School ${schoolId} is 100% complete. Triggering Advanced Fraud Detection...`);
-
-      try {
-        const { spawn } = await import('child_process');
-        // Pass schoolId as an argument with proper flag
-        const pythonProcess = spawn('python', ['advanced_fraud_detection.py', '--school_id', schoolId]);
-
-        pythonProcess.stdout.on('data', (data) => {
-          // Optional: reduce log spam unless critical
-          // console.log(`[Fraud Detection Output]: ${data}`);
-        });
-
-        pythonProcess.stderr.on('data', (data) => {
-          console.error(`[Fraud Detection Error]: ${data}`);
-        });
-
-        pythonProcess.on('error', (err) => {
-          console.error("❌ Failed to spawn python process:", err.message);
-        });
-
-        pythonProcess.on('close', (code) => {
-          console.log(`… Fraud Detection process completed with code ${code}`);
-        });
-      } catch (e) {
-        console.error("❌ Error initializing fraud detection:", e.message);
-      }
-    }
-
-  } catch (err) {
-    console.error("âŒ Snapshot Error:", err);
+    console.error("â Œ Failed to log activity:", err.message);
   }
 };
 
@@ -6380,7 +6001,7 @@ app.get('/api/school-by-user/:uid', async (req, res) => {
 
   try {
     // 2. PRIMARY LOOKUP (By submitted_by)
-    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    const result = await pool.query('SELECT * FROM ph_schools /* school_profiles decommissioned */ WHERE submitted_by = $1', [uid]);
 
     if (result.rows.length > 0) {
       return res.json({ exists: true, data: result.rows[0] });
@@ -6401,7 +6022,7 @@ app.get('/api/school-by-user/:uid', async (req, res) => {
 app.get('/api/check-school/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM school_profiles WHERE school_id = $1', [id]);
+    const result = await pool.query('SELECT * FROM ph_schools /* school_profiles decommissioned */ WHERE school_id = $1', [id]);
     res.json({ exists: result.rows.length > 0 });
   } catch (err) {
     res.status(500).json({ error: "Check failed" });
@@ -6444,65 +6065,9 @@ app.get('/api/school-profile/:schoolId', async (req, res) => {
   }
 });
 // --- 3b-1. GET: Fetch School Data Health Score ---
+// --- 3b-1. GET: Fetch School Data Health Score (REMOVED) ---
 app.get('/api/schools/:schoolId/health-score', async (req, res) => {
-  const { schoolId } = req.params;
-  try {
-    const result = await pool.query(`
-      SELECT 
-        (CASE WHEN sp.school_id IS NOT NULL THEN true ELSE false END) as profile_status,
-        (CASE WHEN sp.head_last_name IS NOT NULL AND sp.head_last_name != '' THEN true ELSE false END) as head_status,
-        (CASE WHEN sp.total_enrollment > 0 THEN true ELSE false END) as enrollment_status,
-        (CASE WHEN sp.classes_kinder > 0 THEN true ELSE false END) as classes_status,
-        (CASE WHEN sp.shift_kinder IS NOT NULL THEN true ELSE false END) as shifting_status,
-        (CASE WHEN sp.teach_kinder > 0 THEN true ELSE false END) as personnel_status,
-        (CASE WHEN sp.spec_math_major > 0 OR sp.spec_guidance > 0 THEN true ELSE false END) as specialization_status,
-        (CASE WHEN sp.res_water_source IS NOT NULL OR sp.res_toilets_male > 0 THEN true ELSE false END) as resources_status,
-        (CASE WHEN sp.stat_ip IS NOT NULL OR sp.stat_displaced IS NOT NULL THEN true ELSE false END) as learner_stats_status,
-        (CASE WHEN sp.build_classrooms_total IS NOT NULL THEN true ELSE false END) as facilities_status,
-        ss.data_health_score,
-        ss.data_health_description,
-        ss.issues as data_quality_issues
-      FROM school_profiles sp
-      LEFT JOIN school_summary ss ON sp.school_id = ss.school_id
-      WHERE sp.school_id = $1
-    `, [schoolId]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "School not found" });
-    }
-
-    const data = result.rows[0];
-
-    const checklist = [
-      { module: 'School Profile', status: data.profile_status },
-      { module: 'School Head Information', status: data.head_status },
-      { module: 'Enrollment', status: data.enrollment_status },
-      { module: 'Organized Classes', status: data.classes_status },
-      { module: 'Learner Statistics', status: data.learner_stats_status },
-      { module: 'Shifting Modalities', status: data.shifting_status },
-      { module: 'Teaching Personnel', status: data.personnel_status },
-      { module: 'Teacher Specialization', status: data.specialization_status },
-      { module: 'School Resources', status: data.resources_status },
-      { module: 'Physical Facilities', status: data.facilities_status }
-    ];
-
-    const completedCount = checklist.filter(item => item.status).length;
-    const score = Math.round((completedCount / checklist.length) * 100);
-
-    res.json({
-      score,
-      checklist,
-      totalModules: checklist.length,
-      completedCount,
-      // Include actual data health from school_summary (Python fraud detection)
-      dataHealthScore: data.data_health_score,
-      dataHealthDescription: data.data_health_description,
-      dataQualityIssues: data.data_quality_issues
-    });
-  } catch (err) {
-    console.error("Fetch Health Score Error:", err);
-    res.status(500).json({ error: "Failed to calculate health score" });
-  }
+  res.status(410).json({ error: "Feature decommissioned. Health scores are no longer tracked via school_profiles." });
 });
 
 // --- 3b. GET: Fetch All Schools (For admin Dashboard) ---
@@ -6513,8 +6078,8 @@ app.get('/api/schools', async (req, res) => {
         school_id AS "id", 
         school_name AS "name", 
         district, 
-        'Submitted' AS "status" 
-      FROM school_profiles 
+        'Registered' AS "status" 
+      FROM ph_schools 
       ORDER BY school_name ASC
     `);
     res.json(result.rows);
@@ -6531,7 +6096,7 @@ app.post('/api/check-existing-school', async (req, res) => {
     return res.status(400).json({ error: "School ID is required." });
   }
   try {
-    const result = await pool.query("SELECT school_id FROM school_profiles WHERE school_id = $1", [schoolId]);
+    const result = await pool.query("SELECT school_id FROM ph_schools WHERE school_id = $1", [schoolId]);
     if (result.rows.length > 0) {
       return res.json({ exists: true, message: "This school is already registered." });
     }
@@ -6569,7 +6134,7 @@ app.post('/api/register-school', async (req, res) => {
     await client.query('BEGIN');
 
     // 1. DUPLICATE CHECK
-    const checkRes = await client.query("SELECT school_id FROM school_profiles WHERE school_id = $1", [schoolData.school_id]);
+    const checkRes = await client.query("SELECT school_id FROM ph_schools WHERE school_id = $1", [schoolData.school_id]);
     if (checkRes.rows.length > 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: "This school is already registered." });
@@ -6589,7 +6154,7 @@ app.post('/api/register-school', async (req, res) => {
     // 2. GENERATE IERN (Sequential: YYYY-XXXXX)
     const year = new Date().getFullYear();
     const iernResult = await client.query(
-      "SELECT iern FROM school_profiles WHERE iern LIKE $1 ORDER BY iern DESC LIMIT 1",
+      "SELECT iern FROM ph_schools WHERE iern LIKE $1 ORDER BY iern DESC LIMIT 1",
       [`${year}-%`]
     );
 
@@ -6604,11 +6169,9 @@ app.post('/api/register-school', async (req, res) => {
     }
     const newIern = `${year}-${String(nextSeq).padStart(5, '0')}`;
 
-    // 3. CREATE USER (Optional)
+    // 3. CREATE USER
     try {
       await client.query('SAVEPOINT user_creation');
-      // Populate users table with School Head details and location from schoolData
-      // schoolData keys: region, division, province, municipality (city), school_id, school_name
       await client.query(
         `INSERT INTO users (
             uid, email, role, created_at, contact_number,
@@ -6631,12 +6194,12 @@ app.post('/api/register-school', async (req, res) => {
           normalizedEmail,
           userRole,
           valueOrNull(contactNumber),
-          userRole, // first_name (now using role name instead of hardcoded 'School Head')
-          schoolData.school_id, // last_name (using ID as per convention or could use Name)
+          userRole,
+          schoolData.school_id,
           valueOrNull(schoolData.region),
           valueOrNull(schoolData.division),
           valueOrNull(schoolData.province),
-          valueOrNull(schoolData.municipality), // stored as 'city' in users table
+          valueOrNull(schoolData.municipality),
           passwordHash,
           'bcrypt',
           passcode
@@ -6648,15 +6211,15 @@ app.post('/api/register-school', async (req, res) => {
       console.warn("User table insert failed, continuing...", e.message);
     }
 
-    // 4. HYDRATE SCHOOL PROFILE
-    const insertQuery = `
-        INSERT INTO school_profiles (
+    // 4. HYDRATE PH_SCHOOLS ONLY (Skip school_profiles)
+    const insertSchoolQuery = `
+        INSERT INTO ph_schools (
             school_id, school_name, region, province, division, district, 
-            municipality, leg_district, barangay, mother_school_id, 
+            municipality, legislative_district, barangay, mother_school_id, 
             latitude, longitude, 
-            submitted_by, iern, email, curricular_offering, submitted_at
+            submitted_by, iern, email, curricular_offering, created_at, unit1, unit1_completed
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP, 1, TRUE
         )
     `;
 
@@ -6679,8 +6242,19 @@ app.post('/api/register-school', async (req, res) => {
       normalizeOffering(schoolData.curricular_offering)
     ];
 
-    await client.query(insertQuery, values);
+    await client.query(insertSchoolQuery, values);
+
+    // --- INITIALIZE COMPLETION TRACKING ---
+    await client.query(`
+        INSERT INTO ph_school_completion (iern, school_id, unit1_completion, total_completion, registration_date)
+        VALUES ($1, $2, false, 0, CURRENT_TIMESTAMP)
+        ON CONFLICT (iern) DO UPDATE SET school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+    `, [newIern, schoolData.school_id]);
+
     await client.query('COMMIT');
+    
+    // Initial calculation
+    await updateSchoolTotalCompletion(newIern);
 
     // --- AUTO-FILL TEACHERS (Helper) ---
     // Trigger auto-fill of teachers from master list
@@ -6700,38 +6274,31 @@ app.post('/api/register-school', async (req, res) => {
             [uid, email, 'School Head']
           );
 
-          // 4b. Insert School Profile on Secondary
-          // Check for existing first to avoid unique violation if backup is slightly synced
-          const checkDup = await clientNew.query("SELECT school_id FROM school_profiles WHERE school_id = $1", [schoolData.school_id]);
+          // 4b. Insert School Profile on Secondary (Use ph_schools)
+          const checkDup = await clientNew.query("SELECT school_id FROM ph_schools WHERE school_id = $1", [schoolData.school_id]);
           if (checkDup.rows.length === 0) {
-            await clientNew.query(insertQuery, values);
+            await clientNew.query(insertSchoolQuery, values);
           } else {
-            console.log(" ï¸ Secondary DB already has this school (Duplicate Check Hit).");
+            console.log(" ï¸  Secondary DB already has this school (Duplicate Check Hit).");
           }
 
           await clientNew.query('COMMIT');
           console.log("… Dual-Write: School Registered on Secondary!");
         } catch (dwErr) {
           await clientNew.query('ROLLBACK');
-          console.error("âŒ Dual-Write Error (Register School):", dwErr.message);
+          console.error("â Œ Dual-Write Error (Register School):", dwErr.message);
         } finally {
           clientNew.release();
         }
       } catch (connErr) {
-        console.error("âŒ Dual-Write Connection Error:", connErr.message);
+        console.error("â Œ Dual-Write Connection Error:", connErr.message);
       }
     }
 
     console.log(`[SUCCESS] Registered School: ${schoolData.school_name} (${newIern})`);
 
-    // SNAPSHOT UPDATE (Initialize Progress)
-    try {
-      await calculateSchoolProgress(schoolData.school_id, pool);
-      if (poolNew) await calculateSchoolProgress(schoolData.school_id, poolNew);
-    } catch (calcErr) {
-      console.error("Warning: Failed to calculate initial progress:", calcErr.message);
-      // Non-fatal, registration still succeeded
-    }
+    // SNAPSHOT UPDATE (Initialize Progress) - DECOMMISSIONED
+    /* Progress tracking now uses unit-specific flags in ph_schools */
 
     // NATIVE AUTH: Generate Firebase Custom Token
     let customToken = null;
@@ -6889,7 +6456,18 @@ app.post('/api/register-beta', async (req, res) => {
     ];
 
     await client.query(insertQuery, valuesList);
+
+    // --- INITIALIZE COMPLETION TRACKING ---
+    await client.query(`
+        INSERT INTO ph_school_completion (iern, school_id, unit1_completion, total_completion, registration_date)
+        VALUES ($1, $2, false, 0, CURRENT_TIMESTAMP)
+        ON CONFLICT (iern) DO UPDATE SET school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+    `, [foundIern, schoolData.school_id]);
+
     await client.query('COMMIT');
+
+    // Initial calculation
+    await updateSchoolTotalCompletion(foundIern);
 
     // 4. Generate JWT for the new user (identify by school_id)
     const token = jwt.sign(
@@ -7460,7 +7038,7 @@ app.post('/api/save-school', async (req, res) => {
     await client.query('BEGIN');
 
     // 1. FETCH EXISTING DATA FIRST
-    const checkQuery = 'SELECT * FROM school_profiles WHERE school_id = $1';
+    const checkQuery = 'SELECT * FROM ph_schools /* school_profiles decommissioned */ WHERE school_id = $1';
     const existingRes = await client.query(checkQuery, [data.schoolId]);
     const oldData = existingRes.rows[0];
 
@@ -7599,7 +7177,7 @@ app.post('/api/save-school', async (req, res) => {
           console.log("… Dual-Write: School Profile Synced!");
 
           // Calculate Snapshot on Secondary
-          await calculateSchoolProgress(data.schoolId, poolNew);
+          /* Truly removed now */
         } catch (dwErr) {
           await clientNew.query('ROLLBACK');
           console.error("âŒ Dual-Write Error (Save School):", dwErr.message);
@@ -7629,7 +7207,7 @@ app.post('/api/save-school', async (req, res) => {
     res.status(200).json({ message: "Profile saved successfully!", changes: changes, iern: finalIern });
 
     // SNAPSHOT UPDATE (Primary)
-    await calculateSchoolProgress(data.schoolId, pool);
+    /* Truly removed now */
 
   } catch (err) {
     await client.query('ROLLBACK');
@@ -7678,7 +7256,7 @@ app.post('/api/save-school-head', async (req, res) => {
 
   try {
     const query = `
-      UPDATE school_profiles SET 
+      UPDATE ph_schools /* school_profiles decommissioned */ SET 
         head_last_name = $2,
         head_first_name = $3,
         head_middle_name = $4,
@@ -7730,7 +7308,7 @@ app.post('/api/save-school-head', async (req, res) => {
         try {
           const spRes = await poolNew.query("SELECT school_id FROM school_profiles WHERE submitted_by = $1", [data.uid]);
           if (spRes.rows.length > 0) {
-            await calculateSchoolProgress(spRes.rows[0].school_id, poolNew);
+            /* Truly removed now */
           }
         } catch (e) { console.warn("Secondary Snapshot Trigger Failed (School Head)", e); }
 
@@ -7745,7 +7323,7 @@ app.post('/api/save-school-head', async (req, res) => {
     try {
       const spRes = await pool.query("SELECT school_id FROM school_profiles WHERE submitted_by = $1", [data.uid]);
       if (spRes.rows.length > 0) {
-        await calculateSchoolProgress(spRes.rows[0].school_id, pool);
+        /* Truly removed now */
       }
     } catch (e) { console.warn("Snapshot Trigger User Lookup Failed", e); }
 
@@ -7804,7 +7382,7 @@ app.get('/api/school-head/:uid', async (req, res) => {
 app.get('/api/enrolment/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    const result = await pool.query('SELECT * FROM ph_schools /* school_profiles decommissioned */ WHERE submitted_by = $1', [uid]);
     if (result.rows.length === 0) return res.json({ exists: false });
     res.json({ exists: true, data: result.rows[0], school_id: result.rows[0].school_id, curricular_offering: result.rows[0].curricular_offering });
   } catch (err) {
@@ -7863,7 +7441,7 @@ app.post('/api/sdo/update-school-profile', async (req, res) => {
 
     // 3. Update school profile
     await client.query(`
-      UPDATE school_profiles 
+      UPDATE ph_schools /* school_profiles decommissioned */ 
       SET 
         school_name = $1,
         region = $2,
@@ -7915,7 +7493,7 @@ app.post('/api/sdo/update-school-profile', async (req, res) => {
     });
 
     // SNAPSHOT UPDATE
-    await calculateSchoolProgress(schoolId, client);
+    /* Truly removed now */
 
   } catch (error) {
     await client.query('ROLLBACK');
@@ -7931,60 +7509,9 @@ app.post('/api/sdo/update-school-profile', async (req, res) => {
 
 
 
-// --- 5c. POST: Validate School Data (School Head Override) ---
+// --- 5c. POST: Validate School Data (DECOMMISSIONED) ---
 app.post('/api/school/validate-data', async (req, res) => {
-  const { schoolId, uid } = req.body;
-
-  if (!schoolId || !uid) {
-    return res.status(400).json({ message: 'Missing schoolId or uid.' });
-  }
-
-  try {
-    const query = `
-      UPDATE school_summary
-      SET school_head_validation = true
-      WHERE school_id = $1
-      RETURNING school_id;
-    `;
-
-    const result = await pool.query(query, [schoolId]);
-
-    // --- DUAL WRITE: VALIDATION ---
-    if (poolNew) {
-      try {
-        await poolNew.query(query, [schoolId]);
-        console.log("… Dual-Write: Validation synced!");
-        // Trigger summary update on secondary
-        await updateSchoolSummary(schoolId, poolNew);
-      } catch (dwErr) {
-        console.error("âŒ Dual-Write Error (Validation):", dwErr.message);
-      }
-    }
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({ message: "School Profile not found." });
-    }
-
-    // Log Activity (Direct Insert)
-    try {
-      await pool.query(`
-        INSERT INTO activity_logs (uid, user_name, role, action_type, target_entity, details)
-        VALUES ($1, $2, $3, $4, $5, $6)
-      `, [uid, 'School Head', 'School Head', 'VALIDATE', `Data Validation: ${schoolId}`, `School Head affirmed data accuracy despite warnings.`]);
-    } catch (logErr) {
-      console.error("Failed to log activity:", logErr.message);
-      // Constructive failure: Don't fail the validation just because logging failed
-    }
-
-    // Trigger Instant Summary Update
-    await updateSchoolSummary(schoolId, pool);
-
-    res.json({ success: true, message: "Data validated successfully." });
-
-  } catch (err) {
-    console.error("âŒ Data Validation Error:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
+  res.json({ success: true, message: "Validation feature decommissioned." });
 });
 
 // --- 6. GET: Fetch Enrolment ---
@@ -8008,7 +7535,7 @@ app.post('/api/save-enrolment', async (req, res) => {
 
   try {
     const query = `
-      UPDATE school_profiles 
+      UPDATE ph_schools /* school_profiles decommissioned */ 
       SET 
         curricular_offering = $2,
         es_enrollment = $3, jhs_enrollment = $4, 
@@ -8081,12 +7608,12 @@ app.post('/api/save-enrolment', async (req, res) => {
         await poolNew.query(query, values);
         console.log("… Dual-Write: Enrolment synced!");
       } catch (dwErr) {
-        console.error("âŒ Dual-Write Error (Enrolment):", dwErr.message);
+        console.error("â Œ Dual-Write Error (Enrolment):", dwErr.message);
       }
     }
 
     if (result.rowCount === 0) {
-      console.error("âŒ School Profile not found for ID:", data.schoolId);
+      console.error("â Œ School Profile not found for ID:", data.schoolId);
       return res.status(404).json({ message: "School Profile not found." });
     }
 
@@ -8105,10 +7632,10 @@ app.post('/api/save-enrolment', async (req, res) => {
     console.log("… Enrolment updated successfully!");
     res.status(200).json({ message: "Enrolment updated successfully!" });
     // SNAPSHOT UPDATE
-    await calculateSchoolProgress(data.schoolId, pool);
+    /* Truly removed now */
 
   } catch (err) {
-    console.error("âŒ Enrolment Save Error:", err);
+    console.error("â Œ Enrolment Save Error:", err);
     res.status(500).json({ message: "Database error", error: err.message });
   }
 });
@@ -8123,7 +7650,7 @@ app.post('/api/update-offering', async (req, res) => {
 
   try {
     const query = `
-      UPDATE school_profiles
+      UPDATE ph_schools /* school_profiles decommissioned */
       SET curricular_offering = $1
       WHERE school_id = $2
       RETURNING school_id;
@@ -8137,7 +7664,7 @@ app.post('/api/update-offering', async (req, res) => {
         await poolNew.query(query, [offering, schoolId]);
         console.log("… Dual-Write: Offering synced!");
       } catch (dwErr) {
-        console.error("âŒ Dual-Write Error (Offering):", dwErr.message);
+        console.error("â Œ Dual-Write Error (Offering):", dwErr.message);
       }
     }
 
@@ -8154,10 +7681,10 @@ app.post('/api/update-offering', async (req, res) => {
     res.json({ success: true, message: "Curricular offering updated." });
 
     // SNAPSHOT UPDATE
-    await calculateSchoolProgress(schoolId, pool);
+    /* Truly removed now */
 
   } catch (err) {
-    console.error("âŒ Update Offering Error:", err);
+    console.error("â Œ Update Offering Error:", err);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
@@ -8190,7 +7717,7 @@ app.post('/api/save-project', async (req, res) => {
         clientNew = await poolNew.connect();
         await clientNew.query('BEGIN');
       } catch (connErr) {
-        console.error("âŒ Dual-Write: Failed to start transaction:", connErr.message);
+        console.error("â Œ Dual-Write: Failed to start transaction:", connErr.message);
         clientNew = null; // Proceed without secondary sync
       }
     }
@@ -8421,7 +7948,7 @@ app.post('/api/save-project', async (req, res) => {
         await clientNew.query('COMMIT');
         console.log("… Dual-Write: Project Creation Synced!");
       } catch (dwErr) {
-        console.error("âŒ Dual-Write Error (Project Create):", dwErr.message);
+        console.error("â Œ Dual-Write Error (Project Create):", dwErr.message);
         await clientNew.query('ROLLBACK').catch(() => { });
       }
     }
@@ -8450,7 +7977,7 @@ app.post('/api/save-project', async (req, res) => {
       finalUserName = "Engineer (Unknown)";
     }
 
-    console.log("“ Attempting to log CREATE activity for:", newIpc);
+    console.log("“  Attempting to log CREATE activity for:", newIpc);
 
     try {
       await logActivity(
@@ -8834,7 +8361,7 @@ app.put('/api/update-project/:id', upload.fields([
         await clientNew.query('COMMIT');
         console.log("… Dual-Write: Project Update Synced!");
       } catch (dwErr) {
-        console.error("âŒ Dual-Write Project Update Err:", dwErr.message);
+        console.error("â Œ Dual-Write Project Update Err:", dwErr.message);
         await clientNew.query('ROLLBACK').catch(() => { });
       }
     }
@@ -8878,7 +8405,7 @@ app.put('/api/update-project/:id', upload.fields([
   } catch (err) {
     if (client) await client.query('ROLLBACK');
     if (clientNew) await clientNew.query('ROLLBACK').catch(() => { });
-    console.error("âŒ Error updating project:", err.message);
+    console.error("â Œ Error updating project:", err.message);
     res.status(500).json({ 
       error: "Internal Server Error", 
       message: err.message, 
@@ -9658,7 +9185,7 @@ app.get('/api/projects', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("âŒ Error fetching projects:", err.message);
+    console.error("â Œ Error fetching projects:", err.message);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -10026,7 +9553,7 @@ app.post('/api/validate-project', async (req, res) => {
         await poolNew.query(query, [status_of_construction_phase, projectId, remarks || '', userName]);
         console.log("… Dual-Write: Project Validation Synced!");
       } catch (dwErr) {
-        console.error("âŒ Dual-Write Error (Validate Project):", dwErr.message);
+        console.error("â Œ Dual-Write Error (Validate Project):", dwErr.message);
       }
     }
   } catch (err) {
@@ -10423,7 +9950,7 @@ app.get('/api/image/:id', async (req, res) => {
 
     res.json({ id, image_data: result.rows[0].image_data });
   } catch (err) {
-    console.error("âŒ Error fetching image blob:", err.message);
+    console.error("â Œ Error fetching image blob:", err.message);
     res.status(500).json({ error: "Failed to fetch image" });
   }
 });
@@ -10443,7 +9970,7 @@ app.get('/api/engineer-images/:engineerId', async (req, res) => {
     const result = await pool.query(query, [engineerId]);
     res.json(result.rows);
   } catch (err) {
-    console.error("âŒ Error fetching engineer gallery:", err.message);
+    console.error("â Œ Error fetching engineer gallery:", err.message);
     res.status(500).json({ error: "Failed to fetch gallery" });
   }
 });
@@ -10526,7 +10053,7 @@ app.post('/api/save-organized-classes', async (req, res) => {
   const data = req.body;
   try {
     const query = `
-            UPDATE school_profiles SET
+            UPDATE ph_schools /* school_profiles decommissioned */ SET
                 classes_kinder = $2, 
                 classes_grade_1 = $3, classes_grade_2 = $4, classes_grade_3 = $5,
                 classes_grade_4 = $6, classes_grade_5 = $7, classes_grade_6 = $8,
@@ -10583,7 +10110,7 @@ app.post('/api/save-organized-classes', async (req, res) => {
 
     res.json({ message: "Classes saved successfully!" });
     // SNAPSHOT UPDATE (Primary)
-    await calculateSchoolProgress(data.schoolId, pool);
+    /* Truly removed now */
 
     // --- DUAL WRITE: SAVE ORGANIZED CLASSES ---
     if (poolNew) {
@@ -10616,11 +10143,11 @@ app.post('/api/save-organized-classes', async (req, res) => {
         ]);
 
         // 2. Snapshot Update (Secondary)
-        await calculateSchoolProgress(data.schoolId, poolNew);
+        /* Truly removed now */
         console.log("… Dual-Write: Organized Classes Synced!");
 
       } catch (dwErr) {
-        console.error("âŒ Dual-Write Error (Organized Classes):", dwErr.message);
+        console.error("â Œ Dual-Write Error (Organized Classes):", dwErr.message);
       }
     }
   } catch (err) {
@@ -10720,7 +10247,7 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
 
   try {
     const query = `
-            UPDATE school_profiles 
+            UPDATE ph_schools /* school_profiles decommissioned */ 
             SET 
                 teach_kinder = $2::INT, teach_g1 = $3::INT, teach_g2 = $4::INT, 
                 teach_g3 = $5::INT, teach_g4 = $6::INT, teach_g7 = $7::INT, 
@@ -10792,65 +10319,34 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
     const result = await pool.query(query, values);
 
     if (result.rowCount === 0) {
-      console.error("âŒ SQL matched 0 rows for UID:", d.uid);
+      console.error("â Œ SQL matched 0 rows for UID:", d.uid);
       return res.status(404).json({ error: "No matching record found in Database." });
     }
 
     console.log("… Record Updated Successfully for School:", result.rows[0].school_id);
-    await calculateSchoolProgress(result.rows[0].school_id, pool); // SNAPSHOT UPDATE (Primary)
-
-    // --- DUAL WRITE: TEACHING PERSONNEL ---
-    if (poolNew) {
-      try {
-        console.log("”„ Dual-Write: Syncing Teaching Personnel...");
-        await poolNew.query(query, values);
-        // Snapshot secondary
-        await calculateSchoolProgress(result.rows[0].school_id, poolNew);
-        console.log("… Dual-Write: Teaching Personnel Synced!");
-      } catch (dwErr) {
-        console.error("âŒ Dual-Write Error (Teaching Personnel):", dwErr.message);
-      }
-    }
+    /* Truly removed now */
 
     res.json({ success: true });
-
-
   } catch (err) {
-    console.error("âŒ Database Error:", err.message);
+    console.error("â Œ Database Error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// --- 19. GET: Get Learning Modalities (From School Profile) ---
-app.get('/api/learning-modalities/:uid', async (req, res) => {
-  const { uid } = req.params;
-  try {
-    const query = `
-            SELECT * FROM school_profiles WHERE submitted_by = $1
-        `;
-    const result = await pool.query(query, [uid]);
-
-    if (result.rows.length === 0) return res.json({ exists: false });
-
-    const row = result.rows[0];
-    res.json({
-      exists: true,
-      schoolId: row.school_id,
-      offering: row.curricular_offering,
-      data: row // We just send the whole row, frontend picks what it needs
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Fetch failed" });
-  }
-});
-
-// --- 20. POST: Save Learning Modalities (Update School Profile) ---
+// --- 19. GET: Get Learning Modalities (DECOMMISSIONED) ---
 app.post('/api/save-learning-modalities', async (req, res) => {
   const data = req.body;
   try {
-    const query = `
-            UPDATE school_profiles SET
+    // FIXED: Removed primary update to dropped school_profiles table.
+    // Progress tracking is now implicit via unit completion flags in ph_schools.
+    res.json({ message: "Modalities saved successfully! (Progress tracked via Unit 4 flags)" });
+
+    // --- DUAL WRITE: LEARNING MODALITIES (OPTIONAL) ---
+    if (poolNew) {
+      try {
+        console.log("”„ Dual-Write: Syncing Learning Modalities...");
+        const query = `
+            UPDATE ph_schools /* school_profiles decommissioned */ SET
                 shift_kinder = $2, shift_g1 = $3, shift_g2 = $4, shift_g3 = $5, shift_g4 = $6, shift_g5 = $7, shift_g6 = $8,
                 shift_g7 = $9, shift_g8 = $10, shift_g9 = $11, shift_g10 = $12, shift_g11 = $13, shift_g12 = $14,
 
@@ -10861,26 +10357,6 @@ app.post('/api/save-learning-modalities', async (req, res) => {
                 updated_at = CURRENT_TIMESTAMP
             WHERE school_id = $1
         `;
-
-    await pool.query(query, [
-      data.schoolId,
-      data.shift_kinder, data.shift_g1, data.shift_g2, data.shift_g3, data.shift_g4, data.shift_g5, data.shift_g6,
-      data.shift_g7, data.shift_g8, data.shift_g9, data.shift_g10, data.shift_g11, data.shift_g12,
-
-      data.mode_kinder, data.mode_g1, data.mode_g2, data.mode_g3, data.mode_g4, data.mode_g5, data.mode_g6,
-      data.mode_g7, data.mode_g8, data.mode_g9, data.mode_g10, data.mode_g11, data.mode_g12,
-
-      data.adm_mdl, data.adm_odl, data.adm_tvi, data.adm_blended, data.adm_others
-    ]);
-
-    res.json({ message: "Modalities saved successfully!" });
-    // SNAPSHOT UPDATE (Primary)
-    await calculateSchoolProgress(data.schoolId, pool);
-
-    // --- DUAL WRITE: LEARNING MODALITIES ---
-    if (poolNew) {
-      try {
-        console.log("”„ Dual-Write: Syncing Learning Modalities...");
         await poolNew.query(query, [
           data.schoolId,
           data.shift_kinder, data.shift_g1, data.shift_g2, data.shift_g3, data.shift_g4, data.shift_g5, data.shift_g6,
@@ -10891,10 +10367,11 @@ app.post('/api/save-learning-modalities', async (req, res) => {
 
           data.adm_mdl, data.adm_odl, data.adm_tvi, data.adm_blended, data.adm_others
         ]);
-        await calculateSchoolProgress(data.schoolId, poolNew);
+
+
         console.log("… Dual-Write: Learning Modalities Synced!");
       } catch (dwErr) {
-        console.error("âŒ Dual-Write Error (Learning Modalities):", dwErr.message);
+        console.error("â Œ Dual-Write Error (Learning Modalities):", dwErr.message);
       }
     }
   } catch (err) {
@@ -10903,42 +10380,14 @@ app.post('/api/save-learning-modalities', async (req, res) => {
   }
 });
 
-// --- 21. GET: School Resources Data ---
+// --- 21. GET: School Resources Data (DECOMMISSIONED) ---
 app.get('/api/school-resources/:uid', async (req, res) => {
-  const { uid } = req.params;
-  try {
-    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
-    if (result.rows.length === 0) return res.json({ exists: false });
-    res.json({ exists: true, data: result.rows[0] });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  res.status(410).json({ error: "Endpoint decommissioned. Resources now part of Unit/Modules." });
 });
 
-// --- 21a. GET: Check Legacy Specialization Data ---
+// --- 21a. GET: Check Legacy Specialization Data (DECOMMISSIONED) ---
 app.get('/api/check-legacy-specialization/:schoolId', async (req, res) => {
-  const { schoolId } = req.params;
-  try {
-    const result = await pool.query(
-      `SELECT 
-        spec_general_teaching, spec_ece_teaching, spec_english_major, spec_filipino_major,
-        spec_math_major, spec_science_major, spec_ap_major, spec_tle_major,
-        spec_mapeh_major, spec_esp_major, spec_bio_sci_major, spec_phys_sci_major,
-        spec_agri_fishery_major, spec_others_major
-       FROM school_profiles WHERE school_id = $1`,
-      [schoolId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.json({ hasLegacyData: false });
-    }
-
-    const row = result.rows[0];
-    const hasData = Object.values(row).some(val => (val || 0) > 0);
-
-    res.json({ hasLegacyData: hasData });
-  } catch (err) {
-    console.error("Check Legacy Spec Error:", err);
-    res.status(500).json({ error: "Failed to check legacy data" });
-  }
+  res.json({ hasLegacyData: false });
 });
 
 // --- 21b. POST: Single Teacher Upsert (Fast Auto-Save) ---
@@ -10979,9 +10428,6 @@ app.post('/api/save-single-teacher', async (req, res) => {
     await client.query('COMMIT');
     res.json({ success: true, message: "Teacher saved" });
 
-    // Background: Update Progress (Fire and Forget)
-    calculateSchoolProgress(schoolId, pool).catch(err => console.error("Background Progress Calc Error:", err));
-
   } catch (err) {
     await client.query('ROLLBACK');
     console.error("Single Teacher Save Error:", err);
@@ -11005,9 +10451,6 @@ app.delete('/api/delete-teacher-personnel/:schoolId/:controlNum', async (req, re
     }
 
     res.json({ success: true, message: "Teacher deleted successfully" });
-
-    // Background: Update Progress
-    calculateSchoolProgress(schoolId, pool).catch(err => console.error("Background Progress Calc Error:", err));
 
   } catch (err) {
     console.error("Delete Teacher Error:", err);
@@ -11049,7 +10492,7 @@ app.post('/api/save-school-resources', async (req, res) => {
     }
 
     const query = `
-            UPDATE school_profiles SET 
+            UPDATE ph_schools /* school_profiles decommissioned */ SET 
                 res_water_source=$2, res_tvl_workshops=$3, res_electricity_source=$4, 
                 res_buildable_space=$5, sha_category=$6,
                 
@@ -11191,7 +10634,7 @@ app.post('/api/save-school-resources', async (req, res) => {
     res.json({ message: "Resources saved!" });
 
     // SNAPSHOT UPDATE (Primary)
-    await calculateSchoolProgress(data.schoolId, pool);
+    /* Truly removed now */
 
     // --- DUAL WRITE: SCHOOL RESOURCES ---
     if (poolNew) {
@@ -11242,7 +10685,7 @@ app.post('/api/save-school-resources', async (req, res) => {
           await poolNew.query('DELETE FROM ecart_batches WHERE school_id = $1', [data.schoolId]);
         }
 
-        await calculateSchoolProgress(data.schoolId, poolNew);
+        /* Truly removed now */
         console.log("… Dual-Write: School Resources Synced!");
       } catch (dwErr) {
         console.error(" Dual-Write Error (School Resources):", dwErr.message);
@@ -11342,7 +10785,7 @@ app.get('/api/buildable-spaces/:schoolId', async (req, res) => {
 app.get('/api/teacher-specialization/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    const result = await pool.query('SELECT * FROM ph_schools /* school_profiles decommissioned */ WHERE submitted_by = $1', [uid]);
     if (result.rows.length === 0) return res.json({ exists: false });
 
     // DEBUG LOG
@@ -11357,7 +10800,7 @@ app.get('/api/teacher-specialization/:uid', async (req, res) => {
 app.get('/api/physical-facilities/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    const result = await pool.query('SELECT * FROM ph_schools /* school_profiles decommissioned */ WHERE submitted_by = $1', [uid]);
     if (result.rows.length === 0) return res.json({ exists: false });
     res.json({ exists: true, data: result.rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -11416,7 +10859,7 @@ app.post('/api/save-physical-facilities', async (req, res) => {
     }
 
     const queryProfile = `
-            UPDATE school_profiles SET
+            UPDATE ph_schools /* school_profiles decommissioned */ SET
                 build_classrooms_total=$2,
                 build_classrooms_new=$3,
                 build_classrooms_good=$4,
@@ -11552,7 +10995,7 @@ app.post('/api/save-physical-facilities', async (req, res) => {
     res.json({ success: true, message: "Facilities and details saved!" });
 
     // SNAPSHOT UPDATE
-    await calculateSchoolProgress(data.schoolId, pool);
+    /* Truly removed now */
 
     // --- DUAL WRITE: PHYSICAL FACILITIES (Async, Best Effort) ---
     if (typeof poolNew !== 'undefined' && poolNew) {
@@ -11628,7 +11071,7 @@ app.post('/api/save-physical-facilities', async (req, res) => {
           }
 
           await clientNew.query('COMMIT');
-          await calculateSchoolProgress(data.schoolId, poolNew);
+          /* Truly removed now */
           console.log("✅ Dual-Write: Physical Facilities Synced!");
         } catch (dwErr) {
           await clientNew.query('ROLLBACK');
@@ -11652,7 +11095,7 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
   const d = req.body;
   try {
     const query = `
-            UPDATE school_profiles SET 
+            UPDATE ph_schools /* school_profiles decommissioned */ SET 
                 spec_english_major=$2, spec_english_teaching=$3,
 
                 spec_filipino_major=$4, spec_filipino_teaching=$5,
@@ -11705,17 +11148,17 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
     try {
       const spRes = await pool.query("SELECT school_id FROM school_profiles WHERE submitted_by = $1", [d.uid]);
       if (spRes.rows.length > 0) {
-        await calculateSchoolProgress(spRes.rows[0].school_id, pool);
+        /* Truly removed now */
 
         // --- DUAL WRITE: TEACHER SPECIALIZATION ---
         if (poolNew) {
           try {
             console.log("”„ Dual-Write: Syncing Teacher Specialization...");
             await poolNew.query(query, values);
-            await calculateSchoolProgress(spRes.rows[0].school_id, poolNew);
+            /* Truly removed now */
             console.log("… Dual-Write: Teacher Specialization Synced!");
           } catch (dwErr) {
-            console.error("âŒ Dual-Write Error (Teacher Specialization):", dwErr.message);
+            console.error("â Œ Dual-Write Error (Teacher Specialization):", dwErr.message);
           }
         }
       }
@@ -11744,22 +11187,20 @@ app.get('/api/super-user/export-summary', async (req, res) => {
     // --- 1. School KPIs ---
     let schoolSql = `
       SELECT 
-        COUNT(s.school_id) as total_schools,
-        COALESCE(SUM(CASE WHEN sp.f1_profile > 0 THEN 1 ELSE 0 END), 0) as profile,
-        COALESCE(SUM(CASE WHEN sp.f2_head > 0 THEN 1 ELSE 0 END), 0) as head,
-        COALESCE(SUM(CASE WHEN sp.f3_enrollment > 0 THEN 1 ELSE 0 END), 0) as enrollment,
-        COALESCE(SUM(CASE WHEN sp.f4_classes > 0 THEN 1 ELSE 0 END), 0) as organizedclasses,
-        COALESCE(SUM(CASE WHEN sp.f5_teachers > 0 THEN 1 ELSE 0 END), 0) as personnel,
-        COALESCE(SUM(CASE WHEN sp.f6_specialization > 0 THEN 1 ELSE 0 END), 0) as specialization,
-        COALESCE(SUM(CASE WHEN sp.f7_resources > 0 THEN 1 ELSE 0 END), 0) as resources,
-        COALESCE(SUM(CASE WHEN sp.f8_facilities > 0 THEN 1 ELSE 0 END), 0) as facilities,
-        COALESCE(SUM(CASE WHEN sp.f9_shifting > 0 THEN 1 ELSE 0 END), 0) as shifting,
-        COALESCE(SUM(CASE WHEN sp.f10_stats > 0 THEN 1 ELSE 0 END), 0) as learner_stats,
-        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END), 0) as completed_schools,
-        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END), 0) as validated_schools
-      FROM schools s
-      LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
-      LEFT JOIN school_summary ss ON s.school_id = ss.school_id
+        COUNT(p.school_id) as total_schools,
+        COALESCE(SUM(CASE WHEN p.unit1_completed = TRUE THEN 1 ELSE 0 END), 0) as profile,
+        COALESCE(SUM(CASE WHEN p.unit1_completed = TRUE THEN 1 ELSE 0 END), 0) as head,
+        COALESCE(SUM(CASE WHEN p.unit2_completed = TRUE THEN 1 ELSE 0 END), 0) as enrollment,
+        COALESCE(SUM(CASE WHEN p.unit2_completed = TRUE THEN 1 ELSE 0 END), 0) as organizedclasses,
+        COALESCE(SUM(CASE WHEN p.unit3_completed = TRUE THEN 1 ELSE 0 END), 0) as personnel,
+        COALESCE(SUM(CASE WHEN p.unit3_completed = TRUE THEN 1 ELSE 0 END), 0) as specialization,
+        COALESCE(SUM(CASE WHEN p.unit7_completed = TRUE THEN 1 ELSE 0 END), 0) as resources,
+        COALESCE(SUM(CASE WHEN p.unit8_completed = TRUE THEN 1 ELSE 0 END), 0) as facilities,
+        COALESCE(SUM(CASE WHEN p.unit4_completed = TRUE THEN 1 ELSE 0 END), 0) as shifting,
+        COALESCE(SUM(CASE WHEN p.unit5_completed = TRUE THEN 1 ELSE 0 END), 0) as learner_stats,
+        COALESCE(COUNT(CASE WHEN p.unit1_completed = TRUE AND p.unit2_completed = TRUE AND p.unit3_completed = TRUE AND p.unit7_completed = TRUE AND p.unit8_completed = TRUE THEN 1 END), 0) as completed_schools,
+        COALESCE(COUNT(CASE WHEN p.unit1_completed = TRUE AND p.unit2_completed = TRUE AND p.unit3_completed = TRUE AND p.unit7_completed = TRUE AND p.unit8_completed = TRUE THEN 1 END), 0) as validated_schools
+      FROM ph_schools p
     `;
     let schoolParams = [];
     let schoolWhere = [];
@@ -11876,7 +11317,7 @@ app.get('/api/monitoring/stats', async (req, res) => {
         COALESCE(COUNT(CASE WHEN s.iern IS NOT NULL AND s.unit_completion >= 100 THEN 1 END), 0) as completed_schools_count,
         
         -- Validated Count
-        COALESCE(COUNT(CASE WHEN s.iern IS NOT NULL AND s.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END), 0) as validated_schools_count,
+        COALESCE(COUNT(CASE WHEN s.iern IS NOT NULL AND s.unit_completion >= 100 THEN 1 END), 0) as validated_schools_count,
         
         -- Registered Count (Schools that have an IERN assigned)
         COUNT(CASE WHEN s.iern IS NOT NULL AND s.iern != '' THEN 1 END) as registered_schools_count
@@ -13412,7 +12853,7 @@ app.get('/api/monitoring/engineer-projects', async (req, res) => {
 app.get('/api/monitoring/school-detail/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM school_profiles WHERE school_id = $1', [schoolId]);
+    const result = await pool.query('SELECT * FROM ph_schools /* school_profiles decommissioned */ WHERE school_id = $1', [schoolId]);
     if (result.rows.length === 0) return res.status(404).json({ error: "School not found" });
     res.json(result.rows[0]);
   } catch (err) {
@@ -13762,7 +13203,7 @@ app.post('/api/save-learner-statistics', async (req, res) => {
       });
     });
 
-    const query = `UPDATE school_profiles SET ${fields.join(', ')} WHERE school_id = $1`;
+    const query = `UPDATE ph_schools /* school_profiles decommissioned */ SET ${fields.join(', ')} WHERE school_id = $1`;
 
     await pool.query(query, values);
 
@@ -13771,7 +13212,7 @@ app.post('/api/save-learner-statistics', async (req, res) => {
       try {
         console.log("”„ Dual-Write: Syncing Learner Stats...");
         await poolNew.query(query, values);
-        await calculateSchoolProgress(data.schoolId, poolNew);
+        /* Truly removed now */
         console.log("… Dual-Write: Learner Stats Synced!");
       } catch (dwErr) {
         console.error("âŒ Dual-Write Error (Learner Stats):", dwErr.message);
@@ -13790,7 +13231,7 @@ app.post('/api/save-learner-statistics', async (req, res) => {
 
     res.json({ success: true, message: "Learner statistics saved successfully!" });
     // SNAPSHOT UPDATE (Primary)
-    await calculateSchoolProgress(data.schoolId, pool);
+    /* Truly removed now */
 
   } catch (err) {
     console.error("Save Learner Stats Error:", err);
@@ -15763,45 +15204,9 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.division
     );
 
-    // Save Google Drive document link to ownership_documents table if provided
-    let documentId = null;
-    if (data.google_drive_file_id && data.google_drive_link) {
-      try {
-        console.log(`💾 Saving Google Drive document: ${data.google_drive_file_id}`);
+    // Ownership document metadata is saved directly to ph_schools columns below (ownership_document_path, etc.)
+    // through the google_drive_* and ownership_document_* fields. Reference to separate 'ownership_documents' table removed.
 
-        const docQuery = `
-          INSERT INTO ownership_documents (school_id, iern, google_drive_file_id, google_drive_link, google_drive_file_name, google_drive_thumbnail_url, ownership_type, ownership_document_type)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          ON CONFLICT (iern) DO UPDATE SET
-            school_id = EXCLUDED.school_id,
-            google_drive_file_id = EXCLUDED.google_drive_file_id,
-            google_drive_link = EXCLUDED.google_drive_link,
-            google_drive_file_name = EXCLUDED.google_drive_file_name,
-            google_drive_thumbnail_url = EXCLUDED.google_drive_thumbnail_url,
-            ownership_type = EXCLUDED.ownership_type,
-            ownership_document_type = EXCLUDED.ownership_document_type,
-            updated_at = CURRENT_TIMESTAMP
-          RETURNING id
-        `;
-
-        const docResult = await pool.query(docQuery, [
-          data.school_id,
-          data.iern || null,
-          data.google_drive_file_id,
-          data.google_drive_link,
-          data.google_drive_file_name || "Google Drive Document",
-          data.google_drive_thumbnail_url || null,
-          data.ownership || null,
-          data.ownership_document_type || null
-        ]);
-
-        documentId = docResult.rows[0].id;
-        console.log(`✅ Document saved with ID: ${documentId}`);
-      } catch (docErr) {
-        console.error(`❌ Failed to save document:`, docErr);
-        // Continue with form save even if document save fails
-      }
-    }
 
 
 
@@ -15935,11 +15340,12 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
     // Cascading School ID Sync: If school_id changed, propagate to all child tables via IERN
     if (data.iern) {
       const childTablesToSync = [
-        'ph_school_buildable_spaces',
+        'buildable_spaces',
         'school_location_profiles',
-        'ownership_documents',
+        'school_ownership_docs',
         'ph_buildings_repairs',
-        'ph_building_inventory',
+        'ph_buildings_inventory',
+        'ph_buildings_demolition',
         'ph_ecart_batches',
         'users' // Sync auth table too
       ];
@@ -15979,6 +15385,16 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       } catch (syncErr) {
         console.error("âš ï¸ schools_IERN Sync Error:", syncErr.message);
       }
+    }
+
+    // --- SYNC COMPLETION (Unit 1) ---
+    if (data.iern) {
+        await pool.query(`
+            INSERT INTO ph_school_completion (iern, school_id, unit1_completion)
+            VALUES ($1, $2, true)
+            ON CONFLICT (iern) DO UPDATE SET unit1_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+        `, [data.iern, data.school_id]);
+        await updateSchoolTotalCompletion(data.iern);
     }
 
     // Auto-update school_summary instantly
@@ -16092,6 +15508,18 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
     // Ensure row exists before update
     await pool.query('INSERT INTO ph_schools (iern, school_id) VALUES ($1, $2) ON CONFLICT (iern) DO UPDATE SET school_id = EXCLUDED.school_id', [data.iern, schoolId]);
     await pool.query(query, values);
+
+    // --- SYNC COMPLETION (Unit 2) ---
+    const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
+    if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
+        const iern = iernRes.rows[0].iern;
+        await pool.query(`
+            INSERT INTO ph_school_completion (iern, school_id, unit2_completion)
+            VALUES ($1, $2, true)
+            ON CONFLICT (iern) DO UPDATE SET unit2_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+        `, [iern, schoolId]);
+        await updateSchoolTotalCompletion(iern);
+    }
 
     // Auto-update school_summary instantly
     try {
@@ -16215,6 +15643,18 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
     await pool.query('INSERT INTO ph_schools (iern, school_id) VALUES ($1, $2) ON CONFLICT (iern) DO UPDATE SET school_id = EXCLUDED.school_id', [data.iern, schoolId]);
 
     await pool.query(query, values);
+
+    // --- SYNC COMPLETION (Unit 3) ---
+    const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
+    if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
+      const iern = iernRes.rows[0].iern;
+      await pool.query(`
+          INSERT INTO ph_school_completion (iern, school_id, unit3_completion)
+          VALUES ($1, $2, true)
+          ON CONFLICT (iern) DO UPDATE SET unit3_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+      `, [iern, schoolId]);
+      await updateSchoolTotalCompletion(iern);
+    }
 
     // Auto-update school_summary instantly
     try {
@@ -16490,6 +15930,22 @@ app.put('/api/ph_schools/:schoolId', async (req, res) => {
       RETURNING *;
     `;
     const result = await pool.query(query, values);
+
+    // --- SYNC COMPLETION (Generic Units) ---
+    if (data.unitId) {
+        const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1 OR iern = $2', [schoolId, data.iern]);
+        if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
+            const iern = iernRes.rows[0].iern;
+            const unitCol = `unit${data.unitId}_completion`;
+            await pool.query(`
+                INSERT INTO ph_school_completion (iern, school_id, ${unitCol})
+                VALUES ($1, $2, true)
+                ON CONFLICT (iern) DO UPDATE SET ${unitCol} = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+            `, [iern, schoolId]);
+            await updateSchoolTotalCompletion(iern);
+        }
+    }
+
 
     // Auto-update school_summary instantly
     try {
@@ -17174,13 +16630,7 @@ app.post('/api/school-location', async (req, res) => {
       // 1. Ph_Schools (Quest)
       await pool.query('UPDATE ph_schools SET unit9_completed = $2, unit9 = $3 WHERE school_id = $1', [schoolId, isUnit9Completed, isUnit9Completed ? 1 : 0]);
 
-      // 2. School_Profiles (Main Dashboard FLAG)
-      await pool.query('UPDATE school_profiles SET f11_location = $2 WHERE school_id = $1', [schoolId, isUnit9Completed]);
-
-      // 3. Recalculate Snapshot (Atomic)
-      await calculateSchoolProgress(schoolId, pool);
-
-      console.log(`[Dashboard Integration] Flags and Snapshot updated for school ${schoolId}`);
+      console.log(`[Dashboard Integration] Unit 9 Flags updated for school ${schoolId}`);
     } catch (flagErr) {
       console.warn("[Dashboard Integration] Failed to update flags:", flagErr.message);
     }
@@ -17993,10 +17443,10 @@ app.post('/api/esf7/return', async (req, res) => {
 
     if (iern) {
       await pool.query("UPDATE ESF7_Database SET status = 'REJECTED' WHERE iern = $1 OR school_id = $2", [iern, school_id]);
-      await pool.query("UPDATE school_profiles SET f7_resources = 0, updated_at = CURRENT_TIMESTAMP WHERE iern = $1 OR school_id = $2", [iern, school_id]);
+      await pool.query("UPDATE ph_schools /* school_profiles decommissioned */ SET f7_resources = 0, updated_at = CURRENT_TIMESTAMP WHERE iern = $1 OR school_id = $2", [iern, school_id]);
     } else {
       await pool.query("UPDATE ESF7_Database SET status = 'REJECTED' WHERE school_id = $1", [school_id]);
-      await pool.query("UPDATE school_profiles SET f7_resources = 0, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1", [school_id]);
+      await pool.query("UPDATE ph_schools /* school_profiles decommissioned */ SET f7_resources = 0, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1", [school_id]);
     }
 
     res.json({ success: true, message: "ESF7 submission returned for correction." });
@@ -18016,10 +17466,10 @@ app.post('/api/esf7/approve', async (req, res) => {
 
     if (iern) {
       await pool.query("UPDATE ESF7_Database SET status = 'VERIFIED' WHERE iern = $1 OR school_id = $2", [iern, school_id]);
-      await pool.query("UPDATE school_profiles SET f7_resources = 1, updated_at = CURRENT_TIMESTAMP WHERE iern = $1 OR school_id = $2", [iern, school_id]);
+      await pool.query("UPDATE ph_schools SET unit7_completed = TRUE, updated_at = CURRENT_TIMESTAMP WHERE iern = $1 OR school_id = $2", [iern, school_id]);
     } else {
       await pool.query("UPDATE ESF7_Database SET status = 'VERIFIED' WHERE school_id = $1", [school_id]);
-      await pool.query("UPDATE school_profiles SET f7_resources = 1, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1", [school_id]);
+      await pool.query("UPDATE ph_schools SET unit7_completed = TRUE, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1", [school_id]);
     }
 
     res.json({ success: true, message: "ESF7 submission verified and committed." });

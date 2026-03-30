@@ -8,7 +8,7 @@ import SuccessModal from '../SuccessModal';
 import BottomNav from '../../modules/BottomNav';
 import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
 
-const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
+const Unit8SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const navigate = useNavigate();
     const formRef = React.useRef();
     const [initialDraft, setInitialDraft] = React.useState(null);
@@ -44,7 +44,7 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 if (!hasCheckedCompletion.current) {
                     const storedProgress = localStorage.getItem('quest_progress');
                     const progress = storedProgress ? JSON.parse(storedProgress) : null;
-                    isUnitCompleted = progress?.completedUnits?.includes(9);
+                    isUnitCompleted = progress?.completedUnits?.includes(8);
 
                     if (isUnitCompleted && !propReadOnly && !isReadOnly) {
                         setIsReadOnly(true);
@@ -74,7 +74,7 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         }
                     }
 
-                    const draft = await getUnitDraft(9, schoolId);
+                    const draft = await getUnitDraft(8, schoolId);
                     if (draft) {
                         setInitialDraft(draft);
                         setShowWelcomeBack(true);
@@ -101,7 +101,7 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             formData: formRef.current.getFormData(),
             currentStep: formRef.current.getCurrentStep()
         };
-        await saveUnitDraft(9, schoolId, draftData);
+        await saveUnitDraft(8, schoolId, draftData);
         navigate('/modular-dashboard');
     };
 
@@ -109,8 +109,8 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         // Update localStorage so ModularDashboard immediately reflects completion
         const stored = localStorage.getItem('quest_progress');
         let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
-        if (!progress.completedUnits.includes(9)) {
-            progress.completedUnits.push(9);
+        if (!progress.completedUnits.includes(8)) {
+            progress.completedUnits.push(8);
             progress.xp = (progress.xp || 0) + 500;
             localStorage.setItem('quest_progress', JSON.stringify(progress));
 
@@ -118,11 +118,11 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             fetch('/api/user/progress', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ unitId: 9, schoolId })
+                body: JSON.stringify({ unitId: 8, schoolId })
             }).catch(e => console.error(e));
         }
 
-        if (schoolId) await clearUnitDraft(9, schoolId);
+        if (schoolId) await clearUnitDraft(8, schoolId);
         setShowSuccess(true);
     };
 
@@ -168,7 +168,7 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         <span className={`text-[8px] font-black uppercase tracking-widest ${riskColor} opacity-60`}>Risk Index</span>
                     </div>
                     <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-indigo-100">
-                        Unit 9 • School Terrain
+                        Unit 8 • School Terrain
                     </span>
                     <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight px-4">School Terrain</h1>
                     <p className="text-slate-500 font-medium mt-2 italic px-8">"Environmental & structural variables"</p>
@@ -427,7 +427,7 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                             <FiArrowLeft className="w-5 h-5" />
                         </button>
                         <div className="flex-1 text-center">
-                            <div className="text-[10px] font-black tracking-widest text-[#004A99] uppercase">Unit 9</div>
+                            <div className="text-[10px] font-black tracking-widest text-[#004A99] uppercase">Unit 8</div>
                             <h1 className="text-sm font-black text-gray-800 uppercase tracking-tight">School Terrain</h1>
                         </div>
                         <div className="w-10" />
@@ -520,4 +520,4 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     );
 };
 
-export default Unit9SchoolLocation;
+export default Unit8SchoolLocation;

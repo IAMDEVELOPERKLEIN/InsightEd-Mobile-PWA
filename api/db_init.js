@@ -50,6 +50,33 @@ const runMigrations = async (client, dbLabel) => {
         console.error(`❌ [${dbLabel}] Failed to init notifications table:`, tableErr.message);
     }
 
+    // --- 2.2. SCHOOL COMPLETION TABLE ---
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS ph_school_completion (
+                iern VARCHAR(255) PRIMARY KEY,
+                school_id VARCHAR(255),
+                unit1_completion BOOLEAN DEFAULT false,
+                unit2_completion BOOLEAN DEFAULT false,
+                unit3_completion BOOLEAN DEFAULT false,
+                unit4_completion BOOLEAN DEFAULT false,
+                unit5_completion BOOLEAN DEFAULT false,
+                unit6_completion BOOLEAN DEFAULT false,
+                unit7_completion BOOLEAN DEFAULT false,
+                unit8_completion BOOLEAN DEFAULT false,
+                total_completion NUMERIC(5,2) DEFAULT 0,
+                registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        // Migration to add school_id if missing
+        await client.query(`ALTER TABLE ph_school_completion ADD COLUMN IF NOT EXISTS school_id VARCHAR(255)`).catch(() => {});
+        await client.query(`ALTER TABLE ph_school_completion ADD COLUMN IF NOT EXISTS registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP`).catch(() => {});
+        // console.log(`✅ [${dbLabel}] School Completion Table Initialized`);
+    } catch (tableErr) {
+        console.error(`❌ [${dbLabel}] Failed to init ph_school_completion table:`, tableErr.message);
+    }
+
     // --- 2.5. ACTIVITY LOGS TABLE ---
     try {
         await client.query(`
@@ -824,7 +851,7 @@ const runMigrations = async (client, dbLabel) => {
         await client.query(`
             CREATE TABLE IF NOT EXISTS ph_schools (
                 iern        TEXT PRIMARY KEY,
-                school_id   TEXT,
+                school_id   TEXT UNIQUE,
                 created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -890,6 +917,22 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS total_enrollment           INTEGER DEFAULT 0,
             ADD COLUMN IF NOT EXISTS male_enrollment            INTEGER DEFAULT 0,
             ADD COLUMN IF NOT EXISTS female_enrollment          INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS total_male                INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS total_female              INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS kinder_male              INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS kinder_female            INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS g1_male                  INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS g1_female                INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS g2_male                  INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS g2_female                INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS g3_male                  INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS g3_female                INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS g4_male                  INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS g4_female                INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS g5_male                  INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS g5_female                INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS g6_male                  INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS g6_female                INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS g7_male                  INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS g7_female                INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS g8_male                  INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS g8_female                INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS g9_male                  INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS g9_female                INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS g10_male                 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS g10_female               INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS g11_male                 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS g11_female               INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS g12_male                 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS g12_female               INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS sned_male                INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS sned_female              INTEGER DEFAULT 0,
             ADD COLUMN IF NOT EXISTS sned_self_contained_count  INTEGER DEFAULT 0,
             ADD COLUMN IF NOT EXISTS unit2_simplified_enrollment TEXT,
             ADD COLUMN IF NOT EXISTS multigrade_groupings_1     TEXT,
@@ -1129,9 +1172,10 @@ const runMigrations = async (client, dbLabel) => {
         `);
 
         // ── INDEXES ───────────────────────────────────────────────────────────
+        await client.query(`DROP INDEX IF EXISTS idx_ph_schools_school_id;`);
         await client.query(`
             CREATE UNIQUE INDEX IF NOT EXISTS idx_ph_schools_school_id
-            ON ph_schools(school_id) WHERE school_id IS NOT NULL;
+            ON ph_schools(school_id);
         `);
         await client.query(`CREATE INDEX IF NOT EXISTS idx_ph_schools_division  ON ph_schools(division);`);
         await client.query(`CREATE INDEX IF NOT EXISTS idx_ph_schools_region    ON ph_schools(region);`);

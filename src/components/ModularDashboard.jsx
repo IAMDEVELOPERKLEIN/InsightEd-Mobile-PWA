@@ -142,7 +142,7 @@ const ModularDashboard = () => {
 
             const drafts = {};
             // Check Units 1-8 (Unit 6 Teaching Personnel has been removed)
-            const unitIds = [1, 2, 3, 4, 5, 7, 8];
+            const unitIds = [1, 2, 3, 4, 5, 6, 7, 8];
             
             await Promise.all(unitIds.map(async (i) => {
                 try {

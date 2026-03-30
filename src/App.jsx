@@ -88,9 +88,9 @@ import Unit2Learners from './components/modular/Unit2Learners';
 import Unit3OrganizedClasses from './components/modular/Unit3OrganizedClasses';
 import Unit4LearnerProfile from './components/modular/Unit4LearnerProfile';
 import Unit5ShiftingModality from './components/modular/Unit5ShiftingModality';
-import Unit7SchoolResources from './components/modular/Unit7SchoolResources';
-import Unit8PhysicalFacilities from './components/modular/Unit8PhysicalFacilities';
-import Unit9SchoolLocation from './components/modular/Unit9SchoolLocation';
+import Unit6SchoolResources from './components/modular/Unit6SchoolResources';
+import Unit7PhysicalFacilities from './components/modular/Unit7PhysicalFacilities';
+import Unit8SchoolLocation from './components/modular/Unit8SchoolLocation';
 
 // Nexus & Drafts
 import NodesDashboard from './modules/NexusDashboard';
@@ -347,7 +347,7 @@ const AnimatedRoutes = () => {
           path="/modular/unit-6"
           element={
             <ProtectedRoute allowedRoles={['School Head']}>
-              <Unit7SchoolResources />
+              <Unit6SchoolResources />
             </ProtectedRoute>
           }
         />
@@ -355,7 +355,7 @@ const AnimatedRoutes = () => {
           path="/modular/unit-7"
           element={
             <ProtectedRoute allowedRoles={['School Head']}>
-              <Unit8PhysicalFacilities />
+              <Unit7PhysicalFacilities />
             </ProtectedRoute>
           }
         />
@@ -363,7 +363,7 @@ const AnimatedRoutes = () => {
           path="/modular/unit-8"
           element={
             <ProtectedRoute allowedRoles={['School Head']}>
-              <Unit9SchoolLocation />
+              <Unit8SchoolLocation />
             </ProtectedRoute>
           }
         />

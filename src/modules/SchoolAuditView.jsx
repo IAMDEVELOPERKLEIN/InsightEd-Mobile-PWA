@@ -10,9 +10,9 @@ import Unit2Learners from '../components/modular/Unit2Learners';
 import Unit3OrganizedClasses from '../components/modular/Unit3OrganizedClasses';
 import Unit4LearnerProfile from '../components/modular/Unit4LearnerProfile';
 import Unit5ShiftingModality from '../components/modular/Unit5ShiftingModality';
-import Unit7SchoolResources from '../components/modular/Unit7SchoolResources';
-import Unit8PhysicalFacilities from '../components/modular/Unit8PhysicalFacilities';
-import Unit9SchoolLocation from '../components/modular/Unit9SchoolLocation';
+import Unit6SchoolResources from '../components/modular/Unit6SchoolResources';
+import Unit7PhysicalFacilities from '../components/modular/Unit7PhysicalFacilities';
+import Unit8SchoolLocation from '../components/modular/Unit8SchoolLocation';
 import Unit10Verification from '../components/modular/Unit10Verification';
 
 const SchoolAuditView = () => {
@@ -102,9 +102,9 @@ const SchoolAuditView = () => {
                     {activeTab === 'u3' && <Unit3OrganizedClasses targetSchoolId={schoolData.id} isReadOnly={true} />}
                     {activeTab === 'u4' && <Unit4LearnerProfile targetSchoolId={schoolData.id} isReadOnly={true} />}
                     {activeTab === 'u5' && <Unit5ShiftingModality targetSchoolId={schoolData.id} isReadOnly={true} />}
-                    {activeTab === 'u6' && <Unit7SchoolResources targetSchoolId={schoolData.id} isReadOnly={true} />}
-                    {activeTab === 'u7' && <Unit8PhysicalFacilities targetSchoolId={schoolData.id} isReadOnly={true} />}
-                    {activeTab === 'u8' && <Unit9SchoolLocation targetSchoolId={schoolData.id} isReadOnly={true} />}
+                    {activeTab === 'u6' && <Unit6SchoolResources targetSchoolId={schoolData.id} isReadOnly={true} />}
+                    {activeTab === 'u7' && <Unit7PhysicalFacilities targetSchoolId={schoolData.id} isReadOnly={true} />}
+                    {activeTab === 'u8' && <Unit8SchoolLocation targetSchoolId={schoolData.id} isReadOnly={true} />}
                     {activeTab === 'u9' && <Unit10Verification targetSchoolId={schoolData.id} />}
                 </div>
             </div>

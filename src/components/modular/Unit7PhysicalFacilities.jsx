@@ -50,7 +50,7 @@ const DEFAULT_BUILDING_TYPES = [
     "Gymnasium"
 ];
 
-export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: propReadOnly }) {
+export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: propReadOnly }) {
     const navigate = useNavigate();
 
     // ── Global State ─────────────────────────────────────────────────────────
@@ -149,7 +149,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             setSchoolId(storedId);
 
             try {
-                const draft = await getUnitDraft(8, storedId);
+                const draft = await getUnitDraft(7, storedId);
                 const resProfile = await fetch(`/api/ph_schools/${storedId}`);
                 if (resProfile.ok) {
                     const profile = await resProfile.json();
@@ -211,7 +211,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                         }
 
                         // 3. Filter out monogrades that are part of a MG group (optional but cleaner)
-                        // For Unit 8, it might be better to show both if the user wants to assign a room to a specific grade within a group,
+                        // For Unit 7, it might be better to show both if the user wants to assign a room to a specific grade within a group,
                         // but usually multigrade rooms are assigned to the group.
                         // Let's stick to showing what Unit 2 defines as active.
                         
@@ -238,7 +238,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 fetchBuildingTypes();
                 fetchTeachers(storedId);
             } catch (e) {
-                console.warn("Could not fetch Unit 8 data", e);
+                console.warn("Could not fetch Unit 7 data", e);
             }
         };
         init();
@@ -421,8 +421,8 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             // Update Progress locally if this is the first interaction that completes unit 10
             const stored = localStorage.getItem('quest_progress');
             let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
-            if (!progress.completedUnits.includes(8)) {
-                progress.completedUnits.push(8);
+            if (!progress.completedUnits.includes(7)) {
+                progress.completedUnits.push(7);
                 // The dashboard mapped Unit 10 ID to locked array of 9. Let's just update as needed.
                 if (!progress.completedUnits.includes(10)) progress.completedUnits.push(10);
                 progress.xp += 300;
@@ -741,7 +741,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             return;
         }
 
-        const confirmSubmit = window.confirm("Are you sure you want to finalize and save this entire Unit 8 Audit?");
+        const confirmSubmit = window.confirm("Are you sure you want to finalize and save this entire Unit 7 Audit?");
         if (!confirmSubmit) return;
 
         try {
@@ -806,14 +806,14 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             if (!masterRes.ok) {
                 const errorData = await masterRes.json().catch(() => null);
                 console.error("Master Submission Error Response:", errorData);
-                throw new Error("Failed to submit Unit 8 master payload.");
+                throw new Error("Failed to submit Unit 7 master payload.");
             }
 
-            // Force Unit 8 completion XP if not done
+            // Force Unit 7 completion XP if not done
             const stored = localStorage.getItem('quest_progress');
             let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
-            if (!progress.completedUnits.includes(8)) {
-                progress.completedUnits.push(8);
+            if (!progress.completedUnits.includes(7)) {
+                progress.completedUnits.push(7);
                 progress.xp += 500;
                 localStorage.setItem('quest_progress', JSON.stringify(progress));
 
@@ -877,7 +877,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                 <FiArrowLeft className="w-6 h-6" />
                             </button>
                             <div className="flex-1 text-center">
-                                <div className="text-[10px] font-black tracking-widest text-indigo-500 uppercase">Unit 8</div>
+                                <div className="text-[10px] font-black tracking-widest text-indigo-500 uppercase">Unit 7</div>
                                 <h1 className="text-sm font-black text-gray-800">Physical Facilities</h1>
                             </div>
                             <div className="w-10" />
@@ -896,7 +896,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                             <span className="text-4xl text-white">🏢</span>
                         </motion.div>
                         <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-indigo-100">
-                            Unit 8 • Architecture Profile
+                            Unit 7 • Architecture Profile
                         </span>
                         <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight">Facilities Summary</h1>
                         <p className="text-slate-500 font-medium mt-2 italic">"Comprehensive audit of campus infrastructure"</p>
@@ -1131,7 +1131,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                             <FiArrowLeft className="w-5 h-5" />
                         </button>
                         <div className="flex-1 text-center">
-                            <div className="text-[10px] font-black tracking-widest text-[#004A99] uppercase">Unit 8</div>
+                            <div className="text-[10px] font-black tracking-widest text-[#004A99] uppercase">Unit 7</div>
                             <h1 className="text-sm font-black text-gray-800 uppercase tracking-tight">Physical Facilities</h1>
                         </div>
                         {(!isReadOnly) ? (
