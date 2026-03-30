@@ -92,6 +92,67 @@ const BIDDING_MILESTONES = [
     { key: 'dateNoticeOfAward', label: 'Notice of Award' },
 ];
 
+const PhotoCard = ({ categoryColor, photoDB, activePreviews, activePhotoCategory, removePhoto, internalCameraRef, externalCameraRef, internalInputRef, externalInputRef }) => (
+    <div className={`border-2 rounded-3xl overflow-hidden border-${categoryColor}-100`}>
+        {/* Description Banner */}
+        <div className={`bg-${categoryColor}-50 px-4 pt-4 pb-3 border-b border-${categoryColor}-100`}>
+            <div className="flex items-center gap-2 mb-2">
+                <span className="text-xl">{photoDB.emoji}</span>
+                <span className={`text-[10px] font-black uppercase tracking-widest text-${categoryColor}-600`}>{photoDB.label}</span>
+            </div>
+            <ul className="space-y-1">
+                {photoDB.guidelines.map((g, i) => (
+                    <li key={i} className={`text-[9px] font-bold text-${categoryColor}-600 flex items-start gap-1.5`}>
+                        <span className="mt-0.5 shrink-0">•</span>
+                        <span>{g}</span>
+                    </li>
+                ))}
+            </ul>
+        </div>
+
+        {/* Photo Grid */}
+        {activePreviews.length > 0 && (
+            <div className="grid grid-cols-3 gap-2 p-3">
+                {activePreviews.map((src, i) => (
+                    <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-slate-100 group">
+                        <img src={src} alt="" className="w-full h-full object-cover" />
+                        <button
+                            onClick={() => removePhoto(i, activePhotoCategory)}
+                            className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                        >
+                            <FiX size={10} />
+                        </button>
+                    </div>
+                ))}
+            </div>
+        )}
+
+        {/* Upload Buttons */}
+        <div className="flex gap-2 p-3 pt-0">
+            {activePreviews.length === 0 && (
+                <div className="flex-1 flex flex-col items-center justify-center gap-2 py-5 text-slate-300">
+                    <span className="text-3xl">📷</span>
+                    <span className="text-[9px] font-bold uppercase tracking-wider">No photos yet</span>
+                </div>
+            )}
+        </div>
+        <div className="flex gap-2 p-3 pt-0">
+            <button
+                onClick={() => activePhotoCategory === 'Internal' ? internalCameraRef.current?.click() : externalCameraRef.current?.click()}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-${categoryColor}-200 bg-${categoryColor}-50/30 text-${categoryColor}-500 text-[10px] font-black uppercase hover:bg-${categoryColor}-50 transition-all`}
+            >
+                <FiCamera size={15} /> Camera
+            </button>
+            <button
+                onClick={() => activePhotoCategory === 'Internal' ? internalInputRef.current?.click() : externalInputRef.current?.click()}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-${categoryColor}-200 bg-${categoryColor}-50/30 text-${categoryColor}-500 text-[10px] font-black uppercase hover:bg-${categoryColor}-50 transition-all`}
+            >
+                <FiImage size={15} /> Gallery
+            </button>
+        </div>
+    </div>
+);
+
 const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) => {
     const isProcurementMode = (project?.statusDesignPhase !== "Completed");
     const STEPS = isProcurementMode ? STEPS_PROCUREMENT : STEPS_CONSTRUCTION;
@@ -320,67 +381,6 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
     const photoDB = PHOTO_DESCRIPTIONS[activePhotoCategory];
     const categoryColor = activePhotoCategory === 'Internal' ? 'blue' : 'emerald';
 
-    const PhotoCard = () => (
-        <div className={`border-2 rounded-3xl overflow-hidden border-${categoryColor}-100`}>
-            {/* Description Banner */}
-            <div className={`bg-${categoryColor}-50 px-4 pt-4 pb-3 border-b border-${categoryColor}-100`}>
-                <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xl">{photoDB.emoji}</span>
-                    <span className={`text-[10px] font-black uppercase tracking-widest text-${categoryColor}-600`}>{photoDB.label}</span>
-                </div>
-                <ul className="space-y-1">
-                    {photoDB.guidelines.map((g, i) => (
-                        <li key={i} className={`text-[9px] font-bold text-${categoryColor}-600 flex items-start gap-1.5`}>
-                            <span className="mt-0.5 shrink-0">•</span>
-                            <span>{g}</span>
-                        </li>
-                    ))}
-                </ul>
-            </div>
-
-            {/* Photo Grid */}
-            {activePreviews.length > 0 && (
-                <div className="grid grid-cols-3 gap-2 p-3">
-                    {activePreviews.map((src, i) => (
-                        <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-slate-100 group">
-                            <img src={src} alt="" className="w-full h-full object-cover" />
-                            <button
-                                onClick={() => removePhoto(i, activePhotoCategory)}
-                                className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
-                            >
-                                <FiX size={10} />
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            {/* Upload Buttons */}
-            <div className="flex gap-2 p-3 pt-0">
-                {activePreviews.length === 0 && (
-                    <div className="flex-1 flex flex-col items-center justify-center gap-2 py-5 text-slate-300">
-                        <span className="text-3xl">📷</span>
-                        <span className="text-[9px] font-bold uppercase tracking-wider">No photos yet</span>
-                    </div>
-                )}
-            </div>
-            <div className="flex gap-2 p-3 pt-0">
-                <button
-                    onClick={() => activePhotoCategory === 'Internal' ? internalCameraRef.current?.click() : externalCameraRef.current?.click()}
-                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-${categoryColor}-200 bg-${categoryColor}-50/30 text-${categoryColor}-500 text-[10px] font-black uppercase hover:bg-${categoryColor}-50 transition-all`}
-                >
-                    <FiCamera size={15} /> Camera
-                </button>
-                <button
-                    onClick={() => activePhotoCategory === 'Internal' ? internalInputRef.current?.click() : externalInputRef.current?.click()}
-                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-${categoryColor}-200 bg-${categoryColor}-50/30 text-${categoryColor}-500 text-[10px] font-black uppercase hover:bg-${categoryColor}-50 transition-all`}
-                >
-                    <FiImage size={15} /> Gallery
-                </button>
-            </div>
-        </div>
-    );
-
     const modal = (
         <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-6 pb-6 px-4 bg-slate-900/70 backdrop-blur-sm">
             <div className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[calc(100vh-3rem)]">
@@ -441,7 +441,17 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
                                             );
                                         })}
                                     </div>
-                                    <PhotoCard />
+                                    <PhotoCard
+                                        categoryColor={categoryColor}
+                                        photoDB={photoDB}
+                                        activePreviews={activePreviews}
+                                        activePhotoCategory={activePhotoCategory}
+                                        removePhoto={removePhoto}
+                                        internalCameraRef={internalCameraRef}
+                                        externalCameraRef={externalCameraRef}
+                                        internalInputRef={internalInputRef}
+                                        externalInputRef={externalInputRef}
+                                    />
                                     <input ref={internalInputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => handlePhotoSelect(e, 'Internal')} />
                                     <input ref={internalCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handlePhotoSelect(e, 'Internal')} />
                                     <input ref={externalInputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => handlePhotoSelect(e, 'External')} />

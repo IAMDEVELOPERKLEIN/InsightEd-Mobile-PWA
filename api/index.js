@@ -4241,7 +4241,8 @@ const parseNumberOrNull = (value) => {
 
 const parseIntOrNull = (value) => {
   if (value === '' || value === null || value === undefined) return null;
-  const parsed = parseInt(value);
+  const cleaned = String(value).replace(/[^0-9\-]/g, '');
+  const parsed = parseInt(cleaned);
   return isNaN(parsed) ? null : parsed;
 };
 
@@ -8235,9 +8236,11 @@ app.post('/api/save-project', async (req, res) => {
       'completed': 'Completed',
       'terminated': 'Terminated',
       'suspended': 'Suspended',
-      'final inspection': 'Final Inspection',
-      'under procurement': 'Under Procurement',
-      'not yet started': 'Not Yet Started'
+      'final inspection': 'For Final Inspection',
+      'for final inspection': 'For Final Inspection',
+      'under procurement': 'Under procurement',
+      'not yet started': 'Not Yet Started',
+      'not yet procured': 'Not yet procured'
     };
 
     const normalizedConstructionStatus = statusMapping[data.statusOfConstructionPhase?.toLowerCase()] || data.statusOfConstructionPhase || '';
@@ -8543,9 +8546,10 @@ app.put('/api/update-project/:id', upload.fields([
       'completed': 'Completed',
       'terminated': 'Terminated',
       'suspended': 'Suspended',
-      'final inspection': 'Final Inspection',
-      'under procurement': 'Under Procurement',
-      'not yet started': 'Not Yet Started'
+      'final inspection': 'For Final Inspection',
+      'under procurement': 'Under procurement',
+      'not yet started': 'Not Yet Started',
+      'not yet procured': 'Not yet procured'
     };
 
     const rawStatus = (data.statusOfConstructionPhase !== undefined) ? data.statusOfConstructionPhase : (data.status !== undefined ? data.status : oldData.status_of_construction_phase);
