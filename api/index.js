@@ -6553,6 +6553,7 @@ app.post('/api/register-school', async (req, res) => {
     return res.status(400).json({ error: "Validation Failed", details: result.error.format() });
   }
   const { email, password, schoolData, contactNumber, role, passcode } = result.data;
+  const normalizedEmail = (email || '').toLowerCase();
 
   // Fallback to School Head if role not provided for backward compatibility
   const userRole = role || 'School Head';
@@ -6931,6 +6932,7 @@ app.post('/api/register-user', async (req, res) => {
     return res.status(400).json({ error: "Validation Failed", details: result.error.format() });
   }
   const { email, password, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail, accountCategory, passcode } = result.data;
+  const normalizedEmail = (email || '').toLowerCase();
 
   console.log(`🚀 Registration request received for: ${email} (Role: ${role})`);
 
@@ -11877,7 +11879,7 @@ app.get('/api/monitoring/stats', async (req, res) => {
         COALESCE(COUNT(CASE WHEN s.iern IS NOT NULL AND s.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END), 0) as validated_schools_count,
         
         -- Registered Count (Schools that have an IERN assigned)
-        COUNT(s.iern) as registered_schools_count
+        COUNT(CASE WHEN s.iern IS NOT NULL AND s.iern != '' THEN 1 END) as registered_schools_count
       FROM ph_schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
@@ -12062,10 +12064,11 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
       SELECT 
         UPPER(TRIM(s.division)) as division, 
         COUNT(s.school_id) as total_schools, 
-        COUNT(s.iern) as completed_schools,
-        COUNT(CASE WHEN s.iern IS NOT NULL AND s.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
-        COUNT(CASE WHEN s.iern IS NOT NULL AND s.unit_completion >= 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
-        ROUND(COALESCE(AVG(CASE WHEN s.iern IS NOT NULL THEN s.unit_completion ELSE NULL END), 0), 1) as avg_completion,
+        COUNT(CASE WHEN s.iern IS NOT NULL AND s.iern != '' THEN 1 END) as registered_schools,
+        COUNT(CASE WHEN s.unit_completion >= 100 THEN 1 END) as completed_schools,
+        COUNT(CASE WHEN s.iern IS NOT NULL AND s.iern != '' AND s.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
+        COUNT(CASE WHEN s.iern IS NOT NULL AND s.iern != '' AND s.unit_completion >= 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
+        ROUND(COALESCE(AVG(CASE WHEN s.iern IS NOT NULL AND s.iern != '' THEN s.unit_completion ELSE NULL END), 0), 1) as avg_completion,
         
         -- Map modular units to legacy names for frontend bars
         COALESCE(SUM(s.unit1), 0) as profile,
@@ -12633,10 +12636,11 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
       SELECT 
         UPPER(TRIM(${groupCol})) as district, 
         COUNT(s.school_id) as total_schools, 
-        COUNT(s.iern) as completed_schools,
-        COUNT(CASE WHEN s.iern IS NOT NULL AND s.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
-        COUNT(CASE WHEN s.iern IS NOT NULL AND s.unit_completion >= 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
-        ROUND(COALESCE(AVG(CASE WHEN s.iern IS NOT NULL THEN s.unit_completion ELSE NULL END), 0), 1) as avg_completion,
+        COUNT(CASE WHEN s.iern IS NOT NULL AND s.iern != '' THEN 1 END) as registered_schools,
+        COUNT(CASE WHEN s.unit_completion >= 100 THEN 1 END) as completed_schools,
+        COUNT(CASE WHEN s.iern IS NOT NULL AND s.iern != '' AND s.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
+        COUNT(CASE WHEN s.iern IS NOT NULL AND s.iern != '' AND s.unit_completion >= 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
+        ROUND(COALESCE(AVG(CASE WHEN s.iern IS NOT NULL AND s.iern != '' THEN s.unit_completion ELSE NULL END), 0), 1) as avg_completion,
 
         -- Map modular units to legacy names for frontend bars
         COALESCE(SUM(s.unit1), 0) as profile,
@@ -15280,10 +15284,10 @@ app.get('/api/reports/insights', async (req, res) => {
     } else {
       metricSelect = `
         COUNT(p.school_id) as total_schools,
-        COUNT(CASE WHEN sp.school_id IS NOT NULL THEN 1 END) as registered_schools,
+        COUNT(CASE WHEN p.iern IS NOT NULL AND p.iern != '' THEN 1 END) as registered_schools,
         COUNT(CASE WHEN p.unit_completion >= 100 THEN 1 END) as completed_schools,
         ROUND(COALESCE(AVG(LEAST(COALESCE(p.unit_completion, 0), 100)), 0), 1) as avg_completion,
-        ROUND(COALESCE(AVG(CASE WHEN p.school_id IS NOT NULL THEN 100.0 * (CASE WHEN sp.school_id IS NOT NULL THEN 1 ELSE 0 END) ELSE 0 END), 0), 1) as value
+        ROUND(COALESCE(AVG(CASE WHEN p.school_id IS NOT NULL THEN 100.0 * (CASE WHEN p.iern IS NOT NULL AND p.iern != '' THEN 1 ELSE 0 END) ELSE 0 END), 0), 1) as value
       `;
     }
 

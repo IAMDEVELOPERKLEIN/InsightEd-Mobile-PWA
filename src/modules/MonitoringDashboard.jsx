@@ -1197,6 +1197,30 @@ const MonitoringDashboard = () => {
         }
     }, [coDistrict, coDivision, coRegion, userData]);
 
+    const StatCard = ({ title, value, total, color, icon: Icon }) => {
+        const percentage = total > 0 ? Math.min(Math.round((value / total) * 100), 100) : 0;
+        return (
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+                <div className="flex justify-between items-start mb-4">
+                    <div className={`p-3 rounded-xl ${color} bg-opacity-10 dark:bg-opacity-20`}>
+                        <Icon className={color.replace('bg-', 'text-')} size={24} />
+                    </div>
+                    <div className="text-right">
+                        <span className="text-2xl font-black text-slate-800 dark:text-slate-100">{percentage}%</span>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{value} / {total}</p>
+                    </div>
+                </div>
+                <h3 className="text-sm font-bold text-slate-600 dark:text-slate-300">{title}</h3>
+                <div className="mt-3 w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                    <div
+                        className={`h-full ${color} transition-all duration-1000`}
+                        style={{ width: `${percentage}%` }}
+                    ></div>
+                </div>
+            </div>
+        );
+    };
+
     // jurisdictionTotal: rely on API stats (schools_IERN-backed) as single source of truth
     const jurisdictionTotal = useMemo(() => {
         return parseInt(stats?.total_schools || 0);
@@ -1572,7 +1596,7 @@ const MonitoringDashboard = () => {
                                                         {p.status}
                                                     </span>
                                                     <div className="text-xs font-black text-slate-700 dark:text-slate-300">
-                                                        {p.accomplishmentPercentage}%
+                                                        {Math.min(p.accomplishmentPercentage || 0, 100)}%
                                                     </div>
                                                 </div>
                                             </div>
@@ -1840,7 +1864,7 @@ const MonitoringDashboard = () => {
                                                     <div className="flex items-center justify-between h-full">
                                                         <div>
                                                             <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400">
-                                                                {percentage}%
+                                                                {Math.min(percentage, 100)}%
                                                             </span>
                                                             <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">
                                                                 Account Registration <br />
@@ -1866,7 +1890,7 @@ const MonitoringDashboard = () => {
                                                     <div className="flex items-center justify-between h-full">
                                                         <div>
                                                             <span className="text-3xl font-black text-[#004A99] dark:text-blue-400">
-                                                                {percentage}%
+                                                                {Math.min(percentage, 100)}%
                                                             </span>
                                                             <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">
                                                                 100% Data Completion <br />
@@ -1892,7 +1916,7 @@ const MonitoringDashboard = () => {
                                                     <div className="flex items-center justify-between h-full">
                                                         <div>
                                                             <span className="text-3xl font-black text-amber-600 dark:text-amber-400">
-                                                                {percentage}%
+                                                                {Math.min(percentage, 100)}%
                                                             </span>
                                                             <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">
                                                                 ESF7 Submitted <br />
@@ -1927,7 +1951,7 @@ const MonitoringDashboard = () => {
                                                     <div className="flex items-center justify-between h-full">
                                                         <div>
                                                             <span className="text-3xl font-black text-purple-600 dark:text-purple-400">
-                                                                {percentage}%
+                                                                {Math.min(percentage, 100)}%
                                                             </span>
                                                             <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">
                                                                 System Validated <br />
@@ -1966,7 +1990,7 @@ const MonitoringDashboard = () => {
                                                 {/* Completed Projects % */}
                                                 {engStats?.total_projects > 0 && (
                                                     <div className="mt-4 text-[10px] font-bold text-emerald-700/70 dark:text-emerald-300/70">
-                                                        {Math.round(((engStats.completed_count || 0) / engStats.total_projects) * 100)}% Completed
+                                                        {Math.min(Math.round(((engStats.completed_count || 0) / engStats.total_projects) * 100), 100)}% Completed
                                                     </div>
                                                 )}
                                             </div>
@@ -2001,29 +2025,24 @@ const MonitoringDashboard = () => {
                                             return (
                                                 <div className="space-y-4">
                                                     {regionDivisions.map((divName, idx) => {
-                                                        // 3. Get Completed Count from Backend Stats
+                                                        // 3. Get Stats from Backend
                                                         const startStat = divisionStats.find(d => normalizeLocationName(d.division) === normalizeLocationName(divName));
-                                                        const completedCount = startStat ? parseInt(startStat.completed_schools || 0) : 0;
+                                                        const registeredCount = startStat ? parseInt(startStat.registered_schools || 0) : 0;
                                                         const validatedCount = startStat ? parseInt(startStat.validated_schools || 0) : 0;
+                                                        const forValidationCount = startStat ? parseInt(startStat.for_validation_schools || 0) : 0;
 
                                                         // 2. Calculate Total Schools
-                                                        // Use API Total if available and higher than CSV (to include new schools)
                                                         const apiTotal = startStat ? parseInt(startStat.total_schools || 0) : 0;
-
-                                                        // Use API total directly (schools_IERN is the source of truth)
                                                         const totalSchools = apiTotal;
 
-                                                        // 4. Calculate Percentage (User Logic: Completed Schools / Total Schools)
-                                                        // Clamp to 100%
-                                                        const rawPercentage = totalSchools > 0 ? (completedCount / totalSchools) * 100 : 0;
-                                                        // Use toFixed(1) to avoid rounding up to 100%
+                                                        // 4. Calculate Percentage (Registration Rate)
+                                                        const rawPercentage = totalSchools > 0 ? (registeredCount / totalSchools) * 100 : 0;
                                                         const percentage = totalSchools > 0 ? Math.min(rawPercentage, 100).toFixed(1) : 0;
 
                                                         // Validation Percentages for Stacked Bar
                                                         const validatedPct = totalSchools > 0 ? (validatedCount / totalSchools) * 100 : 0;
 
                                                         // For Validation: Use the for_validation_schools field from API
-                                                        const forValidationCount = parseInt(startStat?.for_validation_schools || 0);
                                                         const forValidationPct = totalSchools > 0 ? (forValidationCount / totalSchools) * 100 : 0;
 
                                                         // Define colors for progress bars (cycling)
@@ -2043,13 +2062,13 @@ const MonitoringDashboard = () => {
                                                                     <div>
                                                                         <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors">{divName}</h3>
                                                                         <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
-                                                                            {completedCount} / {totalSchools} Registered
+                                                                            {registeredCount} / {totalSchools} Registered
                                                                         </p>
                                                                     </div>
                                                                     <div className="text-right">
-                                                                        <span className="text-lg font-black text-slate-700 dark:text-slate-200">{percentage}%</span>
+                                                                        <span className="text-lg font-black text-slate-700 dark:text-slate-200">{Math.min(percentage, 100)}%</span>
                                                                         {effectiveRole !== 'Regional Office' && effectiveRole !== 'School Division Office' && (
-                                                                            <p className="text-[9px] font-bold text-slate-400">({Math.round(validatedPct)}% Validated)</p>
+                                                                            <p className="text-[9px] font-bold text-slate-400">({Math.round(Math.min(validatedPct, 100))}% Validated)</p>
                                                                         )}
                                                                     </div>
                                                                 </div>
@@ -2057,13 +2076,13 @@ const MonitoringDashboard = () => {
                                                                 <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden flex mb-2">
                                                                     <div
                                                                         className={`h-full ${color} transition-all duration-1000`}
-                                                                        style={{ width: `${(effectiveRole === 'Regional Office' || effectiveRole === 'School Division Office') ? percentage : validatedPct}%` }}
+                                                                        style={{ width: `${Math.min((effectiveRole === 'Regional Office' || effectiveRole === 'School Division Office') ? percentage : validatedPct, 100)}%` }}
                                                                         title={`System Validated: ${validatedCount}`}
                                                                     ></div>
                                                                     {effectiveRole !== 'Regional Office' && effectiveRole !== 'School Division Office' && (
                                                                         <div
                                                                             className={`h-full bg-rose-400/80 transition-all duration-1000`}
-                                                                            style={{ width: `${forValidationPct}%` }}
+                                                                            style={{ width: `${Math.min(forValidationPct, 100)}%` }}
                                                                             title={`Critical Issues: ${forValidationCount}`}
                                                                         ></div>
                                                                     )}
@@ -2265,7 +2284,7 @@ const MonitoringDashboard = () => {
                                                                                     s.percentage >= 50 ? 'bg-blue-500' :
                                                                                         s.percentage > 0 ? 'bg-amber-500' : 'bg-slate-300'
                                                                                     }`}
-                                                                                style={{ width: `${s.percentage}%` }}
+                                                                                style={{ width: `${Math.min(s.percentage, 100)}%` }}
                                                                             ></div>
                                                                         </div>
 
@@ -2336,7 +2355,7 @@ const MonitoringDashboard = () => {
                                                                             s.percentage >= 50 ? 'text-blue-500' :
                                                                                 s.percentage > 0 ? 'text-amber-500' : 'text-slate-300'
                                                                             }`}>
-                                                                            {s.percentage}%
+                                                                            {Math.min(s.percentage, 100)}%
                                                                         </span>
                                                                     </div>
                                                                 </div>
@@ -2424,29 +2443,21 @@ const MonitoringDashboard = () => {
                                             return (
                                                 <div className="space-y-4">
                                                     {divisionDistricts.map((distName, idx) => {
-                                                        // 2. Count Total from CSV
-                                                        // Use API total — schools_IERN is the source of truth
-                                                        const csvTotal = 0; // No longer used
-
                                                         // 3. Get API Stats for this Group
                                                         const startStat = districtStats.find(d => normalizeLocationName(d.district) === normalizeLocationName(distName));
 
-                                                        const completedCount = startStat ? parseInt(startStat.completed_schools || 0) : 0;
+                                                        const registeredCount = startStat ? parseInt(startStat.registered_schools || 0) : 0;
                                                         const validatedCount = startStat ? parseInt(startStat.validated_schools || 0) : 0;
+                                                        const forValidationCount = startStat ? parseInt(startStat.for_validation_schools || 0) : 0;
                                                         const apiTotal = startStat ? parseInt(startStat.total_schools || 0) : 0;
+                                                        const totalSchools = apiTotal;
 
-                                                        // Fix >100% Bug: Ensure total includes API count if it's higher than CSV
-                                                        const totalSchools = Math.max(csvTotal, apiTotal);
-
-                                                        // 4. Calculate Percentage (User Logic: Completed Schools / Total Schools)
-                                                        // Clamp to 100% to prevent edge cases
-                                                        const rawPercentage = totalSchools > 0 ? (completedCount / totalSchools) * 100 : 0;
-                                                        // Use toFixed(1) to avoid rounding up to 100%
+                                                        // 4. Calculate Percentage (Registration Rate)
+                                                        const rawPercentage = totalSchools > 0 ? (registeredCount / totalSchools) * 100 : 0;
                                                         const percentage = totalSchools > 0 ? Math.min(rawPercentage, 100).toFixed(1) : 0;
 
                                                         // Validation Percentages for Stacked Bar
                                                         const validatedPct = totalSchools > 0 ? (validatedCount / totalSchools) * 100 : 0;
-                                                        const forValidationCount = Math.max(0, completedCount - validatedCount);
                                                         const forValidationPct = totalSchools > 0 ? (forValidationCount / totalSchools) * 100 : 0;
 
                                                         // Colors
@@ -2463,13 +2474,13 @@ const MonitoringDashboard = () => {
                                                                     <div>
                                                                         <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors">{distName}</h3>
                                                                         <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
-                                                                            {completedCount} / {totalSchools} Registered
+                                                                            {registeredCount} / {totalSchools} Registered
                                                                         </p>
                                                                     </div>
                                                                     <div className="text-right">
-                                                                        <span className="text-lg font-black text-slate-700 dark:text-slate-200">{percentage}%</span>
+                                                                        <span className="text-lg font-black text-slate-700 dark:text-slate-200">{Math.min(percentage, 100)}%</span>
                                                                         {effectiveRole !== 'Regional Office' && effectiveRole !== 'School Division Office' && (
-                                                                            <p className="text-[9px] font-bold text-slate-400">({Math.round(validatedPct)}% Validated)</p>
+                                                                            <p className="text-[9px] font-bold text-slate-400">({Math.round(Math.min(validatedPct, 100))}% Validated)</p>
                                                                         )}
                                                                     </div>
                                                                 </div>
@@ -2477,13 +2488,13 @@ const MonitoringDashboard = () => {
                                                                 <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden flex mb-2">
                                                                     <div
                                                                         className={`h-full ${color} transition-all duration-1000`}
-                                                                        style={{ width: `${(effectiveRole === 'Regional Office' || effectiveRole === 'School Division Office') ? percentage : validatedPct}%` }}
+                                                                        style={{ width: `${Math.min((effectiveRole === 'Regional Office' || effectiveRole === 'School Division Office') ? percentage : validatedPct, 100)}%` }}
                                                                         title={`System Validated: ${validatedCount}`}
                                                                     ></div>
                                                                     {effectiveRole !== 'Regional Office' && effectiveRole !== 'School Division Office' && (
                                                                         <div
                                                                             className={`h-full bg-slate-400 transition-all duration-1000`}
-                                                                            style={{ width: `${forValidationPct}%` }}
+                                                                            style={{ width: `${Math.min(forValidationPct, 100)}%` }}
                                                                             title={`For Validation: ${forValidationCount}`}
                                                                         ></div>
                                                                     )}
@@ -2747,7 +2758,7 @@ const MonitoringDashboard = () => {
                                                     {schoolsData.map((school, idx) => {
                                                         const metricValue = insightsMetric === 'registration' 
                                                             ? (school.registration_rate || 0) 
-                                                            : (school.avg_completion || 0);
+                                                            : Math.min(school.avg_completion || 0, 100);
                                                         
                                                         const isCompleted = school.completed_schools > 0;
                                                         const isRegistered = school.registered_schools > 0;
@@ -2768,7 +2779,7 @@ const MonitoringDashboard = () => {
                                                                                 {insightsMetric === 'registration' ? 'Registration' : 'Completion'}
                                                                             </span>
                                                                             <span className={`text-sm font-black ${metricValue >= 100 ? 'text-emerald-500' : 'text-purple-600'}`}>
-                                                                                {metricValue.toFixed(1)}%
+                                                                                {Math.min(metricValue, 100).toFixed(1)}%
                                                                             </span>
                                                                         </div>
                                                                         <div className="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
@@ -2906,7 +2917,7 @@ const MonitoringDashboard = () => {
                                                                             <div className="bg-white dark:bg-slate-800 p-4 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-2xl animate-in zoom-in-95 duration-200">
                                                                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{label}</p>
                                                                                 <p className="text-xl font-black text-purple-600 dark:text-purple-400">
-                                                                                    {isRate ? `${val.toFixed(1)}%` : val.toLocaleString()}
+                                                                                    {isRate ? `${Math.min(val, 100).toFixed(1)}%` : val.toLocaleString()}
                                                                                 </p>
                                                                                 <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight mt-1">
                                                                                     {isRate ? (val >= 100 ? 'Target Met' : 'In Progress') : 'Total Accumulated'}
@@ -2952,7 +2963,7 @@ const MonitoringDashboard = () => {
                                                                                 textAnchor="start" 
                                                                                 dominantBaseline="middle"
                                                                             >
-                                                                                {isRate ? `${value.toFixed(1)}%` : value.toLocaleString()}
+                                                                                {isRate ? `${Math.min(value, 100).toFixed(1)}%` : value.toLocaleString()}
                                                                             </text>
                                                                         );
                                                                     }}
@@ -3036,7 +3047,7 @@ const MonitoringDashboard = () => {
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Completed</p>
                                         </div>
                                         <div className="text-center col-span-2 pt-4 border-t border-slate-50 dark:border-slate-700">
-                                            <p className="text-4xl font-black text-amber-500 dark:text-amber-400">{engStats?.avg_progress || 0}%</p>
+                                            <p className="text-4xl font-black text-amber-500 dark:text-amber-400">{Math.min(engStats?.avg_progress || 0, 100)}%</p>
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Avg. Physical Accomplishment</p>
                                         </div>
                                     </div>
@@ -3074,10 +3085,10 @@ const MonitoringDashboard = () => {
                                                         <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                                                             <div
                                                                 className="h-full bg-blue-500 rounded-full"
-                                                                style={{ width: `${project.accomplishmentPercentage}%` }}
+                                                                style={{ width: `${Math.min(project.accomplishmentPercentage || 0, 100)}%` }}
                                                             ></div>
                                                         </div>
-                                                        <span className="text-xs font-black text-slate-700 dark:text-slate-300">{project.accomplishmentPercentage}%</span>
+                                                        <span className="text-xs font-black text-slate-700 dark:text-slate-300">{Math.min(project.accomplishmentPercentage || 0, 100)}%</span>
                                                     </div>
                                                 </div>
                                             ))}

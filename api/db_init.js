@@ -812,22 +812,334 @@ const runMigrations = async (client, dbLabel) => {
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to init facility_rooms table:`, migErr.message);
     }
-    // --- 17. PH_SCHOOLS LOCATION COLUMNS ---
+    // =========================================================================
+    // --- 17. PH_SCHOOLS — CANONICAL COLUMN SCHEMA (Unit 1 → 9 Order) -------
+    // =========================================================================
+    // All ph_schools columns are ensured here in their logical unit order.
+    // Run `node api/reorder_ph_schools.js` once on any existing database to
+    // physically reorder columns to match this declaration.
+    // =========================================================================
     try {
+        // ── CREATE TABLE (no-op if already exists) ───────────────────────────
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS ph_schools (
+                iern        TEXT PRIMARY KEY,
+                school_id   TEXT,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // ── UNIT 1: School Identity ──────────────────────────────────────────
         await client.query(`
             ALTER TABLE ph_schools
-            ADD COLUMN IF NOT EXISTS province TEXT,
-            ADD COLUMN IF NOT EXISTS municipality TEXT,
-            ADD COLUMN IF NOT EXISTS barangay TEXT,
-            ADD COLUMN IF NOT EXISTS leg_district TEXT,
-            ADD COLUMN IF NOT EXISTS latitude TEXT,
-            ADD COLUMN IF NOT EXISTS longitude TEXT;
+            ADD COLUMN IF NOT EXISTS verified_as_of             TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS school_name                TEXT,
+            ADD COLUMN IF NOT EXISTS region                     TEXT,
+            ADD COLUMN IF NOT EXISTS province                   TEXT,
+            ADD COLUMN IF NOT EXISTS municipality               TEXT,
+            ADD COLUMN IF NOT EXISTS barangay                   TEXT,
+            ADD COLUMN IF NOT EXISTS division                   TEXT,
+            ADD COLUMN IF NOT EXISTS district                   TEXT,
+            ADD COLUMN IF NOT EXISTS leg_district               TEXT,
+            ADD COLUMN IF NOT EXISTS curricular_offering        TEXT,
+            ADD COLUMN IF NOT EXISTS latitude                   TEXT,
+            ADD COLUMN IF NOT EXISTS longitude                  TEXT,
+            ADD COLUMN IF NOT EXISTS school_head                TEXT,
+            ADD COLUMN IF NOT EXISTS contact_number             TEXT,
+            ADD COLUMN IF NOT EXISTS ownership                  TEXT,
+            ADD COLUMN IF NOT EXISTS ownership_document_path   TEXT,
+            ADD COLUMN IF NOT EXISTS ownership_document_type   TEXT,
+            ADD COLUMN IF NOT EXISTS google_drive_link          TEXT,
+            ADD COLUMN IF NOT EXISTS google_drive_file_id       TEXT,
+            ADD COLUMN IF NOT EXISTS google_drive_file_name     TEXT,
+            ADD COLUMN IF NOT EXISTS google_drive_thumbnail_url TEXT,
+            ADD COLUMN IF NOT EXISTS school_type                TEXT,
+            ADD COLUMN IF NOT EXISTS mother_school_id           TEXT,
+            ADD COLUMN IF NOT EXISTS extension_mother_school_name TEXT,
+            ADD COLUMN IF NOT EXISTS established_month          TEXT,
+            ADD COLUMN IF NOT EXISTS established_year           TEXT,
+            ADD COLUMN IF NOT EXISTS head_first_name            TEXT,
+            ADD COLUMN IF NOT EXISTS head_middle_name           TEXT,
+            ADD COLUMN IF NOT EXISTS head_last_name             TEXT,
+            ADD COLUMN IF NOT EXISTS head_sex                   TEXT,
+            ADD COLUMN IF NOT EXISTS head_position_title        TEXT,
+            ADD COLUMN IF NOT EXISTS head_date_of_birth         TEXT,
+            ADD COLUMN IF NOT EXISTS head_date_hired            TEXT,
+            ADD COLUMN IF NOT EXISTS unit1                      INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS unit1_completed            BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS unit1_updated_at           TIMESTAMP;
         `);
-        console.log(`✅ [${dbLabel}] ph_schools Location Columns Ensured`);
+
+        // ── UNIT 2: Learners (Enrollment) ────────────────────────────────────
+        await client.query(`
+            ALTER TABLE ph_schools
+            ADD COLUMN IF NOT EXISTS enroll_kinder              INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS enroll_g1                  INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS enroll_g2                  INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS enroll_g3                  INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS enroll_g4                  INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS enroll_g5                  INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS enroll_g6                  INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS enroll_g7                  INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS enroll_g8                  INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS enroll_g9                  INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS enroll_g10                 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS enroll_g11                 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS enroll_g12                 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS total_enrollment           INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS male_enrollment            INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS female_enrollment          INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS sned_self_contained_count  INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS unit2_simplified_enrollment TEXT,
+            ADD COLUMN IF NOT EXISTS multigrade_groupings_1     TEXT,
+            ADD COLUMN IF NOT EXISTS multigrade_groupings_2     TEXT,
+            ADD COLUMN IF NOT EXISTS multigrade_groupings_3     TEXT,
+            ADD COLUMN IF NOT EXISTS multigrade_enrollment_1    INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS multigrade_enrollment_2    INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS multigrade_enrollment_3    INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS unit2                      INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS unit2_completed            BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS unit2_updated_at           TIMESTAMP;
+        `);
+
+        // ── UNIT 3: Organized Classes ────────────────────────────────────────
+        await client.query(`
+            ALTER TABLE ph_schools
+            ADD COLUMN IF NOT EXISTS has_multigrade             BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS multigrade_sections_count  INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS unit3_simplified_counts    JSONB,
+            ADD COLUMN IF NOT EXISTS grade_kinder_size          TEXT,
+            ADD COLUMN IF NOT EXISTS grade_1_size               TEXT,
+            ADD COLUMN IF NOT EXISTS grade_2_size               TEXT,
+            ADD COLUMN IF NOT EXISTS grade_3_size               TEXT,
+            ADD COLUMN IF NOT EXISTS grade_4_size               TEXT,
+            ADD COLUMN IF NOT EXISTS grade_5_size               TEXT,
+            ADD COLUMN IF NOT EXISTS grade_6_size               TEXT,
+            ADD COLUMN IF NOT EXISTS grade_7_size               TEXT,
+            ADD COLUMN IF NOT EXISTS grade_8_size               TEXT,
+            ADD COLUMN IF NOT EXISTS grade_9_size               TEXT,
+            ADD COLUMN IF NOT EXISTS grade_10_size              TEXT,
+            ADD COLUMN IF NOT EXISTS grade_11_size              TEXT,
+            ADD COLUMN IF NOT EXISTS grade_12_size              TEXT,
+            ADD COLUMN IF NOT EXISTS multigrade_size_1          TEXT,
+            ADD COLUMN IF NOT EXISTS multigrade_size_2          TEXT,
+            ADD COLUMN IF NOT EXISTS multigrade_size_3          TEXT,
+            ADD COLUMN IF NOT EXISTS unit3                      INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS unit3_completed            BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS unit3_updated_at           TIMESTAMP;
+        `);
+
+        // ── UNIT 4: Learner Profile ──────────────────────────────────────────
+        await client.query(`
+            ALTER TABLE ph_schools
+            ADD COLUMN IF NOT EXISTS selected_learner_groups    JSONB,
+            ADD COLUMN IF NOT EXISTS bmi_severely_wasted        INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS bmi_wasted                 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS bmi_overweight_obese       INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS bmi_normal                 INTEGER DEFAULT 0,
+            -- ALS
+            ADD COLUMN IF NOT EXISTS als_kinder INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS als_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS als_g2 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS als_g3 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS als_g4 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS als_g5 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS als_g6 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS als_g7 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS als_g8 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS als_g9 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS als_g10 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS als_g11 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS als_g12 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS als_total INTEGER DEFAULT 0,
+            -- Muslim
+            ADD COLUMN IF NOT EXISTS muslim_kinder INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS muslim_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS muslim_g2 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS muslim_g3 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS muslim_g4 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS muslim_g5 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS muslim_g6 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS muslim_g7 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS muslim_g8 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS muslim_g9 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS muslim_g10 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS muslim_g11 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS muslim_g12 INTEGER DEFAULT 0,
+            -- IP
+            ADD COLUMN IF NOT EXISTS ip_kinder INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS ip_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS ip_g2 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS ip_g3 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS ip_g4 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS ip_g5 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS ip_g6 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS ip_g7 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS ip_g8 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS ip_g9 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS ip_g10 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS ip_g11 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS ip_g12 INTEGER DEFAULT 0,
+            -- Displaced
+            ADD COLUMN IF NOT EXISTS displaced_kinder INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS displaced_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS displaced_g2 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS displaced_g3 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS displaced_g4 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS displaced_g5 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS displaced_g6 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS displaced_g7 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS displaced_g8 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS displaced_g9 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS displaced_g10 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS displaced_g11 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS displaced_g12 INTEGER DEFAULT 0,
+            -- Overage
+            ADD COLUMN IF NOT EXISTS overage_kinder INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS overage_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS overage_g2 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS overage_g3 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS overage_g4 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS overage_g5 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS overage_g6 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS overage_g7 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS overage_g8 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS overage_g9 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS overage_g10 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS overage_g11 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS overage_g12 INTEGER DEFAULT 0,
+            -- Dropout
+            ADD COLUMN IF NOT EXISTS dropout_kinder INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS dropout_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS dropout_g2 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS dropout_g3 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS dropout_g4 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS dropout_g5 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS dropout_g6 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS dropout_g7 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS dropout_g8 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS dropout_g9 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS dropout_g10 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS dropout_g11 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS dropout_g12 INTEGER DEFAULT 0,
+            -- Repeater
+            ADD COLUMN IF NOT EXISTS repeater_kinder INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS repeater_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS repeater_g2 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS repeater_g3 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS repeater_g4 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS repeater_g5 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS repeater_g6 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS repeater_g7 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS repeater_g8 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS repeater_g9 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS repeater_g10 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS repeater_g11 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS repeater_g12 INTEGER DEFAULT 0,
+            -- LWD
+            ADD COLUMN IF NOT EXISTS lwd_kinder INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS lwd_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS lwd_g2 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS lwd_g3 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS lwd_g4 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS lwd_g5 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS lwd_g6 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS lwd_g7 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS lwd_g8 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS lwd_g9 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS lwd_g10 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS lwd_g11 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS lwd_g12 INTEGER DEFAULT 0,
+            -- SNED per grade
+            ADD COLUMN IF NOT EXISTS sned_kinder INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS sned_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS sned_g2 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS sned_g3 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS sned_g4 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS sned_g5 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS sned_g6 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS sned_g7 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS sned_g8 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS sned_g9 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS sned_g10 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS sned_g11 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS sned_g12 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS unit4                      INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS unit4_completed            BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS unit4_updated_at           TIMESTAMP;
+        `);
+
+        // ── UNIT 5: Shifting & Modality ──────────────────────────────────────
+        await client.query(`
+            ALTER TABLE ph_schools
+            ADD COLUMN IF NOT EXISTS has_standard_shifting      BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS adm_mdl                    BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS adm_odl                    BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS adm_tvi                    BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS adm_blended                BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS shifting_modality          TEXT,
+            -- Shift per level (K-12 + multigrade)
+            ADD COLUMN IF NOT EXISTS shift_kinder TEXT,
+            ADD COLUMN IF NOT EXISTS shift_g1 TEXT, ADD COLUMN IF NOT EXISTS shift_g2 TEXT,
+            ADD COLUMN IF NOT EXISTS shift_g3 TEXT, ADD COLUMN IF NOT EXISTS shift_g4 TEXT,
+            ADD COLUMN IF NOT EXISTS shift_g5 TEXT, ADD COLUMN IF NOT EXISTS shift_g6 TEXT,
+            ADD COLUMN IF NOT EXISTS shift_g7 TEXT, ADD COLUMN IF NOT EXISTS shift_g8 TEXT,
+            ADD COLUMN IF NOT EXISTS shift_g9 TEXT, ADD COLUMN IF NOT EXISTS shift_g10 TEXT,
+            ADD COLUMN IF NOT EXISTS shift_g11 TEXT, ADD COLUMN IF NOT EXISTS shift_g12 TEXT,
+            ADD COLUMN IF NOT EXISTS shift_mg_1 TEXT, ADD COLUMN IF NOT EXISTS shift_mg_2 TEXT, ADD COLUMN IF NOT EXISTS shift_mg_3 TEXT,
+            -- Mode per level (K-12 + multigrade)
+            ADD COLUMN IF NOT EXISTS mode_kinder TEXT,
+            ADD COLUMN IF NOT EXISTS mode_g1 TEXT, ADD COLUMN IF NOT EXISTS mode_g2 TEXT,
+            ADD COLUMN IF NOT EXISTS mode_g3 TEXT, ADD COLUMN IF NOT EXISTS mode_g4 TEXT,
+            ADD COLUMN IF NOT EXISTS mode_g5 TEXT, ADD COLUMN IF NOT EXISTS mode_g6 TEXT,
+            ADD COLUMN IF NOT EXISTS mode_g7 TEXT, ADD COLUMN IF NOT EXISTS mode_g8 TEXT,
+            ADD COLUMN IF NOT EXISTS mode_g9 TEXT, ADD COLUMN IF NOT EXISTS mode_g10 TEXT,
+            ADD COLUMN IF NOT EXISTS mode_g11 TEXT, ADD COLUMN IF NOT EXISTS mode_g12 TEXT,
+            ADD COLUMN IF NOT EXISTS mode_mg_1 TEXT, ADD COLUMN IF NOT EXISTS mode_mg_2 TEXT, ADD COLUMN IF NOT EXISTS mode_mg_3 TEXT,
+            ADD COLUMN IF NOT EXISTS unit5                      INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS unit5_completed            BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS unit5_updated_at           TIMESTAMP;
+        `);
+
+        // ── UNIT 6: Teaching Personnel (snapshot — roster in teachers_list) ──
+        await client.query(`
+            ALTER TABLE ph_schools
+            ADD COLUMN IF NOT EXISTS total_teachers_registered  INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS total_teachers_kinder      INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS total_teachers_elementary  INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS total_teachers_jhs         INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS total_teachers_shs         INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS unit6                      INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS unit6_completed            BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS unit6_updated_at           TIMESTAMP;
+        `);
+
+        // ── UNIT 7: School Resources ─────────────────────────────────────────
+        await client.query(`
+            ALTER TABLE ph_schools
+            ADD COLUMN IF NOT EXISTS unit7_furniture            TEXT,
+            ADD COLUMN IF NOT EXISTS unit7_ict                  TEXT,
+            ADD COLUMN IF NOT EXISTS unit7_has_ecart            BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS unit7_ecarts               TEXT,
+            ADD COLUMN IF NOT EXISTS unit7_wash                 TEXT,
+            ADD COLUMN IF NOT EXISTS unit7_utilities            TEXT,
+            ADD COLUMN IF NOT EXISTS u7_ict_smart_tv_cond       TEXT,
+            ADD COLUMN IF NOT EXISTS u7_ict_projector_cond      TEXT,
+            ADD COLUMN IF NOT EXISTS u7_ict_printer_cond        TEXT,
+            ADD COLUMN IF NOT EXISTS u7_wash_male_seats_cond    TEXT,
+            ADD COLUMN IF NOT EXISTS u7_wash_female_seats_cond  TEXT,
+            ADD COLUMN IF NOT EXISTS u7_wash_common_seats_cond  TEXT,
+            ADD COLUMN IF NOT EXISTS u7_wash_pwd_seats_cond     TEXT,
+            ADD COLUMN IF NOT EXISTS u7_wash_faucets_cond       TEXT,
+            ADD COLUMN IF NOT EXISTS u7_confirm_no_grid         BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS u7_confirm_no_piped        BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS u7_confirm_no_wired        BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS u7_utility_internet_type   TEXT,
+            ADD COLUMN IF NOT EXISTS unit7                      INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS unit7_completed            BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS unit7_updated_at           TIMESTAMP;
+        `);
+
+        // ── UNIT 8: Physical Facilities (aggregate snapshots) ────────────────
+        await client.query(`
+            ALTER TABLE ph_schools
+            ADD COLUMN IF NOT EXISTS bldg_count_good            INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS bldg_count_minor_repair    INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS bldg_count_major_repair    INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS it_laptop_total            INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS it_tablet_total            INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS it_pc_total                INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS it_printer_total           INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS it_ecart_total             INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS unit8                      INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS unit8_completed            BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS unit8_updated_at           TIMESTAMP;
+        `);
+
+        // ── UNIT 9: School Location / Terrain ────────────────────────────────
+        await client.query(`
+            ALTER TABLE ph_schools
+            ADD COLUMN IF NOT EXISTS hazard_risk_score          INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS unit9                      INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS unit9_completed            BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS unit9_updated_at           TIMESTAMP;
+        `);
+
+        // ── UNIT 10: Verification ────────────────────────────────────────────
+        await client.query(`
+            ALTER TABLE ph_schools
+            ADD COLUMN IF NOT EXISTS unit10                     INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS unit10_completed           BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS unit10_updated_at          TIMESTAMP;
+        `);
+
+        // ── MONITORING / COMPLETION SNAPSHOT ─────────────────────────────────
+        await client.query(`
+            ALTER TABLE ph_schools
+            ADD COLUMN IF NOT EXISTS unit_completion            NUMERIC DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS forms_completed_count      INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS completion_percentage      NUMERIC DEFAULT 0;
+        `);
+
+        // ── INDEXES ───────────────────────────────────────────────────────────
+        await client.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_ph_schools_school_id
+            ON ph_schools(school_id) WHERE school_id IS NOT NULL;
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_ph_schools_division  ON ph_schools(division);`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_ph_schools_region    ON ph_schools(region);`);
+
+        console.log(`✅ [${dbLabel}] ph_schools canonical schema (Unit 1-9) ensured`);
     } catch (migErr) {
-        // Table may not exist yet (created separately) — silently skip
-        if (!migErr.message.includes('does not exist')) {
-            console.error(`❌ [${dbLabel}] Failed to migrate ph_schools columns:`, migErr.message);
+        if (!migErr.message?.includes('does not exist')) {
+            console.error(`❌ [${dbLabel}] Failed to ensure ph_schools schema:`, migErr.message);
         }
     }
 
@@ -903,37 +1215,9 @@ const runMigrations = async (client, dbLabel) => {
         console.error(`❌ [${dbLabel}] Failed to init school_ownership_docs table:`, migErr.message);
     }
 
-    // --- 22. UNIT 7 DYNAMIC CONDITION FIELDS ---
-    try {
-        await client.query(`
-            ALTER TABLE ph_schools 
-            ADD COLUMN IF NOT EXISTS u7_ict_smart_tv_cond TEXT,
-            ADD COLUMN IF NOT EXISTS u7_ict_projector_cond TEXT,
-            ADD COLUMN IF NOT EXISTS u7_ict_printer_cond TEXT,
-            ADD COLUMN IF NOT EXISTS u7_wash_male_seats_cond TEXT,
-            ADD COLUMN IF NOT EXISTS u7_wash_female_seats_cond TEXT,
-            ADD COLUMN IF NOT EXISTS u7_wash_common_seats_cond TEXT,
-            ADD COLUMN IF NOT EXISTS u7_wash_pwd_seats_cond TEXT,
-            ADD COLUMN IF NOT EXISTS u7_wash_faucets_cond TEXT;
-        `);
-        console.log(`✅ [${dbLabel}] Unit 7 Condition Columns Added to ph_schools`);
-    } catch (migErr) {
-        console.error(`❌ [${dbLabel}] Failed to migrate Unit 7 condition columns:`, migErr.message);
-    }
-
-    // --- 23. UNIT 7 UTILITY STATUS CONFIRMATIONS ---
-    try {
-        await client.query(`
-            ALTER TABLE ph_schools 
-            ADD COLUMN IF NOT EXISTS u7_confirm_no_grid BOOLEAN DEFAULT FALSE,
-            ADD COLUMN IF NOT EXISTS u7_confirm_no_piped BOOLEAN DEFAULT FALSE,
-            ADD COLUMN IF NOT EXISTS u7_confirm_no_wired BOOLEAN DEFAULT FALSE,
-            ADD COLUMN IF NOT EXISTS u7_utility_internet_type TEXT;
-        `);
-        console.log(`✅ [${dbLabel}] Unit 7 Utility Confirmation Columns Added to ph_schools`);
-    } catch (migErr) {
-        console.error(`❌ [${dbLabel}] Failed to migrate Unit 7 utility confirmation columns:`, migErr.message);
-    }
+    // NOTE: Unit 7 condition & utility columns are now included in the
+    // canonical ph_schools schema block above (migration #17). Removed
+    // duplicate migrations #22 and #23.
     
 };
 
