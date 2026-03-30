@@ -1057,16 +1057,18 @@ const initDB = async () => {
     await checkAndAddColumn('engineer_form', 'number_of_sites', 'INTEGER DEFAULT 1');
     await checkAndAddColumn('engineer_form', 'number_of_storeys', 'INTEGER DEFAULT 0');
     await checkAndAddColumn('engineer_form', 'program_type', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'checklist', 'JSONB');
+    await checkAndAddColumn('engineer_form', 'triangulated_percentage', 'NUMERIC DEFAULT 0');
 
-    // Migration: Rename status to status_of_construction_phase (Teammate consistency)
+    // Migration: Change status_as_of to TIMESTAMP WITH TIME ZONE
     await pool.query(`
-      DO $$ 
-      BEGIN 
-        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='status') THEN
-          ALTER TABLE engineer_form RENAME COLUMN status TO status_of_construction_phase;
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='status_as_of' AND data_type='date') THEN
+          ALTER TABLE engineer_form ALTER COLUMN status_as_of TYPE TIMESTAMP WITH TIME ZONE USING status_as_of::timestamp with time zone;
         END IF;
       END $$;
-    `).catch(err => console.error("Migration Error (status rename):", err.message));
+    `).catch(err => console.error("Migration Error (status_as_of type):", err.message));
 
     currentSegment = "Segment 12: buildable_spaces and facility tables";
     await pool.query(`
@@ -8562,7 +8564,9 @@ app.put('/api/update-project/:id', upload.fields([
 
     const newStatusDesignPhase = newProcurementStatus;
     const newAccomplishment = parseIntOrNull(data.accomplishmentPercentage) !== null ? parseIntOrNull(data.accomplishmentPercentage) : oldData.accomplishment_percentage;
-    const newStatusAsOf = valueOrNull(data.statusAsOfDate) || oldData.status_as_of;
+    const newStatusAsOf = valueOrNull(data.statusAsOfDate) || oldData.status_as_of || new Date().toISOString();
+    const newChecklist = data.checklist !== undefined ? (typeof data.checklist === 'string' ? data.checklist : JSON.stringify(data.checklist)) : (oldData.checklist ? JSON.stringify(oldData.checklist) : null);
+    const newTriangulatedPercentage = data.triangulated_percentage !== undefined ? parseFloat(data.triangulated_percentage) : (oldData.triangulated_percentage || 0);
     const newRemarks = valueOrNull(data.otherRemarks) || oldData.other_remarks;
     const newActualDate = valueOrNull(data.actualCompletionDate) || oldData.actual_completion_date;
     const newLat = valueOrNull(data.latitude) || oldData.latitude;
@@ -8650,7 +8654,9 @@ app.put('/api/update-project/:id', upload.fields([
       oldData.mother_moa_id,
       oldData.supplamental_moa_id,
       oldData.sangguniang_resolution_id,
-      newCatId
+      newCatId,
+      newChecklist,
+      newTriangulatedPercentage
     ];
 
     const insertQuery = `
@@ -8674,8 +8680,9 @@ app.put('/api/update-project/:id', upload.fields([
         province, city, municipality,
         pow_pdf, dupa_pdf, contract_pdf,
         procurement_status,
-        mother_moa_id, supplamental_moa_id, sangguniang_resolution_id, project_category_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67)
+        mother_moa_id, supplamental_moa_id, sangguniang_resolution_id, project_category_id,
+        checklist, triangulated_percentage
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69)
       RETURNING *;
     `;
 

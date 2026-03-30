@@ -70,7 +70,7 @@ const BottomNav = ({ userRole: propRole }) => {
         'Division Engineer': [
             { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
-            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
+            { label: 'Guide', path: '/guide/division-engineer', icon: FiBookOpen },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Admin': [
