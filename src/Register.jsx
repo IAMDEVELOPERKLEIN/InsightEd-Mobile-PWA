@@ -41,7 +41,6 @@ const AUTHORIZATION_CODES = {
     'Implementing Agency': 'AG5N-K9L2'
 };
 
-import locationData from './locations.json';
 
 const getDashboardPath = (role, accountCategory) => {
     // 1. SPECIFIC ROLE OVERRIDES (Highest Priority)
@@ -438,9 +437,10 @@ const Register = () => {
         // Trigger Cascading Load (Database)
         setSelectedRegion(region);
 
-        // Legacy Location Data (for LGU Province/City/Barangay)
-        if (region && locationData[region]) {
-            setProvinceOptions(Object.keys(locationData[region]).sort());
+        // Cascading API load for Province/City/Barangay
+        if (region) {
+            fetch(`/api/locations/provinces?region=${encodeURIComponent(region)}`)
+                .then(r => r.json()).then(setProvinceOptions).catch(() => setProvinceOptions([]));
         } else {
             setProvinceOptions([]);
         }
@@ -457,7 +457,8 @@ const Register = () => {
         });
 
         if (province && formData.region) {
-            setCityOptions(Object.keys(locationData[formData.region][province]).sort());
+            fetch(`/api/locations/municipalities-by-province?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(province)}`)
+                .then(r => r.json()).then(setCityOptions).catch(() => setCityOptions([]));
         } else {
             setCityOptions([]);
         }
@@ -473,8 +474,8 @@ const Register = () => {
         });
 
         if (city && formData.province && formData.region) {
-            const brgys = locationData[formData.region][formData.province][city];
-            setBarangayOptions(brgys.sort());
+            fetch(`/api/locations/barangays?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(formData.province)}&municipality=${encodeURIComponent(city)}`)
+                .then(r => r.json()).then(setBarangayOptions).catch(() => setBarangayOptions([]));
         } else {
             setBarangayOptions([]);
         }

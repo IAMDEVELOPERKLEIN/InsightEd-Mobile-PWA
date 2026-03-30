@@ -9,7 +9,6 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import locationData from '../locations.json';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
 
@@ -969,14 +968,8 @@ const MonitoringDashboard = () => {
         // Load regions from API (schools_IERN)
         fetch('/api/locations/regions')
             .then(r => r.json())
-            .then(data => {
-                const regions = data.map(r => r.region).filter(Boolean).sort();
-                setAvailableRegions(regions);
-            })
-            .catch(() => {
-                // Fallback to locationData JSON
-                setAvailableRegions(Object.keys(locationData).sort());
-            });
+            .then(data => setAvailableRegions(data.filter(Boolean).sort()))
+            .catch(() => {});
     }, []);
 
     // NEW: Handle Active Tab from Navigation State

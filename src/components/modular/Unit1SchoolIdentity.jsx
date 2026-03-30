@@ -6,7 +6,6 @@ import { useAuth } from "../../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import LocationPickerMap from "../LocationPickerMap";
-import locationData from "../../locations.json";
 import useReadOnly from "../../hooks/useReadOnly";
 import { normalizeOffering } from "../../utils/dataNormalization";
 import DocumentUpload from "./DocumentUpload";
@@ -111,6 +110,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [showUnlockDialog, setShowUnlockDialog] = useState(false);
     const [unlockInput, setUnlockInput] = useState("");
 
+    const [regionOptions, setRegionOptions] = useState([]);
     const [provinceOptions, setProvinceOptions] = useState([]);
     const [cityOptions, setCityOptions] = useState([]);
     const [barangayOptions, setBarangayOptions] = useState([]);
@@ -265,12 +265,15 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             setFormData(merged);
 
             // Pre-populate location dropdowns based on merged state
-            if (merged.region && locationData?.[merged.region]) {
-                setProvinceOptions(Object.keys(locationData[merged.region]).sort());
-                if (merged.province && locationData[merged.region][merged.province]) {
-                    setCityOptions(Object.keys(locationData[merged.region][merged.province]).sort());
-                    if (merged.municipality && locationData[merged.region][merged.province][merged.municipality]) {
-                        setBarangayOptions(locationData[merged.region][merged.province][merged.municipality].sort());
+            if (merged.region) {
+                const provRes = await fetch(`/api/locations/provinces?region=${encodeURIComponent(merged.region)}`).catch(() => null);
+                if (provRes?.ok) setProvinceOptions(await provRes.json());
+                if (merged.province) {
+                    const cityRes = await fetch(`/api/locations/municipalities-by-province?region=${encodeURIComponent(merged.region)}&province=${encodeURIComponent(merged.province)}`).catch(() => null);
+                    if (cityRes?.ok) setCityOptions(await cityRes.json());
+                    if (merged.municipality) {
+                        const brgyRes = await fetch(`/api/locations/barangays?region=${encodeURIComponent(merged.region)}&province=${encodeURIComponent(merged.province)}&municipality=${encodeURIComponent(merged.municipality)}`).catch(() => null);
+                        if (brgyRes?.ok) setBarangayOptions(await brgyRes.json());
                     }
                 }
             }
@@ -317,20 +320,21 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
     // ── Logic sync ───────────────────────────────────────────────────────────
     useEffect(() => {
-        if (!formData.region || !locationData?.[formData.region]) return;
-        setProvinceOptions(Object.keys(locationData[formData.region]).sort());
+        if (!formData.region) { setProvinceOptions([]); return; }
+        fetch(`/api/locations/provinces?region=${encodeURIComponent(formData.region)}`)
+            .then(r => r.json()).then(setProvinceOptions).catch(() => {});
     }, [formData.region]);
 
     useEffect(() => {
-        if (!formData.region || !formData.province) return;
-        const opts = locationData?.[formData.region]?.[formData.province];
-        if (opts) setCityOptions(Object.keys(opts).sort());
+        if (!formData.region || !formData.province) { setCityOptions([]); return; }
+        fetch(`/api/locations/municipalities-by-province?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(formData.province)}`)
+            .then(r => r.json()).then(setCityOptions).catch(() => {});
     }, [formData.region, formData.province]);
 
     useEffect(() => {
-        if (!formData.region || !formData.province || !formData.municipality) return;
-        const opts = locationData?.[formData.region]?.[formData.province]?.[formData.municipality];
-        if (opts) setBarangayOptions(opts.sort());
+        if (!formData.region || !formData.province || !formData.municipality) { setBarangayOptions([]); return; }
+        fetch(`/api/locations/barangays?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(formData.province)}&municipality=${encodeURIComponent(formData.municipality)}`)
+            .then(r => r.json()).then(setBarangayOptions).catch(() => {});
     }, [formData.region, formData.province, formData.municipality]);
 
     useEffect(() => {
@@ -346,6 +350,11 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         fetch(`/api/locations/districts?region=${encodeURIComponent(formData.region)}&division=${encodeURIComponent(formData.division)}`)
             .then(r => r.json()).then(setDistrictOptions).catch(() => {});
     }, [formData.region, formData.division]);
+
+    useEffect(() => {
+        fetch('/api/locations/regions')
+            .then(r => r.json()).then(setRegionOptions).catch(() => {});
+    }, []);
 
     // ── Date Sync Logic ──────────────────────────────────────────────────────
 
@@ -1020,7 +1029,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Region</label>
                                                 <select name="region" value={formData.region} onChange={handleRegionChange} className={chunkySelect}>
                                                     <option value="">Choose Region</option>
-                                                    {Object.keys(locationData).sort().map(r => <option key={r} value={r}>{r}</option>)}
+                                                    {regionOptions.map(r => <option key={r} value={r}>{r}</option>)}
                                                 </select>
                                             </div>
                                             <div className="grid grid-cols-1 gap-4">

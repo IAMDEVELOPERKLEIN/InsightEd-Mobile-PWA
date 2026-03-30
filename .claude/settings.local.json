@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(ls -d E:/InsightEd-Mobile-PWA/*/)",
+      "Bash(node -e \":*)"
     ]
   }
 }
