@@ -897,29 +897,34 @@ const EFDHome = () => {
                                                 <span className="w-2 h-2 bg-blue-600 rounded-full shadow-[0_0_8px_rgba(37,99,235,0.4)]"></span>
                                                 Funding Year Distribution
                                             </h3>
-                                            <div className="h-[200px] w-full">
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart 
-                                                        data={yearData}
-                                                        margin={{ top: 30, right: 30, left: 20, bottom: 5 }}
-                                                    >
-                                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                                        <XAxis 
-                                                            dataKey="name" 
-                                                            tick={{ fontSize: 10, fontWeight: 800, fill: '#64748b' }}
-                                                            axisLine={false}
-                                                            tickLine={false}
-                                                        />
-                                                        <YAxis hide domain={[0, 'auto']} />
-                                                        <Tooltip 
-                                                            cursor={{ fill: '#f8fafc' }}
-                                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                                                        />
-                                                        <Bar dataKey="value" fill="#004A99" radius={[6, 6, 0, 0]} barSize={40}>
-                                                            <LabelList dataKey="value" position="top" style={{ fontSize: '10px', fontWeight: 'black', fill: '#004A99' }} />
-                                                        </Bar>
-                                                    </BarChart>
-                                                </ResponsiveContainer>
+                                            <div className="w-full max-h-[350px] overflow-y-auto no-scrollbar pr-1">
+                                                <div style={{ height: Math.max(200, (yearData?.length || 0) * 45) + 'px' }} className="w-full">
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                        <BarChart
+                                                            data={yearData}
+                                                            layout="vertical"
+                                                            margin={{ top: 5, right: 50, left: 10, bottom: 5 }}
+                                                        >
+                                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                                                            <YAxis
+                                                                dataKey="name"
+                                                                type="category"
+                                                                tick={{ fontSize: 10, fontWeight: 800, fill: '#64748b' }}
+                                                                axisLine={false}
+                                                                tickLine={false}
+                                                                width={45}
+                                                            />
+                                                            <XAxis type="number" hide domain={[0, 'auto']} />
+                                                            <Tooltip
+                                                                cursor={{ fill: '#f8fafc' }}
+                                                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                                            />
+                                                            <Bar dataKey="value" fill="#004A99" radius={[0, 6, 6, 0]} barSize={22}>
+                                                                <LabelList dataKey="value" position="right" style={{ fontSize: '10px', fontWeight: '900', fill: '#004A99' }} />
+                                                            </Bar>
+                                                        </BarChart>
+                                                    </ResponsiveContainer>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1307,7 +1312,7 @@ const EFDHome = () => {
                                         const showsProgression = prevProgress !== null && prevProgress !== progress;
                                         
                                         return (
-                                            <div key={p.id} className="group bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl hover:border-blue-200 transition-all duration-500 relative flex flex-col">
+                                            <div key={p.id} onClick={() => navigate(`/project-details/${p.id}`)} className="group bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl hover:border-blue-200 transition-all duration-500 relative flex flex-col cursor-pointer">
 
                                                 {/* Card Header (Category & Status) */}
                                                 <div className="p-6 pb-0">
@@ -1418,13 +1423,15 @@ const EFDHome = () => {
                                                     {/* Action Buttons Row */}
                                                     <div className="border-t border-slate-50 pt-3 flex items-center justify-between">
                                                         <div className="flex items-center gap-2">
-                                                            <button
-                                                                onClick={(e) => { e.stopPropagation(); handleEditProject(p); }}
-                                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all border border-blue-100"
-                                                                title="Edit Details"
-                                                            >
-                                                                <FiEdit2 size={11} /> Edit
-                                                            </button>
+                                                            {userRole !== 'EFD Engineer' && (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); handleEditProject(p); }}
+                                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all border border-blue-100"
+                                                                    title="Edit Details"
+                                                                >
+                                                                    <FiEdit2 size={11} /> Edit
+                                                                </button>
+                                                            )}
                                                             <button
                                                                 onClick={(e) => { e.stopPropagation(); setLogProject(p); setIsLogOpen(true); }}
                                                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-amber-500 hover:text-white transition-all border border-amber-100"
