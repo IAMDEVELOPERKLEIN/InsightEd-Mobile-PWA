@@ -182,6 +182,7 @@ const ORDERED_COLUMNS = [
   'u7_wash_faucets_cond',
   'u7_confirm_no_grid',
   'u7_confirm_no_piped',
+  'u7_confirm_zero_wash',
   'u7_confirm_no_wired',
   'u7_utility_internet_type',
   'unit7',

@@ -393,6 +393,8 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     // Wizard Validation Logic for Current Step Only
     const isCurrentStepValid = useMemo(() => {
         if (isEditingGrade && currentGrade) {
+            if (currentGrade.id.startsWith('mg_') && mgSubStep === 'overview') return true;
+            
             const data = sectionData[currentGrade.id] || { total_sections: 0, col_below: 0, col_within: 0, col_above: 0 };
             const total = parseInt(data.total_sections) || 0;
             if (total === 0) return false; // MUST ENTER TOTAL SECTION
@@ -835,6 +837,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                                 </div>
                             </div>
                         ) : (
+                            <>
                              <div className="text-center mb-10">
                                             <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-600 text-xs font-black uppercase tracking-[0.2em] mb-4 shadow-sm">
                                                 Section Setup • {currentStep}/{totalSteps}
@@ -955,9 +958,10 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                                 </div>
                             </div>
                             );
-                        })()}
-                        )}
-                    </motion.div>
+                         })()}
+                         </>
+                     )}
+                     </motion.div>
                 )}
 
                 {/* ── Page N+1: Final Confirmation (Receipt) ── */}
@@ -995,7 +999,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                                                 <span className="font-bold text-slate-700">{g.label}</span>
                                                 <div className="flex items-center gap-3">
                                                     <span className="text-xs font-black text-slate-400 tracking-widest">{data.selectedSize}</span>
-                                                    <span className="font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg">{data.total_sections} Sec</span>
+                                                    <span className="font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg">{data.total_sections} Sections</span>
                                                 </div>
                                             </div>
                                         );
