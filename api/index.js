@@ -255,6 +255,11 @@ const projectPhotosUpload = multer({
     storage: projectPhotosStorage,
     limits: { fileSize: 20 * 1024 * 1024 } // 20MB limit
 });
+// Memory storage variant — used when Azure Blob is configured (no disk write needed)
+const projectPhotosMemoryUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 20 * 1024 * 1024 }
+});
 
 // --- UPLOAD ROUTE: SCHOOL OWNERSHIP DOCUMENTS ---
 app.post('/api/schools/:iern/ownership-docs', schoolDocsUpload.single('file'), async (req, res) => {
@@ -9898,13 +9903,17 @@ app.get('/api/project-history/:ipc', async (req, res) => {
   }
 });
 
-// --- 20. POST: Upload Project Image (Base64) ---
 // --- 20. POST: Upload Project Image (Synchronous Optimization) ---
 app.post('/api/upload-image', (req, res, next) => {
     // Accept multipart/form-data (file upload) OR application/json (legacy Base64 / offline outbox)
     const ct = req.headers['content-type'] || '';
     if (ct.includes('multipart/form-data')) {
-        projectPhotosUpload.single('image')(req, res, next);
+        // Use memory storage when Azure is configured (no disk write needed, buffer ready for streaming)
+        if (blobServiceClient) {
+            projectPhotosMemoryUpload.single('image')(req, res, next);
+        } else {
+            projectPhotosUpload.single('image')(req, res, next);
+        }
     } else {
         next();
     }
@@ -9917,35 +9926,59 @@ app.post('/api/upload-image', (req, res, next) => {
 
   let finalFilePath = null;
   let finalImageValue = imageData; // Default to incoming base64 if not a file
+  let isAzureUpload = false;
 
   try {
-    // 1. Synchronous Optimization for File Uploads
+    // 1. Synchronous Optimization / Storage Determination
     if (req.file) {
-        const tempPath = req.file.path;
-        const finalDir = getUploadPath('project_photos');
-        const finalFilename = req.file.filename.replace('temp_', '');
-        const absoluteFinalPath = path.join(finalDir, finalFilename);
-        const scriptPath = path.resolve(__dirname, '..', 'compress_image.py');
-        const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-        
-        console.log(`🖼️ [Sync] Optimizing Project Photo: ${req.file.originalname}`);
+        if (blobServiceClient && req.file.buffer) {
+            // ☁️ Azure path: stream buffer directly to Blob Storage
+            const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'insighted-uploads';
+            const ext = path.extname(req.file.originalname) || '.jpg';
+            
+            // Fetch IPC first for deterministic mapping
+            const ipcRes = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [projectId]);
+            const ipc = ipcRes.rows.length > 0 ? ipcRes.rows[0].ipc : null;
+            
+            const blobName = `project_photos/${ipc ? ipc + '_' : ''}${Date.now()}${ext}`;
+            const containerClient = blobServiceClient.getContainerClient(containerName);
+            const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+            
+            await blockBlobClient.uploadData(req.file.buffer, {
+                blobHTTPHeaders: { blobContentType: req.file.mimetype || 'image/jpeg' }
+            });
+            
+            finalImageValue = blockBlobClient.url;
+            isAzureUpload = true;
+            console.log(`☁️ [AZURE] Image uploaded: ${finalImageValue}`);
+        } else {
+            // 📂 Local disk path (dev environment)
+            const tempPath = req.file.path;
+            const finalDir = getUploadPath('project_photos');
+            const finalFilename = req.file.filename.replace('temp_', '');
+            const absoluteFinalPath = path.join(finalDir, finalFilename);
+            const scriptPath = path.resolve(__dirname, '..', 'compress_image.py');
+            const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+            
+            console.log(`🖼️ [Sync] Optimizing Project Photo: ${req.file.originalname}`);
 
-        try {
-            // Resize to 1280px max-width, 96 DPI, JPEG 80% quality via the existing Python script
-            await execAsync(`"${pythonCmd}" "${scriptPath}" "${tempPath}" "${absoluteFinalPath}"`);
-            console.log(`✅ [Sync] Image Optimized: ${finalFilename}`);
-            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-        } catch (err) {
-            console.error(`⚠️ [Sync] Optimization failed, using original:`, err.message);
-            // Fallback: Just move it as-is to ensure no data loss
-            fs.renameSync(tempPath, absoluteFinalPath);
+            try {
+                // Resize to 1280px max-width, 96 DPI, JPEG 80% quality via the existing Python script
+                await execAsync(`"${pythonCmd}" "${scriptPath}" "${tempPath}" "${absoluteFinalPath}"`);
+                console.log(`✅ [Sync] Image Optimized: ${finalFilename}`);
+                if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+            } catch (err) {
+                console.error(`⚠️ [Sync] Optimization failed, using original:`, err.message);
+                // Fallback: Just move it as-is to ensure no data loss
+                fs.renameSync(tempPath, absoluteFinalPath);
+            }
+
+            finalFilePath = `/uploads/project_photos/${finalFilename}`;
+            finalImageValue = finalFilePath; // For database compatibility
         }
-
-        finalFilePath = `/uploads/project_photos/${finalFilename}`;
-        finalImageValue = finalFilePath; // For database compatibility
     }
 
-    // 2. Database Persistence
+    // 2. Database Persistence Coordination
     // Fetch IPC first for deterministic mapping
     const ipcRes = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [projectId]);
     const ipc = ipcRes.rows.length > 0 ? ipcRes.rows[0].ipc : null;
@@ -9967,13 +10000,40 @@ app.post('/api/upload-image', (req, res, next) => {
 
     await logActivity(uploadedBy, 'Engineer', 'Engineer', 'UPLOAD', `Project ID: ${projectId}`, `Uploaded optimized site image (${category || 'Internal'})`);
 
-    // 3. Dual Write (Async/Non-blocking)
+    // 3. Integrations: Dual-Write & Background Processing
+    // --- Dual Write (Async/Non-blocking) ---
     if (poolNew && ipc) {
       const dwQuery = `
             INSERT INTO engineer_image (project_id, image_data, file_path, uploaded_by, category, ipc)
             VALUES ((SELECT project_id FROM engineer_form WHERE ipc = $1 ORDER BY project_id DESC LIMIT 1), $2, $3, $4, $5, $1);
         `;
       poolNew.query(dwQuery, [ipc, finalImageValue, finalFilePath, uploadedBy, category || 'Internal']).catch(e => console.error("❌ Dual-Write Error (Upload Image):", e.message));
+    }
+
+    // --- Background: optimize image file if saved to local disk (dev only) ---
+    if (req.file && !isAzureUpload && req.file.filename) {
+        const diskPath = path.join(__dirname, '..', 'uploads/project_photos', req.file.filename.replace('temp_', ''));
+        const tmpOut = diskPath + '.tmp.jpg';
+        const scriptPath = path.resolve(__dirname, '..', 'compress_image.py');
+        const cmd = (py) => `${py} "${scriptPath}" "${diskPath}" "${tmpOut}"`;
+        const tryCompress = async () => {
+            console.log(`🖼️ [BG] Checking image optimization for: ${req.file.filename}`);
+            for (const py of ['python', 'py', 'python3']) {
+                try {
+                    await execAsync(cmd(py));
+                    if (fs.existsSync(tmpOut)) {
+                        fs.renameSync(tmpOut, diskPath);
+                        console.log(`✅ [BG] Image optimized: ${req.file.filename}`);
+                        return;
+                    }
+                } catch (e) {
+                    // console.warn(`   - [BG] ${py} optimizer failed:`, e.message);
+                }
+            }
+            console.warn(`⚠️ [BG] Image compression skipped or failed (Python/Pillow unavailable or error encountered)`);
+            if (fs.existsSync(tmpOut)) fs.unlinkSync(tmpOut);
+        };
+        tryCompress().catch(err => console.error("❌ [BG] Fatal optimization error:", err.message));
     }
 
     res.status(201).json({ 

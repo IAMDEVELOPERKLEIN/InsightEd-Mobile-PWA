@@ -556,7 +556,7 @@ const DetailedProjInfo = () => {
             return data;
         }
         if (data.startsWith('/uploads/')) {
-            return data; // Already an absolute path from root — do not prepend BASE_URL
+            return `${window.location.origin}${data}`;
         }
 
         // 5. Otherwise assume it's raw base64 and wrap it

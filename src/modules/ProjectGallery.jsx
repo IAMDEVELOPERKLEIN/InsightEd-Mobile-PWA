@@ -25,12 +25,9 @@ const LazyImage = ({ imageId, meta, onClick }) => {
                 }
             }
 
-            // File-path based storage (new)
+            // File-path based storage (local dev) — use absolute origin so path is never BASE_URL-relative
             if (typeof base64 === 'string' && base64.startsWith('/uploads/')) {
-                const baseUrl = import.meta.env.BASE_URL || "/";
-                const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-                const normalizedData = base64.startsWith('/') ? base64.substring(1) : base64;
-                setSrc(`${normalizedBase}${normalizedData}`);
+                setSrc(`${window.location.origin}${base64}`);
                 setLoading(false);
                 return;
             }
