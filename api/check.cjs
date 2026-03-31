@@ -1,10 +1,13 @@
 const pg = require('pg');
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new pg.Pool({ 
+    connectionString: 'postgres://Administrator1:pRZTbQ2T1JD7@stride-posgre-prod-01.postgres.database.azure.com:5432/insightEd',
+    ssl: { rejectUnauthorized: false }
+});
 
 async function check() {
     try {
         const res = await pool.query('SELECT column_name FROM information_schema.columns WHERE table_name = \'ph_schools\'');
-        console.log(JSON.stringify(res.rows.map(r => r.column_name)));
+        res.rows.forEach(r => console.log(r.column_name));
     } catch (e) {
         console.error(e);
     } finally {

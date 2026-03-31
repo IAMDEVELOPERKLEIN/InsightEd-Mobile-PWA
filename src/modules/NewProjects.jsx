@@ -684,8 +684,8 @@ const NewProjects = () => {
                 update_type: 'Newly Created',
                 // documents: processedDocs, // REMOVED: Sending docs separately
                 statusAsOfDate: new Date().toISOString(),
-                uploader_type: (user?.role === 'EFD' || user?.role === 'EFD Engineer' || user?.role === 'HRODI') ? 'EFD Engineer' :
-                               ((user?.role === 'Non-DepEd Engineer' || user?.account_category === 'Non-DepEd Engineer') ? 'Non-DepEd Engineer' : 'Division Engineer'),
+                uploader_type: (user?.role === 'EFD' || user?.role === 'EFD Engineer' || user?.role === 'HRODI' || user?.role === 'Division Engineer' || user?.role === 'DepEd Engineer') ? 'DepEd Engineer' :
+                               ((user?.role === 'Non-DepEd Engineer' || user?.account_category === 'Non-DepEd Engineer') ? 'Non-DepEd Engineer' : 'DepEd Engineer'),
                 implementingAgency: (user?.role === 'Division Engineer' || user?.role === 'Engineer') ? 'DepEd' : (formData.implementingAgency || null),
                 implementingAgencySpecific: formData.implementingAgencySpecific || null
             };
@@ -755,7 +755,7 @@ const NewProjects = () => {
             if (documents.DUPA) { formDataDocs.append('DUPA', documents.DUPA); hasDocs = true; }
             if (documents.CONTRACT) { formDataDocs.append('CONTRACT', documents.CONTRACT); hasDocs = true; }
 
-            const isEFDOrHRODI = (user?.role === 'EFD' || user?.role === 'HRODI Engineer' || user?.role === 'HRODI' || user?.account_category === 'HRODI Engineer' || user?.account_category === 'EFD');
+            const isEFDOrHRODI = (user?.role === 'EFD' || user?.role === 'HRODI Engineer' || user?.role === 'HRODI' || user?.account_category === 'DepEd Engineer' || user?.account_category === 'EFD');
             if (documents.RTA && isEFDOrHRODI) { formDataDocs.append('RTA', documents.RTA); hasDocs = true; }
             if (documents.MOA && isEFDOrHRODI) { formDataDocs.append('MOA', documents.MOA); hasDocs = true; }
 

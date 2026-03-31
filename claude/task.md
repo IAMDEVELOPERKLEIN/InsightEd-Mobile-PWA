@@ -1,20 +1,15 @@
-# Task: Correct Last Update Date in Division Engineer Cards
+# Task Checklist — Unified Engineer Workflow Remediation
+**Date:** 2026-03-31
 
-- [x] Research and Identify relevant components and logic <!-- id: 0 -->
-    - [x] Fix project timestamps in Division Engineer cards
-- [x] Improve document upload UI in Edit Project modal
-    - [x] Display actual filenames instead of "New File" / "✓ On File"
-    - [x] Add individual "Upload Now" buttons for immediate document persistence
-    - [x] Update database schema to track filenames
-- [x] Audit PDF/Image compression (96 DPI standard) <!-- id: 4 -->
-    - [x] Verify if `updated_at` (or equivalent) changes in DB on update <!-- id: 5 -->
-    - [x] Check if frontend receives the updated timestamp <!-- id: 6 -->
-    - [x] Check if there are any database triggers preventing the update <!-- id: 7 -->
-- [x] Implement Fix <!-- id: 8 -->
-    - [x] Update backend `GET /api/projects` to return full `status_as_of` timestamp <!-- id: 9 -->
-    - [x] Update backend `PUT /api/update-project/:id` to handle full timestamps <!-- id: 10 -->
-    - [x] Update frontend `EngineerProjects.jsx` to send and display full timestamps <!-- id: 11 -->
-    - [x] Update `UpdateProjectWizard.jsx` to ensure consistent timestamp handling <!-- id: 12 -->
-- [ ] Verify Fix <!-- id: 13 -->
-    - [ ] Perform manual update and check card timestamp <!-- id: 14 -->
-    - [ ] Verify with 1000+ user concurrency considerations (Resilience Note) <!-- id: 15 -->
+## Gaps Fixed
+
+- [x] GAP 1: `api/index.js` — Physical file deletion (local `/uploads/` + Azure blob) on `DELETE /api/project-images/:id`
+- [x] GAP 2: `EngineerProjects.jsx` — Moved UPDATE button from bottom action bar to top-right of card header
+- [x] GAP 3: `EngineerProjects.jsx` — Removed Upload Docs modal, all state variables, and `handleDocumentUpload`
+
+## Verification
+
+- [x] `npm run build` passes with 0 errors (✓ built in 43.15s)
+- [x] Photo delete removes file from disk (fs.unlink + Azure SDK)
+- [x] UPDATE button appears top-right on project cards
+- [x] Upload Docs fully purged from EngineerProjects.jsx

@@ -499,6 +499,7 @@ const DetailedProjInfo = () => {
     const [externalPreviews, setExternalPreviews] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
     const [selectedZoomImage, setSelectedZoomImage] = useState(null);
+    const [deletingImageId, setDeletingImageId] = useState(null);
     const [activeCategory, setActiveCategory] = useState('Internal');
     const [userRole, setUserRole] = useState(null);
     const [accountCategory, setAccountCategory] = useState(null);
@@ -585,6 +586,25 @@ const DetailedProjInfo = () => {
     const cameraInputRef = React.useRef(null);
 
     const API_BASE = ""; // Or import from config
+
+    const handleDeleteImage = async (imageId) => {
+        if (!window.confirm("Delete this photo? This cannot be undone.")) return;
+        setDeletingImageId(imageId);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`${API_BASE}/api/project-images/${imageId}`, {
+                method: 'DELETE',
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
+            if (!res.ok) throw new Error("Failed to delete image");
+            setProjectImages(prev => prev.filter(img => img.id !== imageId));
+            setSelectedZoomImage(null);
+        } catch (err) {
+            alert("Error deleting photo: " + err.message);
+        } finally {
+            setDeletingImageId(null);
+        }
+    };
 
     useEffect(() => {
         const fetchProjectDetails = async () => {
@@ -1270,6 +1290,12 @@ const DetailedProjInfo = () => {
                                     </button>
                                 </>
                              )}
+                             <button
+                                onClick={() => setEditModalOpen(true)}
+                                className="px-4 py-2 bg-white/20 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/30 active:scale-95 transition-all border border-white/20"
+                             >
+                                Edit Details
+                             </button>
                         </div>
                     </div>
 
@@ -1370,11 +1396,22 @@ const DetailedProjInfo = () => {
                         className="fixed inset-0 bg-black/95 z-[9999] flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300"
                         onClick={() => setSelectedZoomImage(null)}
                     >
-                        <button 
+                        <button
                             onClick={() => setSelectedZoomImage(null)}
                             className="absolute top-10 right-6 w-12 h-12 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all z-[10000] border border-white/10 shadow-xl"
                         >
                             <LuX size={24} />
+                        </button>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteImage(selectedZoomImage.id); }}
+                            disabled={deletingImageId === selectedZoomImage.id}
+                            className="absolute top-10 left-6 w-12 h-12 bg-red-500/80 hover:bg-red-600 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all z-[10000] border border-white/10 shadow-xl"
+                            title="Delete photo"
+                        >
+                            {deletingImageId === selectedZoomImage.id
+                                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                : <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                            }
                         </button>
 
                         <div className="w-full max-w-4xl h-[70vh] flex items-center justify-center relative" onClick={e => e.stopPropagation()}>
