@@ -15,6 +15,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Dashboards
 import EngineerDashboard from './modules/EngineerDashboard';
+import RegionalEngineerDashboard from './modules/RegionalEngineerDashboard';
 import EngineerProjects from './modules/EngineerProjects';
 
 // import LguDashboard from './modules/lgu'; // Import LguDashboard
@@ -131,6 +132,8 @@ const AnimatedRoutes = () => {
         'School Division Office': 'path_ro_sd',
         'DepEd Engineer': 'path_engineers',
         'Division Engineer': 'path_engineers',
+        'Architect': 'path_engineers',
+        'Regional Engineer': 'path_engineers',
         'Engineer': 'path_engineers',
         'Non-DepEd Engineer': 'path_engineers',
         'Implementing Agency': 'path_agencies',
@@ -212,6 +215,7 @@ const AnimatedRoutes = () => {
 
         {/* Dashboards */}
         <Route path="/engineer-dashboard" element={<EngineerDashboard />} />
+        <Route path="/regional-engineer-dashboard" element={<ProtectedRoute allowedRoles={['Division Engineer', 'Regional Engineer', 'Architect', 'DepEd Engineer', 'Super User', 'EFD Engineer', 'EFD']}><RegionalEngineerDashboard /></ProtectedRoute>} />
         <Route path="/non-deped-dashboard" element={<NonDepEdDashboard />} />
         {/* <Route path="/lgu" element={<LguDashboard />} /> */}
         {/* <Route path="/lgu-form" element={<LguForm />} /> */}
@@ -392,12 +396,12 @@ const AnimatedRoutes = () => {
       <Route path="/leaderboard" element={<ProtectedRoute allowedRoles={['School Head']}><Leaderboard /></ProtectedRoute>} />
 
       {/* DepEd Engineer Forms */}
-      <Route path="/engineer-school-resources" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Super User']}><EngineerSchoolResources /></ProtectedRoute>} />
-      <Route path="/damage-assessment" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Super User']}><DamageAssessment /></ProtectedRoute>} />
-      <Route path="/project-monitoring" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Super User']}><ProjectMonitoring /></ProtectedRoute>} />
-      <Route path="/site-inspection" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Super User']}><SiteInspection /></ProtectedRoute>} />
-      <Route path="/material-inventory" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Super User']}><MaterialInventory /></ProtectedRoute>} />
-      <Route path="/new-project" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Super User', 'EFD Engineer', 'HRODI Engineer', 'EFD']}><NewProjects /></ProtectedRoute>} />
+      <Route path="/engineer-school-resources" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Architect', 'Super User']}><EngineerSchoolResources /></ProtectedRoute>} />
+      <Route path="/damage-assessment" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Architect', 'Super User']}><DamageAssessment /></ProtectedRoute>} />
+      <Route path="/project-monitoring" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Architect', 'Super User']}><ProjectMonitoring /></ProtectedRoute>} />
+      <Route path="/site-inspection" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Architect', 'Super User']}><SiteInspection /></ProtectedRoute>} />
+      <Route path="/material-inventory" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Architect', 'Super User']}><MaterialInventory /></ProtectedRoute>} />
+      <Route path="/new-project" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Architect', 'Super User', 'EFD Engineer', 'HRODI Engineer', 'EFD']}><NewProjects /></ProtectedRoute>} />
       <Route path="/project-details/:id" element={<ProtectedRoute><DetailedProjInfo /></ProtectedRoute>} />
       <Route path="/project-gallery" element={<ProtectedRoute><ProjectGallery /></ProtectedRoute>} />
       <Route path="/project-gallery/:projectId" element={<ProtectedRoute><ProjectGallery /></ProtectedRoute>} />

@@ -31,7 +31,9 @@ const AUTHORIZATION_CODES = {
     'Regional Office': 'H7V3-L5N1',
     'School Division Office': 'Q9D2-R4J6',
     'Division Engineer': 'E5T8-B2W3',
+    'Regional Engineer': 'E5T8-B2W3',
     'Non-DepEd Engineer': 'E5T8-B2W3',
+    'Architect': 'E5T8-B2W3',
     'Local Government Unit': 'L2G7-X4Z9',
     'Central Office Finance': '8XK2-M9P4', // Same as Central Office
     'Super User': 'SUP3R-US3R', // Added for testing
@@ -70,7 +72,9 @@ const getDashboardPath = (role, accountCategory) => {
     if (roleMap[role]) return roleMap[role];
 
     // 2. ENGINEER SPECIAL REDIRECTS
-    if (role === 'DepEd Engineer' || role === 'Non-DepEd Engineer' || role === 'Engineer' || role === 'Division Engineer') {
+    if (role === 'Regional Engineer') return '/regional-engineer-dashboard';
+
+    if (role === 'DepEd Engineer' || role === 'Non-DepEd Engineer' || role === 'Engineer' || role === 'Division Engineer' || role === 'Architect') {
         return (accountCategory === 'Non-DepEd Engineer' || role === 'Non-DepEd Engineer')
             ? '/non-deped-dashboard'
             : '/engineer-dashboard';
@@ -565,7 +569,7 @@ const Register = () => {
                 // RO / SDO / Engineers / CO
                 const isCO = d.role === 'Central Office' || d.role === 'Central Office Finance' || d.role === 'Super User';
                 const isSDO = d.role === 'School Division Office';
-                const isEng = d.role.includes('Engineer');
+                const isEng = d.role.includes('Engineer') || d.role === 'Architect';
 
                 if (isCO) {
                     if (!d.office) {
@@ -721,7 +725,7 @@ const Register = () => {
         // }
 
         // Engineer (Division/EFD) Specific Validations
-        if (formData.role === 'Division Engineer' || formData.role === 'Non-DepEd Engineer' || formData.role === 'EFD Engineer') {
+        if (formData.role === 'Division Engineer' || formData.role === 'Regional Engineer' || formData.role === 'Architect' || formData.role === 'Non-DepEd Engineer' || formData.role === 'EFD Engineer') {
             if (formData.contactNumber.length !== 11) {
                 alert("Please enter a valid 11-digit mobile number.");
                 return;
@@ -886,7 +890,7 @@ const Register = () => {
                         office: formData.office,
                         position: formData.position,
                         contactNumber: formData.contactNumber,
-                        accountCategory: formData.accountCategory
+                        accountCategory: formData.role === 'Regional Engineer' ? 'DepEd Engineer' : formData.accountCategory
                     })
                 });
 
@@ -927,7 +931,7 @@ const Register = () => {
                 }
                 localStorage.setItem('userEmail', identifier);
 
-                const finalCategory = formData.accountCategory || ( (formData.role === 'EFD Engineer') ? 'EFD Engineer' : '' );
+                const finalCategory = formData.role === 'Regional Engineer' ? 'DepEd Engineer' : (formData.accountCategory || ( (formData.role === 'EFD Engineer') ? 'EFD Engineer' : '' ));
                 navigate(getDashboardPath(finalRole, finalCategory));
                 return;
             }
@@ -1027,6 +1031,8 @@ const Register = () => {
                                                                     )}
                                                                     {(!pathId || pathId === 'path_school_head') && <option value="School Head">School Head</option>}
                                                                     {(!pathId || pathId === 'path_engineers') && <option value="Division Engineer">Division Engineer</option>}
+                                                                    {(!pathId || pathId === 'path_engineers') && <option value="Regional Engineer">Regional Engineer</option>}
+                                                                    {(!pathId || pathId === 'path_engineers') && <option value="Architect">Architect</option>}
                                                                     {(!pathId || pathId === 'path_efd') && <option value="EFD Engineer">EFD Engineer</option>}
                                                                     {!pathId && (
                                                                         <>
@@ -1113,7 +1119,7 @@ const Register = () => {
                                                     <>
                                                         <div className="space-y-1">
                                                             <label className="text-xs font-bold text-slate-500 uppercase ml-1">Email Address</label>
-                                                             {['Central Office', 'Regional Office', 'School Division Office', 'Division Engineer', 'EFD Engineer', 'Super User'].includes(formData.role) ? (
+                                                             {['Central Office', 'Regional Office', 'School Division Office', 'Division Engineer', 'Regional Engineer', 'Architect', 'EFD Engineer', 'Super User'].includes(formData.role) ? (
                                                                 <div className="flex items-center w-full">
                                                                     <input
                                                                         type="text"
@@ -1251,7 +1257,7 @@ const Register = () => {
                                                         </div>
                                                     )}
 
-                                                    {formData.role.includes('Engineer') && (
+                                                    {(formData.role.includes('Engineer') || formData.role === 'Architect') && (
                                                          <div className="space-y-4 p-4 bg-teal-50/50 rounded-2xl border border-teal-100">
                                                             <select name="region" onChange={handleRegionChange} value={formData.region} className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-500" required>
                                                                 <option value="">Select Region</option>
@@ -1267,6 +1273,7 @@ const Register = () => {
                                                                 <option value="Engineer III">Engineer III</option>
                                                                 <option value="Engineer IV">Engineer IV</option>
                                                                 <option value="Engineer V">Engineer V</option>
+                                                                <option value="Architect">Architect</option>
                                                                 <option value="Technical Assistant I (COS)">Technical Assistant I (COS)</option>
                                                                 <option value="Technical Assistant II (COS)">Technical Assistant II (COS)</option>
                                                                 <option value="Technical Assistant III (COS)">Technical Assistant III (COS)</option>
