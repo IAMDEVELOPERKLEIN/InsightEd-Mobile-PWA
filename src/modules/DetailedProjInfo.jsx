@@ -1424,48 +1424,46 @@ const DetailedProjInfo = () => {
             isOpen={editModalOpen}
             onClose={() => setEditModalOpen(false)}
             onSaveDetails={async (payload, siteImages = []) => {
-                try {
-                    const isFormData = payload instanceof FormData;
-                    const projectId = isFormData ? payload.get('id') : payload.id;
-                    const res = await fetch(`/api/update-project/${projectId}`, {
-                        method: 'PUT',
-                        headers: isFormData ? {} : { 'Content-Type': 'application/json' },
-                        body: isFormData ? payload : JSON.stringify(payload),
-                    });
-                    if (!res.ok) throw new Error('Update failed');
-                    const resData = await res.json();
+                const isFormData = payload instanceof FormData;
+                const projectId = isFormData ? payload.get('id') : payload.id;
+                const res = await fetch(`/api/update-project/${projectId}`, {
+                    method: 'PUT',
+                    headers: isFormData ? {} : { 'Content-Type': 'application/json' },
+                    body: isFormData ? payload : JSON.stringify(payload),
+                });
+                if (!res.ok) {
+                    const errBody = await res.json().catch(() => ({}));
+                    throw new Error(errBody.message || errBody.error || 'Update failed');
+                }
+                const resData = await res.json();
 
-                    // Orchestrate Site Image Uploads if any
-                    if (siteImages.length > 0) {
-                        // Small delay to ensure snapshot is ready for linking
-                        await new Promise(resolve => setTimeout(resolve, 800));
+                // Orchestrate Site Image Uploads if any
+                if (siteImages.length > 0) {
+                    // Small delay to ensure snapshot is ready for linking
+                    await new Promise(resolve => setTimeout(resolve, 800));
 
-                        for (const item of siteImages) {
-                            try {
-                                const base64Image = await compressImage(item.file);
-                                await fetch(`/api/upload-image`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        projectId: resData.project.project_id, // Link to the NEW snapshot ID
-                                        imageData: base64Image,
-                                        uploadedBy: user?.uid,
-                                        category: item.category
-                                    }),
-                                });
-                            } catch (err) {
-                                console.error("Image upload failed:", err);
-                            }
+                    for (const item of siteImages) {
+                        try {
+                            const base64Image = await compressImage(item.file);
+                            await fetch(`/api/upload-image`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    projectId: resData.project.project_id, // Link to the NEW snapshot ID
+                                    imageData: base64Image,
+                                    uploadedBy: user?.uid,
+                                    category: item.category
+                                }),
+                            });
+                        } catch (err) {
+                            console.error("Image upload failed:", err);
                         }
                     }
-
-                    alert('✅ SUCCESS\n\nProject details and site photos have been saved.');
-                    setEditModalOpen(false);
-                    window.location.reload();
-                } catch (err) { 
-                    console.error("Save Error:", err);
-                    alert('Error: ' + err.message); 
                 }
+
+                alert('✅ SUCCESS\n\nProject details have been saved.');
+                setEditModalOpen(false);
+                window.location.reload();
             }}
             onSaveVO={async (payload) => {
                 try {

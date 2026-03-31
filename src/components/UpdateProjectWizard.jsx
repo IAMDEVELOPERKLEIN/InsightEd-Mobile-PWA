@@ -169,7 +169,7 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
     const [constructionStatus, setConstructionStatus] = useState((project?.status === ConstructionStatus.NotYetStarted || !project?.status) ? "" : project.status); // Force placeholder if not yet started
     const [percentage, setPercentage] = useState(Number(project?.accomplishmentPercentage || 0));
     const [remarks, setRemarks] = useState('');
-    const [statusAsOfDate, setStatusAsOfDate] = useState(new Date().toISOString());
+    const [statusAsOf, setStatusAsOf] = useState(new Date().toISOString());
     const [actualCompletionDate, setActualCompletionDate] = useState(project?.actualCompletionDate || '');
 
     // Triangulation checklist state
@@ -230,7 +230,7 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
             setConstructionStatus((project.status === ConstructionStatus.NotYetStarted || !project.status) ? "" : project.status); // Force placeholder if not yet started
             setPercentage(Number(project.accomplishmentPercentage || 0));
             setRemarks('');
-            setStatusAsOfDate(new Date().toISOString());
+            setStatusAsOf(new Date().toISOString());
             setActualCompletionDate(project.actualCompletionDate || '');
             const saved = project.checklist;
             setCheckedState((saved && typeof saved === 'object' && !Array.isArray(saved)) ? saved : {});
@@ -360,7 +360,7 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
                 accomplishmentPercentage: percentage,
                 previousPercentage: project.accomplishmentPercentage,
                 otherRemarks: remarks || project.otherRemarks,
-                statusAsOfDate: isProcurementMode ? new Date().toISOString() : statusAsOfDate,
+                statusAsOf: isProcurementMode ? new Date().toISOString() : statusAsOf,
                 actualCompletionDate: constructionStatus === ConstructionStatus.Completed ? actualCompletionDate : project.actualCompletionDate,
                 checklist: checkedState,
                 triangulated_percentage: triangulatedPercentage,
@@ -536,11 +536,11 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Status As Of Date</label>
                                             <input
                                                 type="date"
-                                                value={statusAsOfDate.split('T')[0]}
+                                                value={statusAsOf ? statusAsOf.split('T')[0] : ''}
                                                 onChange={e => {
                                                     const datePart = e.target.value;
                                                     const timePart = new Date().toISOString().split('T')[1];
-                                                    setStatusAsOfDate(`${datePart}T${timePart}`);
+                                                    setStatusAsOf(`${datePart}T${timePart}`);
                                                 }}
                                                 className="w-full p-3 rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-700 outline-none"
                                             />

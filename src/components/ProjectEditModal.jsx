@@ -83,7 +83,7 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
             setFormData({
                 status: project.status || '',
                 accomplishmentPercentage: Number(project.accomplishmentPercentage || 0),
-                statusAsOfDate: project.statusAsOfDate || new Date().toISOString().split('T')[0],
+                statusAsOf: project.statusAsOf || new Date().toISOString(),
                 actualCompletionDate: project.actualCompletionDate || '',
                 otherRemarks: project.otherRemarks || '',
                 // Project Info
@@ -179,9 +179,18 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
             formDataToSubmit.append('update_type', 'Details Update');
 
             // Append Document Files (POW, DUPA, Contract)
-            if (documentFiles.POW) formDataToSubmit.append('pow_pdf', documentFiles.POW);
-            if (documentFiles.DUPA) formDataToSubmit.append('dupa_pdf', documentFiles.DUPA);
-            if (documentFiles.CONTRACT) formDataToSubmit.append('contract_pdf', documentFiles.CONTRACT);
+            if (documentFiles.POW) {
+                formDataToSubmit.append('pow_pdf', documentFiles.POW);
+                formDataToSubmit.append('pow_filename', documentFiles.POW.name);
+            }
+            if (documentFiles.DUPA) {
+                formDataToSubmit.append('dupa_pdf', documentFiles.DUPA);
+                formDataToSubmit.append('dupa_filename', documentFiles.DUPA.name);
+            }
+            if (documentFiles.CONTRACT) {
+                formDataToSubmit.append('contract_pdf', documentFiles.CONTRACT);
+                formDataToSubmit.append('contract_filename', documentFiles.CONTRACT.name);
+            }
 
             // Pass Site Images separately for orchestration in the callback
             const siteImages = [
@@ -193,6 +202,32 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
         } catch (err) {
             console.error("Save Error:", err);
             alert("Failed to save details. Please try again.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleSingleUpload = async (docKey) => {
+        if (!documentFiles[docKey]) return;
+        setIsSaving(true);
+        try {
+            const formDataToSubmit = new FormData();
+            formDataToSubmit.append('id', project.id);
+            formDataToSubmit.append('ipc', project.ipc);
+            formDataToSubmit.append('uid', localStorage.getItem('uid') || '');
+            formDataToSubmit.append('update_type', `Upload ${docKey}`);
+            
+            const fieldName = docKey === 'POW' ? 'pow_pdf' : docKey === 'DUPA' ? 'dupa_pdf' : 'contract_pdf';
+            const filenameField = docKey.toLowerCase() + '_filename';
+            
+            formDataToSubmit.append(fieldName, documentFiles[docKey]);
+            formDataToSubmit.append(filenameField, documentFiles[docKey].name);
+
+            await onSaveDetails(formDataToSubmit, []);
+            setDocumentFiles(p => ({ ...p, [docKey]: null }));
+        } catch (err) {
+            console.error("Upload Error:", err);
+            alert(`Failed to upload ${docKey}. Please try again.`);
         } finally {
             setIsSaving(false);
         }
@@ -327,7 +362,17 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                         )}
 
                         <Field label="Status As Of Date">
-                            <input type="date" name="statusAsOfDate" value={formData.statusAsOfDate} onChange={handleChange} className={inputCls} />
+                            <input 
+                                type="date" 
+                                name="statusAsOf" 
+                                value={formData.statusAsOf ? formData.statusAsOf.split('T')[0] : ''} 
+                                onChange={e => {
+                                    const datePart = e.target.value;
+                                    const timePart = new Date().toISOString().split('T')[1];
+                                    setFormData(p => ({ ...p, statusAsOf: `${datePart}T${timePart}` }));
+                                }} 
+                                className={inputCls} 
+                            />
                         </Field>
 
                         <Field label="Remarks (Optional)">
@@ -435,9 +480,9 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
             // STEP 6: DOCUMENTATION
             case 6: {
                 const DOCS = [
-                    { key: 'POW', label: 'Program of Works / POW', icon: '📐', desc: 'Upload the Program of Works or Progress of Work PDF', hasExisting: project.hasPow || project.pow_pdf },
-                    { key: 'DUPA', label: 'DUPA', icon: '📊', desc: 'Detailed Unit Price Analysis document', hasExisting: project.hasDupa || project.dupa_pdf },
-                    { key: 'CONTRACT', label: 'Signed Contract', icon: '✍️', desc: 'Signed Contract Agreement / Agreement Document', hasExisting: project.hasContract || project.contract_pdf },
+                    { key: 'POW', label: 'Program of Works / POW', icon: '📐', desc: 'Upload the Program of Works or Progress of Work PDF', hasExisting: project.hasPow || project.pow_pdf, existingName: project.pow_filename },
+                    { key: 'DUPA', label: 'DUPA', icon: '📊', desc: 'Detailed Unit Price Analysis document', hasExisting: project.hasDupa || project.dupa_pdf, existingName: project.dupa_filename },
+                    { key: 'CONTRACT', label: 'Signed Contract', icon: '✍️', desc: 'Signed Contract Agreement / Agreement Document', hasExisting: project.hasContract || project.contract_pdf, existingName: project.contract_filename },
                 ];
                 return (
                     <div className="space-y-4">
@@ -457,10 +502,13 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                                         <p className="text-[9px] text-slate-400 leading-tight">{doc.desc}</p>
                                     </div>
                                     {doc.hasExisting && !documentFiles[doc.key] && (
-                                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-full text-[8px] font-black uppercase tracking-wide">✓ On File</span>
+                                        <div className="flex flex-col items-end gap-1">
+                                            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-full text-[8px] font-black uppercase tracking-wide">✓ On File</span>
+                                            {doc.existingName && <span className="text-[8px] text-slate-400 font-bold truncate max-w-[100px]">{doc.existingName}</span>}
+                                        </div>
                                     )}
                                     {documentFiles[doc.key] && (
-                                        <span className="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-full text-[8px] font-black uppercase tracking-wide">New File</span>
+                                        <span className="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-full text-[8px] font-black uppercase tracking-wide">New File Selected</span>
                                     )}
                                 </div>
                                 <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border bg-white ${ documentFiles[doc.key] ? 'border-blue-200' : 'border-slate-100' }`}>
@@ -476,7 +524,16 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                                     )}
                                 </div>
                                 {documentFiles[doc.key] && (
-                                    <p className="text-[9px] text-blue-500 font-bold mt-1.5 ml-1">📎 {documentFiles[doc.key].name}</p>
+                                    <div className="flex items-center justify-between mt-2 pl-1">
+                                        <p className="text-[9px] text-blue-500 font-bold truncate flex-1 mr-2">📎 {documentFiles[doc.key].name}</p>
+                                        <button 
+                                            onClick={() => handleSingleUpload(doc.key)}
+                                            disabled={isSaving}
+                                            className="px-3 py-1 bg-blue-600 text-white rounded-lg text-[9px] font-black uppercase tracking-wider hover:bg-blue-700 disabled:bg-slate-300 transition-all flex items-center gap-1"
+                                        >
+                                            {isSaving ? '...' : <><FiCheck size={10} /> Upload Now</>}
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                         ))}

@@ -1,8 +1,20 @@
-# Progress Checklist: School Head Registration Restructuring
+# Task: Correct Last Update Date in Division Engineer Cards
 
-- [ ] Locate registration API endpoint and current data flow <!-- id: 0 -->
-- [ ] Verify database schema for `ph_school` and `schools_IERN` <!-- id: 1 -->
-- [ ] Implement Backend logic to copy school on registration success <!-- id: 2 -->
-- [ ] Update frontend to search from `schools_IERN` <!-- id: 3 -->
-- [ ] Verify transaction atomicity and error handling <!-- id: 4 -->
-- [ ] Final manual testing <!-- id: 5 -->
+- [x] Research and Identify relevant components and logic <!-- id: 0 -->
+    - [x] Fix project timestamps in Division Engineer cards
+- [x] Improve document upload UI in Edit Project modal
+    - [x] Display actual filenames instead of "New File" / "✓ On File"
+    - [x] Add individual "Upload Now" buttons for immediate document persistence
+    - [x] Update database schema to track filenames
+- [x] Audit PDF/Image compression (96 DPI standard) <!-- id: 4 -->
+    - [x] Verify if `updated_at` (or equivalent) changes in DB on update <!-- id: 5 -->
+    - [x] Check if frontend receives the updated timestamp <!-- id: 6 -->
+    - [x] Check if there are any database triggers preventing the update <!-- id: 7 -->
+- [x] Implement Fix <!-- id: 8 -->
+    - [x] Update backend `GET /api/projects` to return full `status_as_of` timestamp <!-- id: 9 -->
+    - [x] Update backend `PUT /api/update-project/:id` to handle full timestamps <!-- id: 10 -->
+    - [x] Update frontend `EngineerProjects.jsx` to send and display full timestamps <!-- id: 11 -->
+    - [x] Update `UpdateProjectWizard.jsx` to ensure consistent timestamp handling <!-- id: 12 -->
+- [ ] Verify Fix <!-- id: 13 -->
+    - [ ] Perform manual update and check card timestamp <!-- id: 14 -->
+    - [ ] Verify with 1000+ user concurrency considerations (Resilience Note) <!-- id: 15 -->
