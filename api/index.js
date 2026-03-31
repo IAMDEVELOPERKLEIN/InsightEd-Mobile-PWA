@@ -16241,6 +16241,18 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
 
     await pool.query(query, values);
 
+    // --- SYNC COMPLETION (Unit 4) ---
+    const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
+    if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
+      const iern = iernRes.rows[0].iern;
+      await pool.query(`
+          INSERT INTO ph_school_completion (iern, school_id, unit4_completion)
+          VALUES ($1, $2, true)
+          ON CONFLICT (iern) DO UPDATE SET unit4_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+      `, [iern, schoolId]);
+      await updateSchoolTotalCompletion(iern);
+    }
+
     // Auto-update school_summary instantly
     try {
       if (poolNew) await updateSchoolSummary(schoolId, poolNew);
@@ -16349,6 +16361,18 @@ app.put('/api/ph_schools/unit5/:schoolId', async (req, res) => {
 
     const result = await pool.query(query, values);
     console.log("UNIT 5 UPDATE RESULT:", result.rows);
+
+    // --- SYNC COMPLETION (Unit 5) ---
+    const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
+    if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
+      const iern = iernRes.rows[0].iern;
+      await pool.query(`
+          INSERT INTO ph_school_completion (iern, school_id, unit5_completion)
+          VALUES ($1, $2, true)
+          ON CONFLICT (iern) DO UPDATE SET unit5_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+      `, [iern, schoolId]);
+      await updateSchoolTotalCompletion(iern);
+    }
 
     // Auto-update school_summary instantly
     try {
@@ -16545,6 +16569,19 @@ app.post('/api/ph_schools/unit7/:schoolId', async (req, res) => {
 
     await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE;`);
     await pool.query('UPDATE ph_schools SET unit7_completed = TRUE, unit7 = 1, unit7_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1', [schoolId]);
+
+    // --- SYNC COMPLETION (Unit 7) ---
+    const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
+    if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
+      const iern = iernRes.rows[0].iern;
+      await pool.query(`
+          INSERT INTO ph_school_completion (iern, school_id, unit7_completion)
+          VALUES ($1, $2, true)
+          ON CONFLICT (iern) DO UPDATE SET unit7_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+      `, [iern, schoolId]);
+      await updateSchoolTotalCompletion(iern);
+    }
+
     res.json({ success: true, message: "Unit 7 finalized!" });
   } catch (err) {
     console.error("Finalize Unit 7 Error:", err);
@@ -16741,6 +16778,28 @@ app.post('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
       await client.query('UPDATE ph_schools SET unit10_completed = TRUE WHERE school_id = $1', [schoolId]);
     }
     console.log(`[Unit 10 Master Submit] Step 5: Updated unit10_completed = TRUE`);
+
+    // --- SYNC COMPLETION (Unit 10 -> Unit 8 Slot) ---
+    if (iern) {
+      await client.query(`
+          INSERT INTO ph_school_completion (iern, school_id, unit8_completion)
+          VALUES ($1, $2, true)
+          ON CONFLICT (iern) DO UPDATE SET unit8_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+      `, [iern, schoolId]);
+      await updateSchoolTotalCompletion(iern);
+    } else {
+      // Fallback if IERN missing - fetch and update
+      const iRes = await client.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
+      if (iRes.rows.length > 0 && iRes.rows[0].iern) {
+        const fallbackIern = iRes.rows[0].iern;
+        await client.query(`
+            INSERT INTO ph_school_completion (iern, school_id, unit8_completion)
+            VALUES ($1, $2, true)
+            ON CONFLICT (iern) DO UPDATE SET unit8_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+        `, [fallbackIern, schoolId]);
+        await updateSchoolTotalCompletion(fallbackIern);
+      }
+    }
 
     await client.query('COMMIT');
     console.log(`[Unit 10 Master Submit] Transaction COMMIT - Success`);
