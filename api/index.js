@@ -3033,7 +3033,7 @@ app.post('/api/masterlist/ai-query', async (req, res) => {
 app.get('/api/offline/schools', async (req, res) => {
   try {
     // Fetch only necessary fields to keep payload light
-    // CHANGED: Use 'schools' table instead of 'school_profiles'
+    // CHANGED: Use 'schools' table instead of 'ph_schools'
     const query = `
             SELECT school_id, school_name, region, division, latitude, longitude 
             FROM schools 
@@ -3053,7 +3053,7 @@ app.get('/api/offline/schools', async (req, res) => {
 app.get('/api/school-profile/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    // CHANGED: Use 'schools' table instead of 'school_profiles'
+    // CHANGED: Use 'schools' table instead of 'ph_schools'
     console.log(`🔎 Searching for School ID: ${schoolId} in 'schools' table...`);
     const query = `SELECT * FROM schools WHERE school_id = $1`;
     const result = await pool.query(query, [schoolId]);
@@ -3275,8 +3275,8 @@ const autoFillSchoolTeachers = async (schoolId) => {
   try {
     console.log(`🤖 [Auto-Fill] Filling Teachers for School: ${schoolId}...`);
 
-    // 1. Get the newly generated IERN from school_profiles
-    const schoolRes = await pool.query("SELECT iern FROM school_profiles WHERE school_id = $1", [schoolId]);
+    // 1. Get the newly generated IERN from ph_schools
+    const schoolRes = await pool.query("SELECT iern FROM ph_schools WHERE school_id = $1", [schoolId]);
     const schoolIern = schoolRes.rows.length > 0 ? schoolRes.rows[0].iern : null;
 
     if (!schoolIern) {
@@ -3381,11 +3381,11 @@ specialization = EXCLUDED.specialization,
       ]);
     }
 
-    // 4. SYNC: Update school_profiles for frontend status compatibility
+    // 4. SYNC: Update ph_schools for frontend status compatibility
     // We update 'spec_general_teaching' with the total count of teachers, 
     // ensuring SchoolForms.jsx sees a value > 0 to mark the form as "Completed".
     await client.query(`
-      UPDATE ph_schools /* school_profiles decommissioned */ 
+      UPDATE ph_schools /* ph_schools decommissioned */ 
       SET spec_general_teaching = (
         SELECT COUNT(*)::int FROM teacher_specialization_details WHERE school_id = $1
       )
@@ -3438,7 +3438,7 @@ app.post('/api/save-teacher-specialization-legacy', async (req, res) => {
       values.push(data[field] ? parseInt(data[field]) : 0);
     });
 
-    const query = `UPDATE ph_schools /* school_profiles decommissioned */ SET ${updates.join(', ')} WHERE school_id = $1`;
+    const query = `UPDATE ph_schools /* ph_schools decommissioned */ SET ${updates.join(', ')} WHERE school_id = $1`;
 
     await client.query(query, values);
 
@@ -3461,7 +3461,7 @@ app.post('/api/save-teacher-specialization-legacy', async (req, res) => {
 app.get('/api/debug/recalculate-all', async (req, res) => {
   try {
     console.log("”„ Starting Full Snapshot Recalculation...");
-    const result = await pool.query('SELECT school_id FROM school_profiles');
+    const result = await pool.query('SELECT school_id FROM ph_schools');
     const schools = result.rows;
 
     let count = 0;
@@ -5961,7 +5961,7 @@ app.get('/api/user-by-school/:schoolId', async (req, res) => {
   try {
     // Check if school exists and get user ID
     const schoolRes = await pool.query(
-      "SELECT submitted_by FROM school_profiles WHERE school_id = $1",
+      "SELECT submitted_by FROM ph_schools WHERE school_id = $1",
       [schoolId]
     );
 
@@ -6021,7 +6021,7 @@ app.get('/api/school-by-user/:uid', async (req, res) => {
 
   try {
     // 2. PRIMARY LOOKUP (By submitted_by)
-    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    const result = await pool.query('SELECT * FROM ph_schools WHERE submitted_by = $1', [uid]);
 
     if (result.rows.length > 0) {
       return res.json({ exists: true, data: result.rows[0] });
@@ -6042,7 +6042,7 @@ app.get('/api/school-by-user/:uid', async (req, res) => {
 app.get('/api/check-school/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM ph_schools /* school_profiles decommissioned */ WHERE school_id = $1', [id]);
+    const result = await pool.query('SELECT * FROM ph_schools /* ph_schools decommissioned */ WHERE school_id = $1', [id]);
     res.json({ exists: result.rows.length > 0 });
   } catch (err) {
     res.status(500).json({ error: "Check failed" });
@@ -6087,7 +6087,7 @@ app.get('/api/school-profile/:schoolId', async (req, res) => {
 // --- 3b-1. GET: Fetch School Data Health Score ---
 // --- 3b-1. GET: Fetch School Data Health Score (REMOVED) ---
 app.get('/api/schools/:schoolId/health-score', async (req, res) => {
-  res.status(410).json({ error: "Feature decommissioned. Health scores are no longer tracked via school_profiles." });
+  res.status(410).json({ error: "Feature decommissioned. Health scores are no longer tracked via ph_schools." });
 });
 
 // --- 3b. GET: Fetch All Schools (For admin Dashboard) ---
@@ -6231,7 +6231,7 @@ app.post('/api/register-school', async (req, res) => {
       console.warn("User table insert failed, continuing...", e.message);
     }
 
-    // 4. HYDRATE PH_SCHOOLS ONLY (Skip school_profiles)
+    // 4. HYDRATE PH_SCHOOLS ONLY (Skip ph_schools)
     const insertSchoolQuery = `
         INSERT INTO ph_schools (
             school_id, school_name, region, province, division, district, 
@@ -6437,7 +6437,7 @@ app.post('/api/register-beta', async (req, res) => {
       console.warn("User table insert failed, continuing...", e.message);
     }
 
-    // 3. HYDRATE PH_SCHOOLS ONLY (Skip school_profiles)
+    // 3. HYDRATE PH_SCHOOLS ONLY (Skip ph_schools)
     const insertQuery = `
       INSERT INTO ph_schools (
         school_id, school_name, region, province, municipality, division, district, leg_district, curricular_offering, latitude, longitude, barangay, iern, updated_at, unit1, unit1_completed
@@ -6845,7 +6845,7 @@ app.get('/api/auth/lookup-email/:schoolId', async (req, res) => {
 
     // 2. Fallback: Try SCHOOL_PROFILES table (Legacy)
     result = await pool.query(
-      "SELECT email FROM school_profiles WHERE school_id = $1 AND email IS NOT NULL LIMIT 1",
+      "SELECT email FROM ph_schools WHERE school_id = $1 AND email IS NOT NULL LIMIT 1",
       [schoolId]
     );
 
@@ -7075,7 +7075,7 @@ app.post('/api/save-school', async (req, res) => {
     await client.query('BEGIN');
 
     // 1. FETCH EXISTING DATA FIRST
-    const checkQuery = 'SELECT * FROM ph_schools /* school_profiles decommissioned */ WHERE school_id = $1';
+    const checkQuery = 'SELECT * FROM ph_schools /* ph_schools decommissioned */ WHERE school_id = $1';
     const existingRes = await client.query(checkQuery, [data.schoolId]);
     const oldData = existingRes.rows[0];
 
@@ -7136,7 +7136,7 @@ app.post('/api/save-school', async (req, res) => {
     if (!finalIern) {
       const year = new Date().getFullYear();
       const iernResult = await client.query(
-        "SELECT iern FROM school_profiles WHERE iern LIKE $1 ORDER BY iern DESC LIMIT 1",
+        "SELECT iern FROM ph_schools WHERE iern LIKE $1 ORDER BY iern DESC LIMIT 1",
         [`${year}-%`]
       );
 
@@ -7154,7 +7154,7 @@ app.post('/api/save-school', async (req, res) => {
 
     // 5. PERFORM INSERT OR UPDATE
     const query = `
-      INSERT INTO school_profiles (
+      INSERT INTO ph_schools (
         school_id, school_name, region, province, division, district, 
         municipality, leg_district, barangay, mother_school_id, 
         latitude, longitude, submitted_by, submitted_at, 
@@ -7183,8 +7183,8 @@ app.post('/api/save-school', async (req, res) => {
         curricular_offering = EXCLUDED.curricular_offering,
         submitted_by = EXCLUDED.submitted_by,
         submitted_at = CURRENT_TIMESTAMP,
-        history_logs = school_profiles.history_logs || $15::jsonb,
-        iern = COALESCE(school_profiles.iern, EXCLUDED.iern);
+        history_logs = ph_schools.history_logs || $15::jsonb,
+        iern = COALESCE(ph_schools.iern, EXCLUDED.iern);
     `;
 
     const values = [
@@ -7262,7 +7262,7 @@ app.get('/api/school-profile/:uid', async (req, res) => {
     const query = `
       SELECT 
         p.* 
-      FROM school_profiles p 
+      FROM ph_schools p 
       WHERE p.submitted_by = $1
     `;
     const result = await pool.query(query, [uid]);
@@ -7293,7 +7293,7 @@ app.post('/api/save-school-head', async (req, res) => {
 
   try {
     const query = `
-      UPDATE ph_schools /* school_profiles decommissioned */ SET 
+      UPDATE ph_schools /* ph_schools decommissioned */ SET 
         head_last_name = $2,
         head_first_name = $3,
         head_middle_name = $4,
@@ -7343,7 +7343,7 @@ app.post('/api/save-school-head', async (req, res) => {
 
         // Snapshot trigger logic repeated for secondary
         try {
-          const spRes = await poolNew.query("SELECT school_id FROM school_profiles WHERE submitted_by = $1", [data.uid]);
+          const spRes = await poolNew.query("SELECT school_id FROM ph_schools WHERE submitted_by = $1", [data.uid]);
           if (spRes.rows.length > 0) {
             /* Truly removed now */
           }
@@ -7358,7 +7358,7 @@ app.post('/api/save-school-head', async (req, res) => {
     // We can fetch school_id from result of update or query it.
     // Let's rely on submitted_by to find school_id.
     try {
-      const spRes = await pool.query("SELECT school_id FROM school_profiles WHERE submitted_by = $1", [data.uid]);
+      const spRes = await pool.query("SELECT school_id FROM ph_schools WHERE submitted_by = $1", [data.uid]);
       if (spRes.rows.length > 0) {
         /* Truly removed now */
       }
@@ -7399,7 +7399,7 @@ app.get('/api/school-head/:uid', async (req, res) => {
         region, 
         division,
         updated_at
-      FROM school_profiles 
+      FROM ph_schools 
       WHERE submitted_by = $1;
     `;
     const result = await pool.query(query, [uid]);
@@ -7419,7 +7419,7 @@ app.get('/api/school-head/:uid', async (req, res) => {
 app.get('/api/enrolment/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    const result = await pool.query('SELECT * FROM ph_schools WHERE submitted_by = $1', [uid]);
     if (result.rows.length === 0) return res.json({ exists: false });
     res.json({ exists: true, data: result.rows[0], school_id: result.rows[0].school_id, curricular_offering: result.rows[0].curricular_offering });
   } catch (err) {
@@ -7458,7 +7458,7 @@ app.post('/api/sdo/update-school-profile', async (req, res) => {
 
     // 2. Verify school is in SDO's division
     const schoolRes = await client.query(
-      'SELECT division, region, school_name FROM school_profiles WHERE school_id = $1',
+      'SELECT division, region, school_name FROM ph_schools WHERE school_id = $1',
       [schoolId]
     );
 
@@ -7478,7 +7478,7 @@ app.post('/api/sdo/update-school-profile', async (req, res) => {
 
     // 3. Update school profile
     await client.query(`
-      UPDATE ph_schools /* school_profiles decommissioned */ 
+      UPDATE ph_schools /* ph_schools decommissioned */ 
       SET 
         school_name = $1,
         region = $2,
@@ -7572,7 +7572,7 @@ app.post('/api/save-enrolment', async (req, res) => {
 
   try {
     const query = `
-      UPDATE ph_schools /* school_profiles decommissioned */ 
+      UPDATE ph_schools /* ph_schools decommissioned */ 
       SET 
         curricular_offering = $2,
         es_enrollment = $3, jhs_enrollment = $4, 
@@ -7655,7 +7655,7 @@ app.post('/api/save-enrolment', async (req, res) => {
     }
 
     // DEBUG: Immediate Verification
-    const verify = await pool.query("SELECT grade_kinder, es_enrollment FROM school_profiles WHERE school_id = $1", [data.schoolId]);
+    const verify = await pool.query("SELECT grade_kinder, es_enrollment FROM ph_schools WHERE school_id = $1", [data.schoolId]);
     if (verify.rows.length > 0) {
       console.log("… DB VERIFY: grade_kinder =", verify.rows[0].grade_kinder);
     }
@@ -7687,7 +7687,7 @@ app.post('/api/update-offering', async (req, res) => {
 
   try {
     const query = `
-      UPDATE ph_schools /* school_profiles decommissioned */
+      UPDATE ph_schools /* ph_schools decommissioned */
       SET curricular_offering = $1
       WHERE school_id = $2
       RETURNING school_id;
@@ -9113,7 +9113,7 @@ app.get('/api/projects', async (req, res) => {
             ) as rn
           FROM engineer_form e
           LEFT JOIN co_finance f ON e.project_id = f.project_id
-          LEFT JOIN school_profiles sp ON e.school_id = sp.school_id
+          LEFT JOIN ph_schools sp ON e.school_id = sp.school_id
           LEFT JOIN engineer_documents d ON e.project_id = d.project_id
       ),
       LatestProjects AS (
@@ -10113,7 +10113,7 @@ app.get('/api/organized-classes/:uid', async (req, res) => {
                 cnt_less_g10, cnt_within_g10, cnt_above_g10,
                 cnt_less_g11, cnt_within_g11, cnt_above_g11,
                 cnt_less_g12, cnt_within_g12, cnt_above_g12
-            FROM school_profiles 
+            FROM ph_schools 
             WHERE submitted_by = $1
         `;
 
@@ -10165,7 +10165,7 @@ app.post('/api/save-organized-classes', async (req, res) => {
   const data = req.body;
   try {
     const query = `
-            UPDATE ph_schools /* school_profiles decommissioned */ SET
+            UPDATE ph_schools /* ph_schools decommissioned */ SET
                 classes_kinder = $2, 
                 classes_grade_1 = $3, classes_grade_2 = $4, classes_grade_3 = $5,
                 classes_grade_4 = $6, classes_grade_5 = $7, classes_grade_6 = $8,
@@ -10289,7 +10289,7 @@ app.get('/api/teaching-personnel/:uid', async (req, res) => {
                 -- Departmentalized
                 dept_english, dept_filipino, dept_science, dept_math, dept_ap,
                 dept_mapeh, dept_tle, dept_values, dept_gen_ed, dept_ece, dept_others, non_advisory, sned_teachers
-            FROM school_profiles 
+            FROM ph_schools 
             WHERE submitted_by = $1
         `;
 
@@ -10359,7 +10359,7 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
 
   try {
     const query = `
-            UPDATE ph_schools /* school_profiles decommissioned */ 
+            UPDATE ph_schools /* ph_schools decommissioned */ 
             SET 
                 teach_kinder = $2::INT, teach_g1 = $3::INT, teach_g2 = $4::INT, 
                 teach_g3 = $5::INT, teach_g4 = $6::INT, teach_g7 = $7::INT, 
@@ -10449,7 +10449,7 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
 app.post('/api/save-learning-modalities', async (req, res) => {
   const data = req.body;
   try {
-    // FIXED: Removed primary update to dropped school_profiles table.
+    // FIXED: Removed primary update to dropped ph_schools table.
     // Progress tracking is now implicit via unit completion flags in ph_schools.
     res.json({ message: "Modalities saved successfully! (Progress tracked via Unit 4 flags)" });
 
@@ -10458,7 +10458,7 @@ app.post('/api/save-learning-modalities', async (req, res) => {
       try {
         console.log("”„ Dual-Write: Syncing Learning Modalities...");
         const query = `
-            UPDATE ph_schools /* school_profiles decommissioned */ SET
+            UPDATE ph_schools /* ph_schools decommissioned */ SET
                 shift_kinder = $2, shift_g1 = $3, shift_g2 = $4, shift_g3 = $5, shift_g4 = $6, shift_g5 = $7, shift_g6 = $8,
                 shift_g7 = $9, shift_g8 = $10, shift_g9 = $11, shift_g10 = $12, shift_g11 = $13, shift_g12 = $14,
 
@@ -10604,7 +10604,7 @@ app.post('/api/save-school-resources', async (req, res) => {
     }
 
     const query = `
-            UPDATE ph_schools /* school_profiles decommissioned */ SET 
+            UPDATE ph_schools /* ph_schools decommissioned */ SET 
                 res_water_source=$2, res_tvl_workshops=$3, res_electricity_source=$4, 
                 res_buildable_space=$5, sha_category=$6,
                 
@@ -10897,7 +10897,7 @@ app.get('/api/buildable-spaces/:schoolId', async (req, res) => {
 app.get('/api/teacher-specialization/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    const result = await pool.query('SELECT * FROM ph_schools WHERE submitted_by = $1', [uid]);
     if (result.rows.length === 0) return res.json({ exists: false });
 
     // DEBUG LOG
@@ -10912,7 +10912,7 @@ app.get('/api/teacher-specialization/:uid', async (req, res) => {
 app.get('/api/physical-facilities/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    const result = await pool.query('SELECT * FROM ph_schools WHERE submitted_by = $1', [uid]);
     if (result.rows.length === 0) return res.json({ exists: false });
     res.json({ exists: true, data: result.rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -10971,7 +10971,7 @@ app.post('/api/save-physical-facilities', async (req, res) => {
     }
 
     const queryProfile = `
-            UPDATE ph_schools /* school_profiles decommissioned */ SET
+            UPDATE ph_schools /* ph_schools decommissioned */ SET
                 build_classrooms_total=$2,
                 build_classrooms_new=$3,
                 build_classrooms_good=$4,
@@ -11207,7 +11207,7 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
   const d = req.body;
   try {
     const query = `
-            UPDATE ph_schools /* school_profiles decommissioned */ SET 
+            UPDATE ph_schools /* ph_schools decommissioned */ SET 
                 spec_english_major=$2, spec_english_teaching=$3,
 
                 spec_filipino_major=$4, spec_filipino_teaching=$5,
@@ -11258,7 +11258,7 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
     res.json({ success: true });
     // SNAPSHOT UPDATE (UID to School ID)
     try {
-      const spRes = await pool.query("SELECT school_id FROM school_profiles WHERE submitted_by = $1", [d.uid]);
+      const spRes = await pool.query("SELECT school_id FROM ph_schools WHERE submitted_by = $1", [d.uid]);
       if (spRes.rows.length > 0) {
         /* Truly removed now */
 
@@ -11409,54 +11409,54 @@ app.get('/api/monitoring/stats', async (req, res) => {
   const { region, division } = req.query;
   try {
     // REFACTOR: Use 'schools' table as the base to get accurate TOTAL SCHOOLS count.
-    // LEFT JOIN 'school_profiles' to get the progress data.
+    // LEFT JOIN 'ph_schools' to get the progress data.
     let statsQuery = `
       SELECT 
-        COUNT(s.school_id) as total_schools,
+        COUNT(s."SchoolID") as total_schools,
         -- Sum up the modular unit flags from ph_schools (Mapping to legacy aliases)
-        COALESCE(SUM(CASE WHEN s.unit1 > 0 THEN 1 ELSE 0 END), 0) as profile,
-        COALESCE(SUM(CASE WHEN s.unit1 > 0 THEN 1 ELSE 0 END), 0) as head, 
-        COALESCE(SUM(CASE WHEN s.unit2 > 0 THEN 1 ELSE 0 END), 0) as enrollment,
-        COALESCE(SUM(CASE WHEN s.unit3 > 0 THEN 1 ELSE 0 END), 0) as organizedclasses,
-        COALESCE(SUM(CASE WHEN s.unit5 > 0 THEN 1 ELSE 0 END), 0) as shifting,
-        COALESCE(SUM(CASE WHEN s.unit6 > 0 THEN 1 ELSE 0 END), 0) as personnel,
-        COALESCE(SUM(CASE WHEN s.unit6 > 0 THEN 1 ELSE 0 END), 0) as specialization,
-        COALESCE(SUM(CASE WHEN s.unit7 > 0 THEN 1 ELSE 0 END), 0) as resources,
-        COALESCE(SUM(CASE WHEN s.unit4 > 0 THEN 1 ELSE 0 END), 0) as learner_stats,
-        COALESCE(SUM(CASE WHEN s.unit8 > 0 THEN 1 ELSE 0 END), 0) as facilities,
+        COALESCE(SUM(CASE WHEN sp.unit1 > 0 THEN 1 ELSE 0 END), 0) as profile,
+        COALESCE(SUM(CASE WHEN sp.unit1 > 0 THEN 1 ELSE 0 END), 0) as head, 
+        COALESCE(SUM(CASE WHEN sp.unit2 > 0 THEN 1 ELSE 0 END), 0) as enrollment,
+        COALESCE(SUM(CASE WHEN sp.unit3 > 0 THEN 1 ELSE 0 END), 0) as organizedclasses,
+        COALESCE(SUM(CASE WHEN sp.unit5 > 0 THEN 1 ELSE 0 END), 0) as shifting,
+        COALESCE(SUM(CASE WHEN sp.unit6 > 0 THEN 1 ELSE 0 END), 0) as personnel,
+        COALESCE(SUM(CASE WHEN sp.unit6 > 0 THEN 1 ELSE 0 END), 0) as specialization,
+        COALESCE(SUM(CASE WHEN sp.unit7 > 0 THEN 1 ELSE 0 END), 0) as resources,
+        COALESCE(SUM(CASE WHEN sp.unit4 > 0 THEN 1 ELSE 0 END), 0) as learner_stats,
+        COALESCE(SUM(CASE WHEN sp.unit8 > 0 THEN 1 ELSE 0 END), 0) as facilities,
         
         -- Overall Completion (100%) - Using ph_schools unit_completion
-        COALESCE(COUNT(CASE WHEN s.iern IS NOT NULL AND s.unit_completion >= 100 THEN 1 END), 0) as completed_schools_count,
+        COALESCE(COUNT(CASE WHEN sp.unit_completion >= 100 THEN 1 END), 0) as completed_schools_count,
         
         -- Validated Count
-        COALESCE(COUNT(CASE WHEN s.iern IS NOT NULL AND s.unit_completion >= 100 THEN 1 END), 0) as validated_schools_count,
+        COALESCE(COUNT(CASE WHEN sp.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.unit10_completed = TRUE) THEN 1 END), 0) as validated_schools_count,
         
-        -- Registered Count (Schools that have an IERN assigned)
-        COUNT(CASE WHEN s.iern IS NOT NULL AND s.iern != '' THEN 1 END) as registered_schools_count
-      FROM ph_schools s
-      LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
-      LEFT JOIN school_summary ss ON s.school_id = ss.school_id
-      WHERE UPPER(TRIM(s.region)) ~* ('^' || $1 || '($|[^a-zA-Z0-9])')
+        -- Registered Count (Schools that exist in ph_schools)
+        COUNT(sp.school_id) as registered_schools_count
+      FROM "schools_IERN" s
+      LEFT JOIN ph_schools sp ON s."SchoolID" = sp.school_id
+      LEFT JOIN school_summary ss ON s."SchoolID" = ss.school_id
+      WHERE UPPER(TRIM(s."Region")) ~* ('^' || $1 || '($|[^a-zA-Z0-9])')
     `;
     console.log("DEBUG: Running Monitoring Stats for Region:", region, "Division:", division);
     let params = [region];
 
     if (division) {
-      statsQuery += ` AND UPPER(TRIM(s.division)) = UPPER(TRIM($2))`;
+      statsQuery += ` AND UPPER(TRIM(s."Division")) = UPPER(TRIM($2))`;
       params.push(division);
     }
 
     if (req.query.district) {
-      statsQuery += ` AND UPPER(TRIM(s.district)) = UPPER(TRIM($${params.length + 1}))`;
+      statsQuery += ` AND UPPER(TRIM(s."District")) = UPPER(TRIM($${params.length + 1}))`;
       params.push(req.query.district);
     }
 
     if (req.query.school_id) {
-       statsQuery += ` AND s.school_id = $${params.length + 1}`;
+       statsQuery += ` AND s."SchoolID" = $${params.length + 1}`;
        params.push(req.query.school_id);
     }
 
-    statsQuery += ` GROUP BY s.region ${division ? ', s.division' : ''} ${req.query.district ? ', s.district' : ''} ${req.query.school_id ? ', s.school_id' : ''}`;
+    statsQuery += ` GROUP BY s."Region" ${division ? ', s."Division"' : ''} ${req.query.district ? ', s."District"' : ''} ${req.query.school_id ? ', s."SchoolID"' : ''}`;
 
     const result = await pool.query(statsQuery, params);
 
@@ -11494,15 +11494,15 @@ app.get('/api/monitoring/hrod-dashboard', async (req, res) => {
     let selectGroup = '';
     let extraSelect = '';
     switch(group_by.toLowerCase()) {
-      case 'division': selectGroup = 'TRIM(s.division)'; break;
-      case 'district': selectGroup = 'TRIM(s.district)'; break;
-      case 'municipality': selectGroup = 'TRIM(s.municipality)'; break;
-      case 'region': selectGroup = 'TRIM(s.region)'; break;
+      case 'division': selectGroup = 'TRIM(s."Division")'; break;
+      case 'district': selectGroup = 'TRIM(s."District")'; break;
+      case 'municipality': selectGroup = 'TRIM(s."Municipality")'; break;
+      case 'region': selectGroup = 'TRIM(s."Region")'; break;
       case 'school': 
-        selectGroup = 'TRIM(s.school_name)'; 
-        extraSelect = ', s.school_id';
+        selectGroup = 'TRIM(s."School_Name")'; 
+        extraSelect = ', s."SchoolID"';
         break;
-      default: selectGroup = 'TRIM(s.region)';
+      default: selectGroup = 'TRIM(s."Region")';
     }
 
     // Dynamic filters based on hierarchy
@@ -11510,19 +11510,19 @@ app.get('/api/monitoring/hrod-dashboard', async (req, res) => {
     const params = [];
 
     if (region) {
-      filterClause += ` AND UPPER(TRIM(s.region)) = UPPER(TRIM($${params.length + 1}))`;
+      filterClause += ` AND UPPER(TRIM(s."Region")) = UPPER(TRIM($${params.length + 1}))`;
       params.push(region);
     }
     if (division) {
-      filterClause += ` AND UPPER(TRIM(s.division)) = UPPER(TRIM($${params.length + 1}))`;
+      filterClause += ` AND UPPER(TRIM(s."Division")) = UPPER(TRIM($${params.length + 1}))`;
       params.push(division);
     }
     if (district) {
-      filterClause += ` AND UPPER(TRIM(s.district)) = UPPER(TRIM($${params.length + 1}))`;
+      filterClause += ` AND UPPER(TRIM(s."District")) = UPPER(TRIM($${params.length + 1}))`;
       params.push(district);
     }
     if (municipality) {
-      filterClause += ` AND UPPER(TRIM(s.municipality)) = UPPER(TRIM($${params.length + 1}))`;
+      filterClause += ` AND UPPER(TRIM(s."Municipality")) = UPPER(TRIM($${params.length + 1}))`;
       params.push(municipality);
     }
 
@@ -11530,20 +11530,21 @@ app.get('/api/monitoring/hrod-dashboard', async (req, res) => {
       SELECT 
         ${selectGroup} as group_name
         ${extraSelect},
-        COUNT(s.school_id) as total_schools,
-        COUNT(s.iern) as registered_schools,
-        COALESCE(SUM(CASE WHEN s.unit_completion >= 100 THEN 1 ELSE 0 END), 0) as unit_completed,
+        COUNT(s."SchoolID") as total_schools,
+        COUNT(sp.school_id) as registered_schools,
+        COALESCE(SUM(CASE WHEN sp.unit_completion >= 100 THEN 1 ELSE 0 END), 0) as unit_completed,
         COALESCE(COUNT(DISTINCT e.school_id) FILTER (WHERE e.status = 'VERIFIED' OR e.status = 'PENDING_SDO'), 0) as esf7_completed,
         -- NSPP placeholder (0 for now as module is coming soon)
         0 as nspp_completed
-      FROM ph_schools s
-      LEFT JOIN esf7_database e ON s.school_id = e.school_id
+      FROM "schools_IERN" s
+      LEFT JOIN ph_schools sp ON s."SchoolID" = sp.school_id
+      LEFT JOIN esf7_database e ON s."SchoolID" = e.school_id
       ${filterClause}
       GROUP BY ${selectGroup} ${extraSelect}
       HAVING ${selectGroup} IS NOT NULL AND ${selectGroup} <> ''
       ORDER BY 
         CASE 
-          WHEN COUNT(s.school_id) > 0 THEN (COALESCE(SUM(CASE WHEN s.unit_completion >= 100 THEN 1 ELSE 0 END), 0)::float / COUNT(s.school_id)::float)
+          WHEN COUNT(s."SchoolID") > 0 THEN (COALESCE(SUM(CASE WHEN sp.unit_completion >= 100 THEN 1 ELSE 0 END), 0)::float / COUNT(s."SchoolID")::float)
           ELSE 0 
         END DESC,
         group_name ASC
@@ -11612,27 +11613,27 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
   const { region } = req.query;
   console.log("DEBUG: FETCHING DIV STATS FOR REGION:", region);
   try {
-    // REFACTOR: Use 'schools' table as base
+    // REFACTOR: Use 'schools_IERN' table as base
     const query = `
       SELECT 
-        UPPER(TRIM(s.division)) as division, 
-        COUNT(s.school_id) as total_schools, 
-        COUNT(CASE WHEN s.iern IS NOT NULL AND s.iern != '' THEN 1 END) as registered_schools,
-        COUNT(CASE WHEN s.unit_completion >= 100 THEN 1 END) as completed_schools,
-        COUNT(CASE WHEN s.iern IS NOT NULL AND s.iern != '' AND s.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
-        COUNT(CASE WHEN s.iern IS NOT NULL AND s.iern != '' AND s.unit_completion >= 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
-        ROUND(COALESCE(AVG(CASE WHEN s.iern IS NOT NULL AND s.iern != '' THEN s.unit_completion ELSE NULL END), 0), 1) as avg_completion,
+        UPPER(TRIM(s."Division")) as division, 
+        COUNT(s."SchoolID") as total_schools, 
+        COUNT(sp.school_id) as registered_schools,
+        COUNT(CASE WHEN sp.unit_completion >= 100 THEN 1 END) as completed_schools,
+        COUNT(CASE WHEN sp.school_id IS NOT NULL AND sp.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.unit10_completed = TRUE) THEN 1 END) as validated_schools,
+        COUNT(CASE WHEN sp.school_id IS NOT NULL AND sp.unit_completion >= 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' AND sp.unit10_completed = FALSE THEN 1 END) as for_validation_schools,
+        ROUND(COALESCE(AVG(CASE WHEN sp.school_id IS NOT NULL THEN sp.unit_completion ELSE NULL END), 0), 1) as avg_completion,
         
         -- Map modular units to legacy names for frontend bars
-        COALESCE(SUM(s.unit1), 0) as profile,
-        COALESCE(SUM(s.unit1), 0) as head,
-        COALESCE(SUM(s.unit2), 0) as enrollment,
-        COALESCE(SUM(s.unit3), 0) as organizedclasses,
-        COALESCE(SUM(s.unit4), 0) as learner_stats,
-        COALESCE(SUM(s.unit5), 0) as shifting,
-        COALESCE(SUM(s.unit6), 0) as personnel,
-        COALESCE(SUM(s.unit7), 0) as resources,
-        COALESCE(SUM(s.unit8), 0) as facilities,
+        COALESCE(SUM(sp.unit1), 0) as profile,
+        COALESCE(SUM(sp.unit1), 0) as head,
+        COALESCE(SUM(sp.unit2), 0) as enrollment,
+        COALESCE(SUM(sp.unit3), 0) as organizedclasses,
+        COALESCE(SUM(sp.unit4), 0) as learner_stats,
+        COALESCE(SUM(sp.unit5), 0) as shifting,
+        COALESCE(SUM(sp.unit6), 0) as personnel,
+        COALESCE(SUM(sp.unit7), 0) as resources,
+        COALESCE(SUM(sp.unit8), 0) as facilities,
 
         SUM(COALESCE(sp.total_enrollment, 0)) as total_enrollment,
         SUM(COALESCE(sp.grade_kinder, 0)) as grade_kinder,
@@ -12147,12 +12148,12 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
         SUM(COALESCE(sp.stat_dropout_jhs, 0)) as stat_dropout_jhs,
         SUM(COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_shs,
         SUM(COALESCE(sp.stat_dropout_es, 0) + COALESCE(sp.stat_dropout_jhs, 0) + COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_total
-      FROM ph_schools s
-      LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
-      LEFT JOIN school_summary ss ON s.school_id = ss.school_id
-      WHERE UPPER(TRIM(s.region)) ~* ('^' || $1 || '($|[^a-zA-Z0-9])')
-      GROUP BY UPPER(TRIM(s.division))
-      ORDER BY UPPER(TRIM(s.division))
+      FROM "schools_IERN" s
+      LEFT JOIN ph_schools sp ON s."SchoolID" = sp.school_id
+      LEFT JOIN school_summary ss ON s."SchoolID" = ss.school_id
+      WHERE UPPER(TRIM(s."Region")) ~* ('^' || $1 || '($|[^a-zA-Z0-9])')
+      GROUP BY UPPER(TRIM(s."Division"))
+      ORDER BY UPPER(TRIM(s."Division"))
     `;
     console.log("DEBUG: Running Division Stats for Region:", region);
 
@@ -12180,31 +12181,31 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
 app.get('/api/monitoring/district-stats', async (req, res) => {
   const { region, division, groupBy } = req.query;
 
-  let groupCol = 's.district';
-  if (groupBy === 'legislative') groupCol = 's.legislative_district';
-  if (groupBy === 'municipality') groupCol = 's.municipality';
+  let groupCol = 's."District"';
+  if (groupBy === 'legislative') groupCol = 's."Legislative_District"';
+  if (groupBy === 'municipality') groupCol = 's."Municipality"';
 
   try {
     const query = `
       SELECT 
         UPPER(TRIM(${groupCol})) as district, 
-        COUNT(s.school_id) as total_schools, 
-        COUNT(CASE WHEN s.iern IS NOT NULL AND s.iern != '' THEN 1 END) as registered_schools,
-        COUNT(CASE WHEN s.unit_completion >= 100 THEN 1 END) as completed_schools,
-        COUNT(CASE WHEN s.iern IS NOT NULL AND s.iern != '' AND s.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
-        COUNT(CASE WHEN s.iern IS NOT NULL AND s.iern != '' AND s.unit_completion >= 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
-        ROUND(COALESCE(AVG(CASE WHEN s.iern IS NOT NULL AND s.iern != '' THEN s.unit_completion ELSE NULL END), 0), 1) as avg_completion,
+        COUNT(s."SchoolID") as total_schools, 
+        COUNT(sp.school_id) as registered_schools,
+        COUNT(CASE WHEN sp.unit_completion >= 100 THEN 1 END) as completed_schools,
+        COUNT(CASE WHEN sp.school_id IS NOT NULL AND sp.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.unit10_completed = TRUE) THEN 1 END) as validated_schools,
+        COUNT(CASE WHEN sp.school_id IS NOT NULL AND sp.unit_completion >= 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' AND sp.unit10_completed = FALSE THEN 1 END) as for_validation_schools,
+        ROUND(COALESCE(AVG(CASE WHEN sp.school_id IS NOT NULL THEN sp.unit_completion ELSE NULL END), 0), 1) as avg_completion,
 
         -- Map modular units to legacy names for frontend bars
-        COALESCE(SUM(s.unit1), 0) as profile,
-        COALESCE(SUM(s.unit1), 0) as head,
-        COALESCE(SUM(s.unit2), 0) as enrollment,
-        COALESCE(SUM(s.unit3), 0) as organizedclasses,
-        COALESCE(SUM(s.unit4), 0) as learner_stats,
-        COALESCE(SUM(s.unit5), 0) as shifting,
-        COALESCE(SUM(s.unit6), 0) as personnel,
-        COALESCE(SUM(s.unit7), 0) as resources,
-        COALESCE(SUM(s.unit8), 0) as facilities,
+        COALESCE(SUM(sp.unit1), 0) as profile,
+        COALESCE(SUM(sp.unit1), 0) as head,
+        COALESCE(SUM(sp.unit2), 0) as enrollment,
+        COALESCE(SUM(sp.unit3), 0) as organizedclasses,
+        COALESCE(SUM(sp.unit4), 0) as learner_stats,
+        COALESCE(SUM(sp.unit5), 0) as shifting,
+        COALESCE(SUM(sp.unit6), 0) as personnel,
+        COALESCE(SUM(sp.unit7), 0) as resources,
+        COALESCE(SUM(sp.unit8), 0) as facilities,
 
         SUM(COALESCE(sp.total_enrollment, 0)) as total_enrollment,
         SUM(COALESCE(sp.grade_kinder, 0)) as grade_kinder,
@@ -12719,11 +12720,11 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
         SUM(COALESCE(sp.stat_dropout_jhs, 0)) as stat_dropout_jhs,
         SUM(COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_shs,
         SUM(COALESCE(sp.stat_dropout_es, 0) + COALESCE(sp.stat_dropout_jhs, 0) + COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_total
-      FROM ph_schools s
-      LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
-      LEFT JOIN school_summary ss ON s.school_id = ss.school_id
-      WHERE UPPER(TRIM(s.region)) ~* ('^' || $1 || '($|[^a-zA-Z0-9])') AND
-            UPPER(TRIM(s.division)) = UPPER(TRIM($2))
+      FROM "schools_IERN" s
+      LEFT JOIN ph_schools sp ON s."SchoolID" = sp.school_id
+      LEFT JOIN school_summary ss ON s."SchoolID" = ss.school_id
+      WHERE UPPER(TRIM(s."Region")) ~* ('^' || $1 || '($|[^a-zA-Z0-9])') AND
+            UPPER(TRIM(s."Division")) = UPPER(TRIM($2))
       GROUP BY UPPER(TRIM(${groupCol}))
       ORDER BY UPPER(TRIM(${groupCol})) ASC
     `;
@@ -12761,22 +12762,22 @@ app.get('/api/monitoring/schools', async (req, res) => {
     let params = [];
     // removed: whereClauses.push(`s.iern IS NOT NULL`);
     if (region) {
-      whereClauses.push(`UPPER(TRIM(s.region)) ~* ('^' || $${params.length + 1} || '($|[^a-zA-Z0-9])')`);
+      whereClauses.push(`UPPER(TRIM(s."Region")) ~* ('^' || $${params.length + 1} || '($|[^a-zA-Z0-9])')`);
       params.push(region);
     }
 
     if (division) {
-      whereClauses.push(`UPPER(TRIM(s.division)) = UPPER(TRIM($${params.length + 1}))`);
+      whereClauses.push(`UPPER(TRIM(s."Division")) = UPPER(TRIM($${params.length + 1}))`);
       params.push(division);
     }
 
     if (req.query.district) {
-      whereClauses.push(`UPPER(TRIM(s.district)) = UPPER(TRIM($${params.length + 1}))`);
+      whereClauses.push(`UPPER(TRIM(s."District")) = UPPER(TRIM($${params.length + 1}))`);
       params.push(req.query.district);
     }
 
     if (search) {
-      whereClauses.push(`(s.school_name ILIKE $${params.length + 1} OR s.school_id ILIKE $${params.length + 1})`);
+      whereClauses.push(`(s."School_Name" ILIKE $${params.length + 1} OR s."SchoolID" ILIKE $${params.length + 1})`);
       params.push(`%${search}%`);
     }
 
@@ -12786,26 +12787,26 @@ app.get('/api/monitoring/schools', async (req, res) => {
 
     // common SELECT fields with SAFE casting
     // We use schools table (s) for identity
-    // We use school_profiles (sp) for status_of_construction_phase, handling NULLs with COALESCE
+    // We use ph_schools (sp) for status_of_construction_phase, handling NULLs with COALESCE
     const selectFields = `
-      s.unit_completion as completion_percentage,
-      s.school_name,
-      s.school_id,
+      COALESCE(sp.unit_completion, 0) as completion_percentage,
+      s."School_Name" as school_name,
+      s."SchoolID" as school_id,
       COALESCE(sp.total_enrollment, 0) as total_enrollment,
       
-      (COALESCE(s.unit1, 0) > 0) as profile_status,
-      (COALESCE(s.unit1, 0) > 0) as head_status,
-      (COALESCE(s.unit2, 0) > 0) as enrollment_status,
-      (COALESCE(s.unit3, 0) > 0) as classes_status,
-      (COALESCE(s.unit5, 0) > 0) as shifting_status,
-      (COALESCE(s.unit6, 0) > 0) as personnel_status,
-      (COALESCE(s.unit6, 0) > 0) as specialization_status,
-      (COALESCE(s.unit7, 0) > 0) as resources_status,
-      (COALESCE(s.unit4, 0) > 0) as learner_stats_status,
-      (COALESCE(s.unit8, 0) > 0) as facilities_status,
+      (COALESCE(sp.unit1, 0) > 0) as profile_status,
+      (COALESCE(sp.unit1, 0) > 0) as head_status,
+      (COALESCE(sp.unit2, 0) > 0) as enrollment_status,
+      (COALESCE(sp.unit3, 0) > 0) as classes_status,
+      (COALESCE(sp.unit5, 0) > 0) as shifting_status,
+      (COALESCE(sp.unit6, 0) > 0) as personnel_status,
+      (COALESCE(sp.unit6, 0) > 0) as specialization_status,
+      (COALESCE(sp.unit7, 0) > 0) as resources_status,
+      (COALESCE(sp.unit4, 0) > 0) as learner_stats_status,
+      (COALESCE(sp.unit8, 0) > 0) as facilities_status,
       
       sp.submitted_by,
-      sp.school_head_validation,
+      sp.unit10_completed as school_head_validation,
       ss.data_health_description,
       ss.data_health_score,
       ss.issues as data_quality_issues
@@ -12820,9 +12821,9 @@ app.get('/api/monitoring/schools', async (req, res) => {
     // COUNT Query (Count from schools table)
     const countQuery = `
       SELECT COUNT(*) as total 
-      FROM ph_schools s
-      LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
-      LEFT JOIN school_summary ss ON s.school_id = ss.school_id
+      FROM "schools_IERN" s
+      LEFT JOIN ph_schools sp ON s."SchoolID" = sp.school_id
+      LEFT JOIN school_summary ss ON s."SchoolID" = ss.school_id
       ${whereSql}
     `;
     console.log("DEBUG: Running Schools List Count for Region:", region, "Division:", division);
@@ -12832,11 +12833,11 @@ app.get('/api/monitoring/schools', async (req, res) => {
     // DATA Query
     const dataQuery = `
       SELECT ${selectFields}
-      FROM ph_schools s
-      LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
-      LEFT JOIN school_summary ss ON s.school_id = ss.school_id
+      FROM "schools_IERN" s
+      LEFT JOIN ph_schools sp ON s."SchoolID" = sp.school_id
+      LEFT JOIN school_summary ss ON s."SchoolID" = ss.school_id
       ${whereSql}
-      ORDER BY s.unit_completion DESC NULLS LAST, s.school_name ASC
+      ORDER BY COALESCE(sp.unit_completion, 0) DESC, s."School_Name" ASC
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
 
@@ -12890,7 +12891,7 @@ app.get('/api/monitoring/engineer-stats', async (req, res) => {
         COALESCE(SUM(p.approved_budget_for_contract), 0) as total_allocation,
         COALESCE(SUM(p.contract_amount), 0) as total_contract_amount
       FROM LatestProjects p
-      LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
+      LEFT JOIN ph_schools sp ON p.school_id = sp.school_id
       WHERE UPPER(TRIM(p.region)) = UPPER(TRIM($1))
     `;
     let params = [region];
@@ -12936,7 +12937,7 @@ app.get('/api/monitoring/engineer-projects', async (req, res) => {
         p.contract_amount as "contractAmount",
         p.validation_status as "validation_status", p.status_as_of as "statusAsOfDate"
       FROM LatestProjects p
-      LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
+      LEFT JOIN ph_schools sp ON p.school_id = sp.school_id
       WHERE UPPER(TRIM(p.region)) = UPPER(TRIM($1))
     `;
     let params = [region];
@@ -12965,7 +12966,7 @@ app.get('/api/monitoring/engineer-projects', async (req, res) => {
 app.get('/api/monitoring/school-detail/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM ph_schools /* school_profiles decommissioned */ WHERE school_id = $1', [schoolId]);
+    const result = await pool.query('SELECT * FROM ph_schools /* ph_schools decommissioned */ WHERE school_id = $1', [schoolId]);
     if (result.rows.length === 0) return res.status(404).json({ error: "School not found" });
     res.json(result.rows[0]);
   } catch (err) {
@@ -13005,7 +13006,7 @@ app.get('/api/leaderboard', async (req, res) => {
         SELECT 
           region as name,
           ROUND(AVG(completion_percentage), 0) as avg_completion
-        FROM school_profiles
+        FROM ph_schools
         WHERE region IS NOT NULL
         GROUP BY region
         ORDER BY avg_completion DESC
@@ -13020,7 +13021,7 @@ app.get('/api/leaderboard', async (req, res) => {
         SELECT 
           division as name,
           ROUND(AVG(completion_percentage), 0) as avg_completion
-        FROM school_profiles
+        FROM ph_schools
         WHERE division IS NOT NULL
       `;
       const params = [];
@@ -13043,7 +13044,7 @@ app.get('/api/leaderboard', async (req, res) => {
           school_id, school_name, region, division, district,
           completion_percentage as completion_rate, -- ALIAS FOR FRONTEND
           updated_at
-        FROM school_profiles
+        FROM ph_schools
         WHERE TRIM(division) = TRIM($1)
         ORDER BY completion_percentage DESC, updated_at DESC LIMIT 50
       `;
@@ -13057,7 +13058,7 @@ app.get('/api/leaderboard', async (req, res) => {
         school_id, school_name, region, division, district,
         completion_percentage as completion_rate,
         updated_at
-      FROM school_profiles
+      FROM ph_schools
       WHERE completion_percentage > 0
       ORDER BY completion_percentage DESC LIMIT 10
     `;
@@ -13077,24 +13078,15 @@ app.get('/api/monitoring/regions', async (req, res) => {
     const query = `
       WITH school_stats AS (
         SELECT 
-          s.region,
-          COUNT(s.school_id) as total_schools,
+          UPPER(TRIM(s."Region")) as region,
+          COUNT(s."SchoolID") as total_schools,
           CAST(AVG(COALESCE(ps.unit_completion, 0)) AS DECIMAL(10,1)) as avg_completion,
           SUM(COALESCE(ps.unit1,0) + COALESCE(ps.unit2,0) + COALESCE(ps.unit3,0) + COALESCE(ps.unit4,0) + 
               COALESCE(ps.unit5,0) + COALESCE(ps.unit6,0) + COALESCE(ps.unit7,0) + COALESCE(ps.unit8,0)) as total_forms_completed,
           COUNT(CASE WHEN COALESCE(ps.unit_completion, 0) >= 100 THEN 1 END) as completed_schools
-        FROM (
-          SELECT 
-            COALESCE(p_in.school_id, s_in."SchoolID") as school_id,
-            UPPER(TRIM(COALESCE(p_in.region, s_in."Region"))) as region,
-            UPPER(TRIM(COALESCE(p_in.division, s_in."Division"))) as division,
-            UPPER(TRIM(COALESCE(p_in.district, s_in."District"))) as district,
-            COALESCE(p_in.school_name, s_in."School_Name") as school_name
-          FROM "schools_IERN" s_in
-          FULL OUTER JOIN ph_schools p_in ON s_in."SchoolID" = p_in.school_id
-        ) s
-        LEFT JOIN ph_schools ps ON s.school_id = ps.school_id
-        GROUP BY s.region
+        FROM "schools_IERN" s
+        LEFT JOIN ph_schools ps ON s."SchoolID" = ps.school_id
+        GROUP BY UPPER(TRIM(s."Region"))
       ),
       project_stats AS (
         SELECT 
@@ -13244,7 +13236,7 @@ app.get('/api/learner-statistics/:uid', async (req, res) => {
       });
     });
 
-    const query = `SELECT ${selectFields.join(', ')} FROM school_profiles WHERE submitted_by = $1`;
+    const query = `SELECT ${selectFields.join(', ')} FROM ph_schools WHERE submitted_by = $1`;
 
     const result = await pool.query(query, [uid]);
 
@@ -13315,7 +13307,7 @@ app.post('/api/save-learner-statistics', async (req, res) => {
       });
     });
 
-    const query = `UPDATE ph_schools /* school_profiles decommissioned */ SET ${fields.join(', ')} WHERE school_id = $1`;
+    const query = `UPDATE ph_schools /* ph_schools decommissioned */ SET ${fields.join(', ')} WHERE school_id = $1`;
 
     await pool.query(query, values);
 
@@ -13642,7 +13634,7 @@ app.get('/api/debug/health-stats', async (req, res) => {
       SELECT 
         COALESCE(data_health_description, 'NULL') as status_of_construction_phase, 
         COUNT(*) as count 
-      FROM school_profiles 
+      FROM ph_schools 
       WHERE completion_percentage = 100 
       GROUP BY data_health_description
     `;
@@ -14578,7 +14570,7 @@ app.get('/api/reports/data-health', async (req, res) => {
         END as data_health_score,
         s.updated_at as last_updated
       FROM ph_schools p
-      LEFT JOIN school_profiles s ON p.school_id = s.school_id
+      LEFT JOIN ph_schools s ON p.school_id = s.school_id
       WHERE ${phWhereClause}
       ORDER BY p.school_name ASC
     `;
@@ -14590,7 +14582,7 @@ app.get('/api/reports/data-health', async (req, res) => {
     // 3. Stale Schools (updated_at is NULL or older than 90 days)
     const staleQuery = `
       SELECT s.school_id, s.school_name, s.updated_at as last_updated
-      FROM school_profiles s
+      FROM ph_schools s
       WHERE ${whereClause}
       AND (s.updated_at IS NULL OR s.updated_at < NOW() - INTERVAL '90 days')
     `;
@@ -14600,7 +14592,7 @@ app.get('/api/reports/data-health', async (req, res) => {
     // 4. Anomalies (Red Flags)
     const anomaliesQuery = `
       SELECT s.school_id, s.school_name, s.total_enrollment, s.latitude, s.longitude
-      FROM school_profiles s
+      FROM ph_schools s
       WHERE ${whereClause}
       AND (
         s.total_enrollment IS NULL 
@@ -14613,7 +14605,7 @@ app.get('/api/reports/data-health', async (req, res) => {
     const anomalies = anomaliesRes.rows;
 
     // Registered Schools Count
-    const registeredQuery = `SELECT COUNT(*) as total FROM school_profiles s WHERE ${whereClause}`;
+    const registeredQuery = `SELECT COUNT(*) as total FROM ph_schools s WHERE ${whereClause}`;
     const registeredRes = await pool.query(registeredQuery, params);
     const registered_schools = parseInt(registeredRes.rows[0].total) || 0;
 
@@ -14649,7 +14641,7 @@ app.get('/api/reports/data-health', async (req, res) => {
           ), 
           ''
         ) as issues_detected
-      FROM school_profiles s
+      FROM ph_schools s
       LEFT JOIN ph_schools p ON s.school_id = p.school_id
       WHERE ${whereClause}
       ORDER BY data_health_score ASC
@@ -14704,14 +14696,14 @@ app.get('/api/reports/insights/master', async (req, res) => {
       whereClause += ` AND UPPER(TRIM(p.division)) = UPPER(TRIM($${params.length}))`;
     }
 
-    // Select all columns from ph_schools and joined columns from school_profiles
+    // Select all columns from ph_schools and joined columns from ph_schools
     const query = `
       SELECT 
         p.*, 
         s.*,
         p.school_id
       FROM ph_schools p
-      LEFT JOIN school_profiles s ON p.school_id = s.school_id
+      LEFT JOIN ph_schools s ON p.school_id = s.school_id
       WHERE ${whereClause}
       ORDER BY p.school_name ASC
     `;
@@ -14849,7 +14841,7 @@ app.get('/api/reports/insights', async (req, res) => {
         UPPER(TRIM(${groupCol})) as label,
         ${metricSelect}
       FROM ph_schools p
-      LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
+      LEFT JOIN ph_schools sp ON p.school_id = sp.school_id
       WHERE ${whereClauses.join(' AND ')}
       GROUP BY UPPER(TRIM(${groupCol}))
       ORDER BY label ASC
@@ -17555,10 +17547,10 @@ app.post('/api/esf7/return', async (req, res) => {
 
     if (iern) {
       await pool.query("UPDATE ESF7_Database SET status = 'REJECTED' WHERE iern = $1 OR school_id = $2", [iern, school_id]);
-      await pool.query("UPDATE ph_schools /* school_profiles decommissioned */ SET f7_resources = 0, updated_at = CURRENT_TIMESTAMP WHERE iern = $1 OR school_id = $2", [iern, school_id]);
+      await pool.query("UPDATE ph_schools /* ph_schools decommissioned */ SET f7_resources = 0, updated_at = CURRENT_TIMESTAMP WHERE iern = $1 OR school_id = $2", [iern, school_id]);
     } else {
       await pool.query("UPDATE ESF7_Database SET status = 'REJECTED' WHERE school_id = $1", [school_id]);
-      await pool.query("UPDATE ph_schools /* school_profiles decommissioned */ SET f7_resources = 0, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1", [school_id]);
+      await pool.query("UPDATE ph_schools /* ph_schools decommissioned */ SET f7_resources = 0, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1", [school_id]);
     }
 
     res.json({ success: true, message: "ESF7 submission returned for correction." });
