@@ -1114,6 +1114,7 @@ const initDB = async () => {
     await checkAndAddColumn('engineer_form', 'pow_filename', 'TEXT');
     await checkAndAddColumn('engineer_form', 'dupa_filename', 'TEXT');
     await checkAndAddColumn('engineer_form', 'contract_filename', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'approval_status', "TEXT DEFAULT 'Approved'");
 
     // Migration: Change status_as_of to TIMESTAMP WITH TIME ZONE
     await pool.query(`
@@ -1876,11 +1877,9 @@ app.post('/api/auth/migrate-login', async (req, res) => {
 
     // --- AUTO-NORMALIZE ACCOUNT CATEGORY ---
     let finalCategory = user.account_category;
-    if (!finalCategory || user.role === 'EFD' || user.role === 'HRODI' || user.account_category === 'DepEd Engineer' || user.account_category === 'HRODI Engineer') {
-      if (user.role === 'EFD' || user.role === 'HRODI' || user.role === 'EFD Engineer') {
-        finalCategory = 'EFD Engineer';
-      } else if (user.role === 'DepEd Engineer' || user.role === 'Division Engineer') {
-        finalCategory = 'Division Engineer';
+    if (!finalCategory || user.role === 'EFD' || user.role === 'HRODI' || user.role === 'EFD Engineer' || user.role === 'DepEd Engineer' || user.role === 'Division Engineer') {
+      if (user.role === 'EFD' || user.role === 'HRODI' || user.role === 'EFD Engineer' || user.role === 'DepEd Engineer' || user.role === 'Division Engineer') {
+        finalCategory = 'DepEd Engineer';
       } else {
         finalCategory = user.role;
       }
@@ -2044,11 +2043,9 @@ app.post('/api/auth/pin-login', async (req, res) => {
 
     // --- AUTO-NORMALIZE ACCOUNT CATEGORY ---
     let finalCategory = user.account_category;
-    if (!finalCategory || user.role === 'EFD' || user.role === 'HRODI' || user.account_category === 'DepEd Engineer' || user.account_category === 'HRODI Engineer') {
-      if (user.role === 'EFD' || user.role === 'HRODI' || user.role === 'EFD Engineer') {
-        finalCategory = 'EFD Engineer';
-      } else if (user.role === 'DepEd Engineer' || user.role === 'Division Engineer') {
-        finalCategory = 'Division Engineer';
+    if (!finalCategory || user.role === 'EFD' || user.role === 'HRODI' || user.role === 'EFD Engineer' || user.role === 'DepEd Engineer' || user.role === 'Division Engineer') {
+      if (user.role === 'EFD' || user.role === 'HRODI' || user.role === 'EFD Engineer' || user.role === 'DepEd Engineer' || user.role === 'Division Engineer') {
+        finalCategory = 'DepEd Engineer';
       } else {
         finalCategory = user.role;
       }
@@ -6560,10 +6557,8 @@ app.post('/api/register-user', async (req, res) => {
     }
 
     let finalAccountCategory = accountCategory;
-    if (finalRole === 'EFD Engineer') {
-      finalAccountCategory = 'EFD Engineer';
-    } else if ((finalRole === 'Division Engineer' || finalRole === 'DepEd Engineer') && !accountCategory) {
-      finalAccountCategory = 'DepEd Engineer'; // Backwards compatibility for the category column
+    if (finalRole === 'EFD Engineer' || finalRole === 'Division Engineer' || finalRole === 'DepEd Engineer') {
+      finalAccountCategory = 'DepEd Engineer';
     } else if (!finalAccountCategory) {
       finalAccountCategory = finalRole;
     }
@@ -7870,6 +7865,13 @@ app.post('/api/save-project', async (req, res) => {
       catId // $57
     ];
 
+    // Determine approval_status based on submitter's role
+    const submitterRoleRes = await client.query('SELECT role FROM users WHERE uid = $1', [data.uid]);
+    const submitterRole = (submitterRoleRes.rows[0]?.role || '').toLowerCase();
+    const divisionEngineerRoles = ['division engineer', 'deped_engineer', 'deped engineer', 'architect', 'engineer'];
+    const approvalStatus = divisionEngineerRoles.includes(submitterRole) ? 'Pending' : 'Approved';
+    projectValues.push(approvalStatus); // $58
+
     const projectQuery = `
       INSERT INTO "engineer_form" (
         project_name, school_name, school_id, region, division,
@@ -7886,8 +7888,8 @@ app.post('/api/save-project', async (req, res) => {
         funding_year, funding_year_justification,
         delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type,
         mode_of_project, implementing_agency, implementing_agency_specific, no_of_units, program_type,
-        province, city, municipality, project_category_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57)
+        province, city, municipality, project_category_id, approval_status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -9091,7 +9093,7 @@ app.get('/api/projects', async (req, res) => {
             e.construction_start_date, e.project_category, e.scope_of_work,
             e.province, e.city, e.municipality,
             e.number_of_classrooms, e.number_of_storeys, e.number_of_sites, e.funds_utilized,
-            e.is_donated, e.program_type, e.status_design_phase, e.procurement_status, e.actions, e.savings, e.funding_year, e.funding_year_justification,
+            e.is_donated, e.program_type, e.status_design_phase, e.procurement_status, e.actions, e.savings, e.funding_year, e.funding_year_justification, e.approval_status,
             e.sangguniang_resolution_id, e.mother_moa_id, e.supplamental_moa_id,
             (NULLIF(d.moa_pdf, '') IS NOT NULL) AS has_moa,
             (NULLIF(d.rta_pdf, '') IS NOT NULL) AS has_rta,
@@ -9161,7 +9163,8 @@ app.get('/api/projects', async (req, res) => {
         p.implementing_agency_specific AS "implementingAgencySpecific",
         p.province, p.city, p.municipality,
         p.tranche_1, p.tranche_2, p.tranche_3,
-        p.liquidated_tranche_1, p.liquidated_tranche_2, p.liquidated_tranche_3
+        p.liquidated_tranche_1, p.liquidated_tranche_2, p.liquidated_tranche_3,
+        p.approval_status AS "approvalStatus"
       FROM LatestProjects p
     `;
 
@@ -9585,9 +9588,47 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
   }
 });
 
+// --- 11c. PUT: Approve a Project (EFD/Super only) ---
+app.put('/api/approve-project/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const ipcRes = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [id]);
+    if (ipcRes.rows.length === 0) return res.status(404).json({ error: "Project not found" });
+    const ipc = ipcRes.rows[0].ipc;
+    await pool.query("UPDATE engineer_form SET approval_status = 'Approved' WHERE ipc = $1", [ipc]);
+    if (poolNew) {
+      await poolNew.query("UPDATE engineer_form SET approval_status = 'Approved' WHERE ipc = $1", [ipc]).catch(() => {});
+    }
+    res.json({ success: true, ipc });
+  } catch (err) {
+    console.error("Approve Project Error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- 11d. DELETE: Delete Project ---
 app.delete('/api/projects/:id', async (req, res) => {
   const { id } = req.params;
+
+  // Role guard: only EFD Engineers, Regional Engineers, and Super Users can delete projects
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const tokenStr = authHeader.split(' ')[1];
+      const decoded = jwt.verify(tokenStr, process.env.JWT_SECRET);
+      const roleRes = await pool.query('SELECT role FROM users WHERE uid = $1', [decoded.uid]);
+      if (roleRes.rows.length > 0) {
+        const role = (roleRes.rows[0].role || '').toLowerCase();
+        const canDelete = ['efd', 'efd engineer', 'hrodi', 'hrodi engineer', 'super user', 'super admin', 'admin', 'central office'].includes(role);
+        if (!canDelete) {
+          return res.status(403).json({ message: "Permission denied. Only EFD Engineers and Super Users can delete projects." });
+        }
+      }
+    } catch (e) {
+      // Token invalid — let request proceed without role check for backwards compat
+    }
+  }
+
   const client = await pool.connect();
   const clientNew = poolNew ? await poolNew.connect() : null;
 
@@ -10046,6 +10087,56 @@ app.get('/api/project-images/:projectId', async (req, res) => {
   } catch (err) {
     console.error("❌ Error fetching project images:", err.message);
     res.status(500).json({ error: "Failed to fetch images" });
+  }
+});
+
+// --- 21a. DELETE: Delete a single project image ---
+app.delete('/api/project-images/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Fetch the image record first to get the file path / blob URL
+    const fetchRes = await pool.query('SELECT id, image_data FROM engineer_image WHERE id = $1', [id]);
+    if (fetchRes.rows.length === 0) return res.status(404).json({ error: "Image not found" });
+
+    const imageData = fetchRes.rows[0].image_data || '';
+
+    // 1. Delete from DB (primary + replica)
+    await pool.query('DELETE FROM engineer_image WHERE id = $1', [id]);
+    if (poolNew) {
+      await poolNew.query('DELETE FROM engineer_image WHERE id = $1', [id]).catch(() => {});
+    }
+
+    // 2. Delete physical file (local disk)
+    if (imageData.startsWith('/uploads/')) {
+      const filePath = path.join(__dirname, '..', imageData);
+      if (fs.existsSync(filePath)) {
+        fs.unlink(filePath, (err) => {
+          if (err) console.warn(`⚠️ Could not delete local image file: ${filePath}`, err.message);
+        });
+      }
+    }
+
+    // 3. Delete Azure Blob (if image_data is an Azure HTTPS URL)
+    if (imageData.startsWith('https://') && blobServiceClient) {
+      try {
+        const url = new URL(imageData);
+        // URL format: https://<account>.blob.core.windows.net/<container>/<blobName>
+        const pathParts = url.pathname.split('/').filter(Boolean);
+        if (pathParts.length >= 2) {
+          const containerName = pathParts[0];
+          const blobName = pathParts.slice(1).join('/');
+          const containerClient = blobServiceClient.getContainerClient(containerName);
+          await containerClient.deleteBlob(blobName, { deleteSnapshots: 'include' });
+        }
+      } catch (azureErr) {
+        console.warn('⚠️ Azure blob delete failed (non-fatal):', azureErr.message);
+      }
+    }
+
+    res.json({ success: true, id });
+  } catch (err) {
+    console.error("Delete Image Error:", err.message);
+    res.status(500).json({ error: "Failed to delete image" });
   }
 });
 

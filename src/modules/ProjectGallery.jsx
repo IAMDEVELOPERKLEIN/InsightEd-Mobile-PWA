@@ -94,6 +94,7 @@ const ProjectGallery = () => {
     const [images, setImages] = useState([]); // Now this will hold METADATA only
     const [loading, setLoading] = useState(true);
     const [selectedImage, setSelectedImage] = useState(null);
+    const [deletingId, setDeletingId] = useState(null);
 
     const API_BASE = '';
 
@@ -129,6 +130,25 @@ const ProjectGallery = () => {
         };
         fetchImages();
     }, [projectId, user]);
+
+    const handleDeleteImage = async (imageId) => {
+        if (!window.confirm("Delete this photo? This cannot be undone.")) return;
+        setDeletingId(imageId);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`${API_BASE}/api/project-images/${imageId}`, {
+                method: 'DELETE',
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
+            if (!res.ok) throw new Error("Failed to delete image");
+            setImages(prev => prev.filter(img => img.id !== imageId));
+            setSelectedImage(null);
+        } catch (err) {
+            alert("Error deleting photo: " + err.message);
+        } finally {
+            setDeletingId(null);
+        }
+    };
 
     return (
         <PageTransition>
@@ -187,6 +207,14 @@ const ProjectGallery = () => {
                             onClick={() => setSelectedImage(null)}
                         >
                             ✕
+                        </button>
+                        <button
+                            className="absolute top-10 left-6 w-10 h-10 bg-red-500/80 rounded-full flex items-center justify-center text-white hover:bg-red-600 transition"
+                            onClick={(e) => { e.stopPropagation(); handleDeleteImage(selectedImage.id); }}
+                            disabled={deletingId === selectedImage.id}
+                            title="Delete photo"
+                        >
+                            {deletingId === selectedImage.id ? '...' : '🗑'}
                         </button>
 
                         <div className="w-full max-w-4xl max-h-[70vh] flex items-center justify-center">

@@ -603,7 +603,7 @@ const EFDMonitoring = () => {
                                                eng.lastName?.toLowerCase().includes(search) || 
                                                eng.division?.toLowerCase().includes(search);
                                         
-                                        const isDivEng = eng.role === 'Division Engineer' || eng.role === 'deped_engineer' || eng.account_category === 'Division Engineer' || eng.account_category === 'deped_engineer';
+                                        const isDivEng = eng.role === 'Division Engineer' || eng.role === 'deped_engineer' || eng.account_category === 'Division Engineer' || eng.account_category === 'deped_engineer' || eng.account_category === 'DepEd Engineer';
                                         
                                         const projReg = selectedProject?.region?.trim().toLowerCase() || '';
                                         const engReg = eng.region?.trim().toLowerCase() || '';
