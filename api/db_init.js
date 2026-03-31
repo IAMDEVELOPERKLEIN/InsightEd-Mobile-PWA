@@ -100,6 +100,8 @@ const runMigrations = async (client, dbLabel) => {
     try {
         // Add Email
         await client.query(`ALTER TABLE school_profiles ADD COLUMN IF NOT EXISTS email TEXT;`);
+        // Add Submitted By (UID mapping)
+        await client.query(`ALTER TABLE school_profiles ADD COLUMN IF NOT EXISTS submitted_by TEXT;`);
         // Add Curricular Offering
         await client.query(`ALTER TABLE school_profiles ADD COLUMN IF NOT EXISTS curricular_offering TEXT;`);
         // Add Resources Columns
@@ -499,6 +501,12 @@ const runMigrations = async (client, dbLabel) => {
             await client.query(`
                 ALTER TABLE engineer_documents
                 ADD COLUMN IF NOT EXISTS ipc TEXT,
+                ADD COLUMN IF NOT EXISTS pow_pdf TEXT,
+                ADD COLUMN IF NOT EXISTS dupa_pdf TEXT,
+                ADD COLUMN IF NOT EXISTS contract_pdf TEXT,
+                ADD COLUMN IF NOT EXISTS pow_filename TEXT,
+                ADD COLUMN IF NOT EXISTS dupa_filename TEXT,
+                ADD COLUMN IF NOT EXISTS contract_filename TEXT,
                 ADD COLUMN IF NOT EXISTS moa_pdf TEXT,
                 ADD COLUMN IF NOT EXISTS rta_pdf TEXT,
                 ADD COLUMN IF NOT EXISTS uploader_id TEXT;

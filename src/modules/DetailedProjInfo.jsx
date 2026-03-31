@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext, createContext } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
-import { getCachedProjects, cacheGallery, getCachedGallery } from '../db';
+import { getCachedProjects, cacheGallery, getCachedGallery, clearProjectsCache } from '../db';
 import LocationPickerMap from '../components/LocationPickerMap';
 import { TbPhoto } from "react-icons/tb";
 import { useAuth } from '../context/AuthContext';
@@ -419,7 +419,18 @@ const Field = ({ label, name, value, type = 'text', options = [] }) => {
     const { isEditMode, formData, handleChange } = useContext(FieldFormContext) || {};
     if (!isEditMode) {
         const isMoney = type === 'money';
-        const displayValue = isMoney ? `₱${Number(value || 0).toLocaleString()}` : (value || '---');
+        let displayValue = isMoney ? `₱${Number(value || 0).toLocaleString()}` : (value || '---');
+        
+        // Special handling for Status As Of to show time
+        if (name === 'statusAsOf' && value) {
+            try {
+                const date = new Date(value);
+                displayValue = `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+            } catch (e) {
+                console.warn("Date parse error", e);
+            }
+        }
+
         return (
             <div className="mb-4 group">
                 <p className="text-[9px] uppercase font-black text-slate-400 mb-0.5 tracking-tighter opacity-70">{label}</p>
@@ -542,8 +553,11 @@ const DetailedProjInfo = () => {
         if (typeof data !== 'string') return null;
 
         // 4. Handle standard data URI, URL, or file path
-        if (data.startsWith('data:') || data.startsWith('http') || data.startsWith('/uploads/')) {
+        if (data.startsWith('data:') || data.startsWith('http')) {
             return data;
+        }
+        if (data.startsWith('/uploads/')) {
+            return `${API_BASE}${data}`;
         }
 
         // 5. Otherwise assume it's raw base64 and wrap it
@@ -912,6 +926,7 @@ const DetailedProjInfo = () => {
             }
 
             alert("✅ SUCCESS\n\nNew project version has been appended to history.");
+            await clearProjectsCache(); // Force refresh on navigation
             setIsEditMode(false);
             setInternalFiles([]);
             setExternalFiles([]);
@@ -951,6 +966,7 @@ const DetailedProjInfo = () => {
             const result = await res.json();
             if (!res.ok) throw new Error(result.error || 'Upload failed');
             alert(`${selectedDocType} uploaded. It will be available after background compression completes.`);
+            await clearProjectsCache(); // Refresh metadata (hasPow etc)
             setIsDocUploadModalOpen(false);
             setDocUploadFile(null);
         } catch (err) {
@@ -1004,7 +1020,7 @@ const DetailedProjInfo = () => {
 
             <div className="grid grid-cols-2 gap-4">
                 <Field label="Current Status" name="status" value={project.status} type="select" options={['Not Yet Started', 'Ongoing', 'For Final Inspection', 'Completed']} />
-                <Field label="Status As Of" name="statusAsOfDate" value={project.statusAsOfDate} type="date" />
+                <Field label="Status As Of" name="statusAsOf" value={project.statusAsOf} type="date" />
             </div>
 
             <SectionHeader title="Project Identity" />
@@ -1187,7 +1203,13 @@ const DetailedProjInfo = () => {
                             </div>
                         </div>
                         {project[docKey] ? (
-                            <a href={project[docKey].startsWith('data:') || project[docKey].startsWith('/uploads/') ? project[docKey] : `data:application/pdf;base64,${project[docKey]}`} download={`${project.schoolName}_${docKey}.pdf`} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95">Download</a>
+                            <a 
+                                href={project[docKey].startsWith('data:') ? project[docKey] : (project[docKey].startsWith('/uploads/') ? `${API_BASE}${project[docKey]}` : `data:application/pdf;base64,${project[docKey]}`)} 
+                                download={`${project.schoolName}_${docKey}.pdf`} 
+                                className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95"
+                            >
+                                Download
+                            </a>
                         ) : (
                             <span className="text-[10px] font-black text-slate-300 uppercase italic px-4">Missing</span>
                         )}

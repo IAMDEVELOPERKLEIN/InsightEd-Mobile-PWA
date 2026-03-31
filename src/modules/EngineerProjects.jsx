@@ -172,9 +172,9 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, onVariati
                       ) : null}
                       <span className="text-[18px] font-black">{p?.accomplishmentPercentage || 0}%</span>
                     </div>
-                    {p.statusAsOf && (
+                    { (p.statusAsOf || p.statusAsOfDate) && (
                       <span className="text-[7px] font-black uppercase tracking-tighter opacity-60 mt-0.5">
-                        As of {new Date(p.statusAsOf).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} {new Date(p.statusAsOf).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                        As of {new Date(p.statusAsOf || p.statusAsOfDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} {new Date(p.statusAsOf || p.statusAsOfDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     )}
                   </div>
@@ -930,6 +930,10 @@ const EngineerProjects = () => {
       const finalProject = {
         ...updatedProject,
         id: resData.project.project_id,
+        status: resData.project.status_of_construction_phase || updatedProject.status,
+        procurement_status: resData.project.procurement_status || updatedProject.procurement_status,
+        procurementStatus: resData.project.procurement_status || updatedProject.procurementStatus,
+        accomplishmentPercentage: Number(resData.project.accomplishment_percentage ?? updatedProject.accomplishmentPercentage),
         otherRemarks: resData.project.other_remarks,
         mother_moa_id: resData.project.mother_moa_id,
         supplamental_moa_id: resData.project.supplamental_moa_id,
@@ -937,7 +941,7 @@ const EngineerProjects = () => {
         project_category_id: resData.project.project_category_id,
         projectCategory: resData.project.project_category || updatedProject.projectCategory,
         savings: resData.project.savings,
-        statusAsOf: resData.project.statusAsOf || resData.project.status_as_of,
+        statusAsOf: resData.project.status_as_of || resData.project.statusAsOf || updatedProject.statusAsOf,
       };
 
       // Online Upload Images
@@ -964,7 +968,10 @@ const EngineerProjects = () => {
         }
       }
       
-      setProjects(prev => prev.map(p => p.id === updatedProject.id ? finalProject : p));
+      const updatedList = projects.map(p => p.id === updatedProject.id ? finalProject : p);
+      setProjects(updatedList);
+      await cacheProjects(updatedList); // PERSIST TO CACHE
+
       alert("✅ SUCCESS\n\nProject updates and site photos have been synced.");
       setInternalFiles([]);
       setExternalFiles([]);

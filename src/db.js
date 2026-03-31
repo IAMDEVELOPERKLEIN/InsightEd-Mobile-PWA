@@ -156,6 +156,16 @@ export async function getCachedProjects() {
 }
 
 /**
+ * Clears the entire projects cache (e.g., on logout to prevent cross-user data leakage)
+ */
+export async function clearProjectsCache() {
+  const db = await initDB();
+  const tx = db.transaction(PROJECTS_STORE, 'readwrite');
+  await tx.objectStore(PROJECTS_STORE).clear();
+  return tx.done;
+}
+
+/**
  * Caches gallery images for a specific project
  * @param {string} projectId 
  * @param {Array} images - List of image objects/urls
