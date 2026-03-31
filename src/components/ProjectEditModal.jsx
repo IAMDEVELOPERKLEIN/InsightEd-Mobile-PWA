@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { FiX, FiCheck, FiChevronRight } from 'react-icons/fi';
+import LocationPickerMap from './LocationPickerMap';
+
 
 /**
  * ProjectEditModal
@@ -66,6 +68,9 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
     const [internalFiles, setInternalFiles] = useState([]);
     const [externalFiles, setExternalFiles] = useState([]);
     const [activePhotoCategory, setActivePhotoCategory] = useState('Internal');
+    const [isCheckingSchool, setIsCheckingSchool] = useState(false);
+    const [isSchoolChecked, setIsSchoolChecked] = useState(false);
+    const [lookupOptions, setLookupOptions] = useState({ provinces: [], municipalities: [], legDistricts: [], fundingYears: [] });
     const bodyRef = useRef(null);
     const internalInputRef = useRef(null);
     const externalInputRef = useRef(null);
@@ -130,6 +135,16 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
             });
             setRealignForm({ targetIpc: '', justification: '' });
             setRealignCandidates([]);
+            setIsSchoolChecked(!!project.schoolId);
+            
+            // Load initial dropdown options
+            fetch('/api/reference/funding-years').then(r => r.json()).then(years => setLookupOptions(prev => ({ ...prev, fundingYears: years }))).catch(() => {});
+            
+            if (project.province) {
+                // If we have a province, maybe try to load its municipalities if needed, 
+                // but usually for edit we just show existing text. 
+                // For the "Check School" flow we want them as dropdowns.
+            }
         }
     }, [isOpen, project?.id]);
 
@@ -215,6 +230,63 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
         }
     };
 
+    const handleCheckSchool = async () => {
+        const schoolId = formData.schoolId;
+        if (!schoolId || schoolId.length !== 6) {
+            alert("Please enter a valid 6-digit School ID.");
+            return;
+        }
+
+        setIsCheckingSchool(true);
+        try {
+            const response = await fetch(`/api/schools_iern/${schoolId}`);
+            
+            if (response.status === 404) {
+                alert("School ID not found. Please contact us in support.stride@deped.gov.ph");
+                setIsCheckingSchool(false);
+                return;
+            }
+
+            const result = await response.json();
+
+            if (result.exists && result.data) {
+                const data = result.data;
+                const newSchoolName = data.School_Name || data.SchoolName || data.school_name || formData.schoolName;
+                const region = data.Region || data.region;
+
+                setFormData(prev => ({
+                    ...prev,
+                    schoolName: newSchoolName,
+                    latitude: data.Latitude || data.latitude || prev.latitude,
+                    longitude: data.Longitude || data.longitude || prev.longitude,
+                    province: data.Province || data.province || prev.province,
+                    municipality: data.Municipality || data.municipality || prev.municipality,
+                    legislative_district: data.Legislative_District || data.LegislativeDistrict || data.legislative_district || prev.legislative_district,
+                }));
+                setIsSchoolChecked(true);
+
+                // Fetch options for dropdowns based on the found school's region/province
+                if (region) {
+                    const province = data.Province || data.province;
+                    Promise.all([
+                        fetch(`/api/locations/provinces?region=${encodeURIComponent(region)}`).then(r => r.json()),
+                        fetch(`/api/locations/leg-districts?region=${encodeURIComponent(region)}`).then(r => r.json()),
+                        fetch(`/api/locations/municipalities-by-province?region=${encodeURIComponent(region)}&province=${encodeURIComponent(province || '')}`).then(r => r.json())
+                    ]).then(([provinces, legDistricts, municipalities]) => {
+                        setLookupOptions(prev => ({ ...prev, provinces, legDistricts, municipalities }));
+                    }).catch(err => console.error("Error fetching location options:", err));
+                }
+            } else {
+                alert("School ID not found. Please contact us in support.stride@deped.gov.ph");
+            }
+        } catch (error) {
+            console.error("Check School Error:", error);
+            alert("Failed to fetch school details. Please check your connection.");
+        } finally {
+            setIsCheckingSchool(false);
+        }
+    };
+
     // ---- Details Steps renderer ----
     const renderDetailsStep = () => {
         switch (detailsStep) {
@@ -227,10 +299,37 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                         </Field>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <Field label="School ID">
-                                <input name="schoolId" value={formData.schoolId} onChange={handleChange} className={inputCls} />
+                                <div className="relative">
+                                    <input 
+                                        name="schoolId" 
+                                        value={formData.schoolId} 
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                                            setFormData(p => ({ ...p, schoolId: val }));
+                                        }} 
+                                        className={inputCls + " pr-24"} 
+                                        placeholder="6-digit ID"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleCheckSchool}
+                                        disabled={isCheckingSchool || formData.schoolId?.length !== 6}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all shadow-sm"
+                                    >
+                                        {isCheckingSchool ? '...' : 'Check'}
+                                    </button>
+                                </div>
                             </Field>
                             <Field label="School Name">
-                                <input name="schoolName" value={formData.schoolName} onChange={handleChange} className={inputCls} />
+                                <input 
+                                    name="schoolName" 
+                                    value={formData.schoolName} 
+                                    onChange={handleChange} 
+                                    className={`${inputCls} ${isSchoolChecked ? 'bg-slate-50 text-slate-500 cursor-not-allowed border-dashed' : ''}`} 
+                                    placeholder="School name" 
+                                    disabled={isSchoolChecked}
+                                />
+                                {isSchoolChecked && <p className="text-[9px] text-blue-500 font-bold mt-1 uppercase tracking-tighter">✓ Locked via Registry</p>}
                             </Field>
                         </div>
                         <Field label="Category">
@@ -247,7 +346,14 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                                 </select>
                             </Field>
                             <Field label="Funding Year">
-                                <input name="funding_year" value={formData.funding_year} onChange={handleChange} className={inputCls} />
+                                <select name="funding_year" value={formData.funding_year} onChange={handleChange} className={inputCls}>
+                                    <option value="">Select Year...</option>
+                                    {lookupOptions.fundingYears.length > 0 ? (
+                                        lookupOptions.fundingYears.map(y => <option key={y} value={y}>{y}</option>)
+                                    ) : (
+                                        [2021, 2022, 2023, 2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)
+                                    )}
+                                </select>
                             </Field>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -289,7 +395,7 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                         </div>
 
                         <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Contract Award</p>
+                            <p className="text-[8px] font-black tracking-widest text-slate-400 mb-1">STEP {detailsStep} / 7 — {DETAILS_STEPS[detailsStep - 1].desc.toUpperCase()}</p>
                             <Field label="Contract ID">
                                 <input name="contractId" value={formData.contractId} onChange={handleChange} className={inputCls} placeholder="Contract reference number" />
                             </Field>
@@ -341,6 +447,23 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
             case 4:
                 return (
                     <div className="space-y-4">
+                        <div className="rounded-2xl border-2 border-slate-100 overflow-hidden bg-slate-50 shadow-sm transition-all hover:border-slate-200">
+                            <div className="p-2.5 bg-white border-b border-slate-100 flex items-center justify-between">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">📍 Site Map Picker</span>
+                                <span className="text-[9px] text-blue-500 font-bold uppercase tracking-tighter bg-blue-50 px-2 py-0.5 rounded-full">Interactive</span>
+                            </div>
+                            <div className="h-[280px]">
+                                <LocationPickerMap 
+                                    latitude={formData.latitude} 
+                                    longitude={formData.longitude} 
+                                    onChange={(lat, lng) => {
+                                        setFormData(prev => ({ ...prev, latitude: lat.toFixed(6), longitude: lng.toFixed(6) }));
+                                    }}
+                                    className="h-full border-none rounded-none"
+                                />
+                            </div>
+                        </div>
+
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <Field label="Latitude">
                                 <input type="text" name="latitude" value={formData.latitude} onChange={handleChange} className={inputCls + " font-mono"} placeholder="e.g. 14.5995" />
@@ -350,13 +473,34 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                             </Field>
                         </div>
                         <Field label="Province">
-                            <input name="province" value={formData.province} onChange={handleChange} className={inputCls} />
+                            {lookupOptions.provinces.length > 0 ? (
+                                <select name="province" value={formData.province} onChange={handleChange} className={inputCls}>
+                                    <option value="">Select Province...</option>
+                                    {lookupOptions.provinces.map(p => <option key={p} value={p}>{p}</option>)}
+                                </select>
+                            ) : (
+                                <input name="province" value={formData.province} onChange={handleChange} className={inputCls} placeholder="Province" />
+                            )}
                         </Field>
                         <Field label="Municipality / City">
-                            <input name="municipality" value={formData.municipality} onChange={handleChange} className={inputCls} />
+                            {lookupOptions.municipalities.length > 0 ? (
+                                <select name="municipality" value={formData.municipality} onChange={handleChange} className={inputCls}>
+                                    <option value="">Select Municipality...</option>
+                                    {lookupOptions.municipalities.map(m => <option key={m} value={m}>{m}</option>)}
+                                </select>
+                            ) : (
+                                <input name="municipality" value={formData.municipality} onChange={handleChange} className={inputCls} placeholder="Municipality / City" />
+                            )}
                         </Field>
                         <Field label="Legislative District">
-                            <input name="legislative_district" value={formData.legislative_district} onChange={handleChange} className={inputCls} />
+                            {lookupOptions.legDistricts.length > 0 ? (
+                                <select name="legislative_district" value={formData.legislative_district} onChange={handleChange} className={inputCls}>
+                                    <option value="">Select District...</option>
+                                    {lookupOptions.legDistricts.map(d => <option key={d} value={d}>{d}</option>)}
+                                </select>
+                            ) : (
+                                <input name="legislative_district" value={formData.legislative_district} onChange={handleChange} className={inputCls} placeholder="Legislative District" />
+                            )}
                         </Field>
                     </div>
                 );
@@ -364,9 +508,9 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
             // STEP 5: DOCUMENTATION
             case 5: {
                 const DOCS = [
-                    { key: 'POW', label: 'Program of Works / POW', icon: '📐', desc: 'Upload the Program of Works or Progress of Work PDF', hasExisting: project.hasPow || project.pow_pdf },
+                    { key: 'POW', label: 'Program of Works / POW', icon: '📋', desc: 'Upload the Program of Works or Progress of Work PDF', hasExisting: project.hasPow || project.pow_pdf },
                     { key: 'DUPA', label: 'DUPA', icon: '📊', desc: 'Detailed Unit Price Analysis document', hasExisting: project.hasDupa || project.dupa_pdf },
-                    { key: 'CONTRACT', label: 'Signed Contract', icon: '✍️', desc: 'Signed Contract Agreement / Agreement Document', hasExisting: project.hasContract || project.contract_pdf },
+                    { key: 'CONTRACT', label: 'Signed Contract', icon: '⚖️', desc: 'Signed Contract Agreement / Agreement Document', hasExisting: project.hasContract || project.contract_pdf },
                 ];
                 return (
                     <div className="space-y-4">
@@ -409,6 +553,73 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                                 )}
                             </div>
                         ))}
+                    </div>
+                );
+            }
+
+            // STEP 7: SITE PHOTOS
+            case 7: {
+                const activeFiles = activePhotoCategory === 'Internal' ? internalFiles : externalFiles;
+                return (
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-3 p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
+                            <span className="text-2xl">📸</span>
+                            <div>
+                                <p className="text-xs font-black text-slate-700">Progress Photos</p>
+                                <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">Attach internal and external site photos to document progress.</p>
+                            </div>
+                        </div>
+
+                        <div className="flex p-1 bg-slate-100 rounded-2xl gap-1">
+                            {['Internal', 'External'].map(cat => {
+                                const count = cat === 'Internal' ? internalFiles.length : externalFiles.length;
+                                return (
+                                    <button key={cat} onClick={() => setActivePhotoCategory(cat)}
+                                        className={`flex-1 py-2 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1.5 ${activePhotoCategory === cat ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-white/50'}`}>
+                                        {cat === 'Internal' ? '🏗️' : '🌳'} {cat}
+                                        {count > 0 && <span className="bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full text-[9px] font-black">{count}</span>}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <div className={`border-2 rounded-3xl overflow-hidden border-${activePhotoCategory === 'Internal' ? 'blue' : 'emerald'}-100`}>
+                            {activeFiles.length > 0 ? (
+                                <div className="grid grid-cols-3 gap-2 p-3">
+                                    {activeFiles.map((file, i) => (
+                                        <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-slate-100 group">
+                                            <img src={URL.createObjectURL(file)} alt="" className="w-full h-full object-cover" />
+                                            <button 
+                                                onClick={() => {
+                                                    const setter = activePhotoCategory === 'Internal' ? setInternalFiles : setExternalFiles;
+                                                    setter(p => p.filter((_, idx) => idx !== i));
+                                                }}
+                                                className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="py-8 text-center text-slate-300">
+                                    <p className="text-3xl mb-1">📸</p>
+                                    <p className="text-[10px] font-black uppercase tracking-widest">No photos attached</p>
+                                </div>
+                            )}
+
+                            <div className="flex gap-2 p-3 pt-0">
+                                <button onClick={() => (activePhotoCategory === 'Internal' ? internalInputRef : externalInputRef).current.click()}
+                                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 text-slate-500 text-[10px] font-black uppercase hover:bg-slate-100 transition-all`}>
+                                    Upload File
+                                </button>
+                            </div>
+                        </div>
+
+                        <input ref={internalInputRef} type="file" accept="image/*" multiple className="hidden" 
+                            onChange={e => setInternalFiles(p => [...p, ...Array.from(e.target.files)])} />
+                        <input ref={externalInputRef} type="file" accept="image/*" multiple className="hidden" 
+                            onChange={e => setExternalFiles(p => [...p, ...Array.from(e.target.files)])} />
                     </div>
                 );
             }
@@ -458,9 +669,7 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                                     <button key={s.id} onClick={() => setDetailsStep(s.id)}
                                         className={`flex flex-col items-center gap-0.5 group transition-all ${detailsStep === s.id ? 'scale-105' : 'opacity-50 hover:opacity-70'}`}
                                     >
-                                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm border-2 transition-all ${detailsStep === s.id ? 'bg-blue-600 border-blue-600 text-white' : detailsStep > s.id ? 'bg-emerald-100 border-emerald-400 text-emerald-700' : 'bg-white border-slate-200 text-slate-400'}`}>
                                             {detailsStep > s.id ? '✓' : s.icon}
-                                        </div>
                                         <span className={`text-[8px] font-black uppercase tracking-widest hidden sm:block ${detailsStep === s.id ? 'text-blue-600' : 'text-slate-400'}`}>{s.label}</span>
                                     </button>
                                 ))}
@@ -572,7 +781,7 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                         <>
                             {detailsStep > 1 ? (
                                 <button onClick={() => setDetailsStep(s => s - 1)} className="flex items-center gap-2 px-5 py-3 bg-slate-100 text-slate-600 rounded-2xl text-xs font-bold hover:bg-slate-200 transition-all">
-                                    ← Back
+                                    â† Back
                                 </button>
                             ) : (
                                 <button onClick={onClose} className="flex items-center gap-2 px-5 py-3 bg-slate-100 text-slate-600 rounded-2xl text-xs font-bold hover:bg-slate-200 transition-all">
@@ -620,3 +829,4 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
 };
 
 export default ProjectEditModal;
+
