@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { FiX, FiCheck, FiCamera, FiUpload, FiAlertCircle, FiChevronRight, FiChevronLeft } from 'react-icons/fi';
+import { FiX, FiCheck, FiCamera, FiUpload, FiAlertCircle } from 'react-icons/fi';
 
 // STATUS ENUMS
 const ProcurementStatus = {
@@ -57,18 +57,13 @@ const REASON_OPTIONS = {
     ],
 };
 
-const STEPS_CONSTRUCTION = [
-    { id: 1, label: "Status", icon: "📊" },
-    { id: 2, label: "Media", icon: "📸" },
-    { id: 3, label: "Validate", icon: "📋" },
-    { id: 4, label: "Confirm", icon: "✅" },
-];
-
-const STEPS_PROCUREMENT = [
-    { id: 1, label: "Status", icon: "📊" },
-    { id: 2, label: "Bidding", icon: "⚖️" },
-    { id: 3, label: "Contract", icon: "📜" },
-    { id: 4, label: "Confirm", icon: "✅" },
+// SINGLE STEPS ARRAY — skip logic in handleNextStep/handlePrevStep
+const STEPS = [
+    { id: 1, label: "Procurement", icon: "🔄" },
+    { id: 2, label: "Construction", icon: "🏗️" },
+    { id: 3, label: "Accomplishment", icon: "📸" },
+    { id: 4, label: "Checklist", icon: "📋" },
+    { id: 5, label: "Confirm", icon: "✅" },
 ];
 
 const PHOTO_DESCRIPTIONS = {
@@ -102,7 +97,7 @@ const BIDDING_MILESTONES = [
     { key: 'contractSigning', label: 'Contract Signing' },
 ];
 
-const PhotoCard = ({ categoryColor, photoDB, activePreviews, activePhotoCategory, removePhoto, internalCameraRef, externalCameraRef, internalInputRef, externalInputRef }) => {
+const PhotoCard = ({ categoryColor, activePreviews, activePhotoCategory, removePhoto, internalCameraRef, externalCameraRef, internalInputRef, externalInputRef }) => {
     const isInternal = activePhotoCategory === 'Internal';
     const cameraRef = isInternal ? internalCameraRef : externalCameraRef;
     const inputRef = isInternal ? internalInputRef : externalInputRef;
@@ -155,23 +150,20 @@ const PhotoCard = ({ categoryColor, photoDB, activePreviews, activePhotoCategory
 };
 
 const UpdateProjectWizard = ({ project, onSave, onClose, isOpen }) => {
-    // Mode Logic (Static - Based on DB)
-    const isProcurementMode = project?.statusDesignPhase !== "Completed";
-    const STEPS = isProcurementMode ? STEPS_PROCUREMENT : STEPS_CONSTRUCTION;
-    
-    // States - Always called
+    // States
     const [step, setStep] = useState(1);
     const [isUploading, setIsUploading] = useState(false);
     const [activePhotoCategory, setActivePhotoCategory] = useState('Internal');
 
-    // Form Data - Safe initial values
+    // Form Data
     const [procurementStatus, setProcurementStatus] = useState(project?.procurementStatus || "");
-    const [constructionStatus, setConstructionStatus] = useState(project?.status || "");
+    const [constructionStatus, setConstructionStatus] = useState(project?.status || ConstructionStatus.NotYetStarted);
     const [percentage, setPercentage] = useState(project?.percentage || 0);
     const [actualCompletionDate, setActualCompletionDate] = useState(project?.actualCompletionDate || "");
     const [statusAsOfDate, setStatusAsOfDate] = useState(new Date().toISOString());
     const [remarks, setRemarks] = useState("");
     const [selectedReasons, setSelectedReasons] = useState([]);
+    const [checkedState, setCheckedState] = useState({});
 
     // Reset reasons when status changes
     useEffect(() => {
@@ -232,25 +224,28 @@ const UpdateProjectWizard = ({ project, onSave, onClose, isOpen }) => {
     useEffect(() => {
         if (isOpen && project) {
             setStep(1);
-            setProcurementStatus(project.procurement_status || "");
-            setConstructionStatus((project.status === ConstructionStatus.NotYetStarted || !project.status) ? "" : project.status); // Force placeholder if not yet started
-            setPercentage(Number(project.accomplishmentPercentage || 0));
+            setIsUploading(false); // <--- RESET LOADING STATE ON STEP RESET
+            setProcurementStatus(project.procurement_status || project.procurementStatus || "");
+            setConstructionStatus(project.status || ConstructionStatus.NotYetStarted);
+            setPercentage(Number(project.accomplishmentPercentage || project.accomplishment_percentage || 0));
             setRemarks('');
-            setStatusAsOf(new Date().toISOString());
+            setStatusAsOfDate(new Date().toISOString());
             setActualCompletionDate(project.actualCompletionDate || '');
             const saved = project.checklist;
             setCheckedState((saved && typeof saved === 'object' && !Array.isArray(saved)) ? saved : {});
             setInternalFiles([]);
-            setInternalPreviews([]);
             setExternalFiles([]);
-            setExternalPreviews([]);
+            setActivePreviews({ Internal: [], External: [] });
 
             setBiddingDates({
-                issuanceOfInvitationToBid: project.issuanceOfInvitationToBid || '',
-                preBidConference: project.preBidConference || '',
-                openingOfTechnicalProposal: project.openingOfTechnicalProposal || '',
-                openingOfFinancialProposal: project.openingOfFinancialProposal || '',
-                dateNoticeOfAward: project.dateNoticeOfAward || '',
+                preProcurement: project.preProcurementDate || '',
+                advertisement: project.adPostDate || '',
+                preBid: project.preBidConfDate || '',
+                submission: project.submissionOpeningBidsDate || '',
+                evaluation: project.bidEvalDate || '',
+                postQual: project.postQualDate || '',
+                noticeOfAward: project.noaDate || '',
+                contractSigning: project.contractSigningDate || '',
             });
 
             setContractAward({
@@ -280,6 +275,40 @@ const UpdateProjectWizard = ({ project, onSave, onClose, isOpen }) => {
         const task = checklist.find(t => t.id === parseInt(id));
         return acc + (task ? task.weight : 0);
     }, 0);
+
+    // Derived state for skip logic
+    const isProcurementComplete = procurementStatus === ProcurementStatus.ProcurementComplete;
+    const isConstructionActive = constructionStatus && constructionStatus !== ConstructionStatus.NotYetStarted;
+
+    // Compute only the steps visible in the stepper based on current selection
+    const visibleSteps = React.useMemo(() => {
+        const steps = [STEPS[0]]; // Procurement (always)
+        if (isProcurementComplete) {
+            steps.push(STEPS[1]); // Construction
+            if (isConstructionActive) {
+                steps.push(STEPS[2]); // Accomplishment
+                steps.push(STEPS[3]); // Checklist
+            }
+        }
+        steps.push(STEPS[4]); // Confirm (always)
+        return steps;
+    }, [isProcurementComplete, isConstructionActive]);
+
+    // Skip-aware navigation
+    const getNextStep = () => {
+        if (step === 1) return isProcurementComplete ? 2 : 5;
+        if (step === 2) return isConstructionActive ? 3 : 5;
+        return step + 1;
+    };
+
+    const getPrevStep = () => {
+        if (step === 5) {
+            if (!isProcurementComplete) return 1;
+            return isConstructionActive ? 4 : 2;
+        }
+        if (step === 3) return 2;
+        return step - 1;
+    };
 
     const handlePhotoSelect = (e, category) => {
         const files = Array.from(e.target.files);
@@ -314,81 +343,70 @@ const UpdateProjectWizard = ({ project, onSave, onClose, isOpen }) => {
         setPercentage(num);
         if (num === 0 && constructionStatus && constructionStatus !== ConstructionStatus.NotYetStarted) {
             setConstructionStatus(ConstructionStatus.NotYetStarted);
-        }
-        else if (num === 100 && constructionStatus !== ConstructionStatus.Completed) setConstructionStatus(ConstructionStatus.ForFinalInspection);
-        else if (num > 0 && num < 100 && [ConstructionStatus.Completed, ConstructionStatus.ForFinalInspection].includes(constructionStatus)) {
+        } else if (num === 100 && constructionStatus !== ConstructionStatus.Completed) {
+            setConstructionStatus(ConstructionStatus.ForFinalInspection);
+        } else if (num > 0 && num < 100 && [ConstructionStatus.Completed, ConstructionStatus.ForFinalInspection].includes(constructionStatus)) {
             setConstructionStatus(ConstructionStatus.Ongoing);
         }
     };
 
     const canProceedNext = () => {
-        // STEP 1: STATUS VALIDATION
         if (step === 1) {
-            if (isProcurementMode) {
-                if (!procurementStatus) return { ok: false, reason: "Please select a procurement status." };
-                if (REASON_OPTIONS[procurementStatus] && selectedReasons.length === 0) {
-                    return { ok: false, reason: "Please select at least one justification/reason." };
-                }
-            } else {
-                if (!constructionStatus) return { ok: false, reason: "Please select a construction status." };
-                if (REASON_OPTIONS[constructionStatus] && selectedReasons.length === 0) {
-                    return { ok: false, reason: "Please select at least one justification/reason." };
-                }
-                if (constructionStatus === ConstructionStatus.Completed && !actualCompletionDate) {
-                    return { ok: false, reason: "Please enter the Actual Completion Date." };
-                }
+            if (!procurementStatus) return { ok: false, reason: "Please select a procurement status." };
+            if (REASON_OPTIONS[procurementStatus] && selectedReasons.length === 0) {
+                return { ok: false, reason: "Please select at least one justification/reason." };
             }
             return { ok: true };
         }
-
-        if (isProcurementMode) {
+        if (step === 2) {
+            if (!constructionStatus) return { ok: false, reason: "Please select a construction status." };
+            if (REASON_OPTIONS[constructionStatus] && selectedReasons.length === 0) {
+                return { ok: false, reason: "Please select at least one justification/reason." };
+            }
+            if (constructionStatus === ConstructionStatus.Completed && !actualCompletionDate) {
+                return { ok: false, reason: "Please enter the Actual Completion Date." };
+            }
             return { ok: true };
         }
-        
-        // STEP 2: PHOTO VALIDATION (Construction only)
-        if (step === 2) {
-            const hasInternal = internalFiles.length > 0;
-            const hasExternal = externalFiles.length > 0;
+        if (step === 3) {
             const needsPhotos = [ConstructionStatus.Ongoing, ConstructionStatus.ForFinalInspection, ConstructionStatus.Completed].includes(constructionStatus);
-            
-            if (needsPhotos && (!hasInternal || !hasExternal)) {
+            if (needsPhotos && (internalFiles.length === 0 || externalFiles.length === 0)) {
                 let missing = [];
-                if (!hasInternal) missing.push("Internal");
-                if (!hasExternal) missing.push("External");
+                if (internalFiles.length === 0) missing.push("Internal");
+                if (externalFiles.length === 0) missing.push("External");
                 return { ok: false, reason: `Please upload both Internal and External photos for "${constructionStatus}" status. Missing: ${missing.join(" & ")}.` };
             }
         }
-
         return { ok: true };
     };
 
     const handleNextStep = () => {
         const check = canProceedNext();
         if (!check.ok) { alert(`⚠️ ${check.reason}`); return; }
-        setStep(s => s + 1);
+        setStep(getNextStep());
     };
 
     const handleSubmit = () => {
-        const check = canProceedNext();
-        if (!check.ok) { alert(`⚠️ ${check.reason}`); return; }
-        
-        const finalRemarks = selectedReasons.length > 0 
+        setIsUploading(true);
+        const finalRemarks = selectedReasons.length > 0
             ? `[Justification: ${selectedReasons.join(', ')}] ${remarks}`.trim()
             : remarks;
 
-        const finalIsCompleted = procurementStatus === ProcurementStatus.ProcurementComplete || !isProcurementMode;
-        
-        setIsUploading(true);
+        const finalStatus = isProcurementComplete ? constructionStatus : ConstructionStatus.NotYetStarted;
+        const finalPercentage = isProcurementComplete ? percentage : 0;
+
         onSave({
-            ...project, // Keep ID, schoolName, and other base fields
-            procurementStatus,
-            status: constructionStatus,
-            percentage,
+            ...project,
+            procurementStatus: procurementStatus,
+            procurement_status: procurementStatus,
+            status: finalStatus,
+            percentage: finalPercentage,
+            accomplishmentPercentage: finalPercentage,
             actualCompletionDate,
             statusAsOfDate,
             remarks: finalRemarks,
-            statusDesignPhase: finalIsCompleted ? "Completed" : (project?.statusDesignPhase || "Ongoing"),
-            triangulatedPercentage,
+            statusDesignPhase: isProcurementComplete ? "Completed" : (project?.statusDesignPhase || "Ongoing"),
+            triangulatedPercentage: isProcurementComplete ? triangulatedPercentage : 0,
             ...biddingDates,
             ...contractAward,
             ...details
@@ -420,7 +438,8 @@ const UpdateProjectWizard = ({ project, onSave, onClose, isOpen }) => {
     };
 
     const procCols = getStatusColor(procurementStatus);
-    const constCols = getStatusColor(constructionStatus);
+    const displayedConstructionStatus = isProcurementComplete ? constructionStatus : ConstructionStatus.NotYetStarted;
+    const constCols = getStatusColor(displayedConstructionStatus);
 
     const categoryColor = activePhotoCategory === 'Internal'
         ? { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', icon: 'text-blue-500', iconBg: 'bg-blue-100' }
@@ -446,15 +465,15 @@ const UpdateProjectWizard = ({ project, onSave, onClose, isOpen }) => {
                         </button>
                     </div>
 
-                    {/* Progress Stepper */}
+                    {/* Progress Stepper — shows only relevant steps */}
                     <div className="flex items-center gap-1.5 px-0.5">
-                        {STEPS.map((s, idx) => (
+                        {visibleSteps.map((s, idx) => (
                             <React.Fragment key={s.id}>
-                                <div className="flex flex-col items-center gap-1 group">
-                                    <div className={`w-8 h-1 tracking-tighter rounded-full transition-all duration-500 ${step >= s.id ? 'bg-blue-600 w-12' : 'bg-slate-100 w-4'}`} />
+                                <div className="flex flex-col items-center gap-1">
+                                    <div className={`h-1 tracking-tighter rounded-full transition-all duration-500 ${step >= s.id ? 'bg-blue-600 w-12' : 'bg-slate-100 w-4'}`} />
                                     <span className={`text-[8px] font-black uppercase tracking-[0.1em] ${step === s.id ? 'text-blue-600' : 'text-slate-300'}`}>{s.label}</span>
                                 </div>
-                                {idx < STEPS.length - 1 && <div className="flex-1 h-[1px] bg-slate-50 mb-2.5 mx-1" />}
+                                {idx < visibleSteps.length - 1 && <div className="flex-1 h-[1px] bg-slate-50 mb-2.5 mx-1" />}
                             </React.Fragment>
                         ))}
                     </div>
@@ -463,412 +482,269 @@ const UpdateProjectWizard = ({ project, onSave, onClose, isOpen }) => {
                 {/* Scrollable Body */}
                 <div ref={bodyRef} className="flex-1 overflow-y-auto p-6 space-y-4">
 
-                    {!isProcurementMode ? (
-                        <>
-                            {/* CONSTRUCTION FLOW */}
-                            {/* STEP 1: STATUS */}
-                            {step === 1 && (
-                                <div className="space-y-6">
-                                    {/* Procurement Selector */}
-                                    <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                                        <div className="flex items-center justify-between ml-1">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Procurement Status</label>
-                                            {constructionStatus && constructionStatus !== ConstructionStatus.NotYetStarted && (
-                                                <span className="text-[8px] font-bold text-amber-500 uppercase tracking-wider mb-3">🔒 Locked (Construction Active)</span>
-                                            )}
-                                        </div>
-                                        <select
-                                            value={procurementStatus || ""}
-                                            onChange={(e) => setProcurementStatus(e.target.value)}
-                                            disabled={constructionStatus && constructionStatus !== ConstructionStatus.NotYetStarted}
-                                            className={`w-full border rounded-2xl p-3 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10 transition-all ${
-                                                (constructionStatus && constructionStatus !== ConstructionStatus.NotYetStarted)
-                                                    ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                                                    : 'bg-white border-slate-200 text-slate-700 cursor-pointer'
-                                            }`}
-                                        >
-                                            <option value="" disabled>— Please select —</option>
-                                            {PROCUREMENT_OPTIONS.map(opt => (
-                                                <option key={opt.value} value={opt.value}>{opt.icon} {opt.label}</option>
-                                            ))}
-                                        </select>
-                                    </div>
+                    {/* ── STEP 1: PROCUREMENT ── */}
+                    {step === 1 && (
+                        <div className="space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                            {/* Procurement Selector */}
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">Procurement Status</label>
+                                <select
+                                    value={procurementStatus || ""}
+                                    onChange={(e) => setProcurementStatus(e.target.value)}
+                                    className="w-full border rounded-2xl p-3 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10 transition-all bg-white border-slate-200 text-slate-700 cursor-pointer"
+                                >
+                                    <option value="" disabled>— Please select —</option>
+                                    {PROCUREMENT_OPTIONS.map(opt => (
+                                        <option key={opt.value} value={opt.value}>{opt.icon} {opt.label}</option>
+                                    ))}
+                                </select>
+                            </div>
 
-                                    {/* Procurement Justification */}
-                                    {REASON_OPTIONS[procurementStatus] && (
-                                        <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300 bg-blue-50/30 p-4 rounded-2xl border border-blue-100/50">
-                                            <label className="block text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 flex items-center gap-2">
-                                                <FiAlertCircle size={12} />
-                                                Procurement Justification:
-                                            </label>
-                                            <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
-                                                {REASON_OPTIONS[procurementStatus].map((reason, idx) => {
-                                                    const isSelected = selectedReasons.includes(reason);
-                                                    return (
-                                                        <label key={idx} className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer group ${isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
-                                                            <div className={`mt-0.5 w-4 h-4 rounded flex-shrink-0 border-2 transition-all flex items-center justify-center ${isSelected ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300'}`}>
-                                                                {isSelected && <FiCheck size={10} className="text-white" />}
-                                                                <input type="checkbox" className="hidden" checked={isSelected}
-                                                                    onChange={() => setSelectedReasons(prev => prev.includes(reason) ? prev.filter(r => r !== reason) : [...prev, reason])} />
-                                                            </div>
-                                                            <span className={`text-[10px] font-bold leading-relaxed ${isSelected ? 'text-blue-700' : 'text-slate-600'}`}>{reason}</span>
-                                                        </label>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Construction Selector Block (ONLY if Procurement Complete) */}
-                                    {procurementStatus === ProcurementStatus.ProcurementComplete && (
-                                        <div className="animate-in fade-in slide-in-from-top-2 duration-300 space-y-4">
-                                            <div className="flex items-center justify-between ml-1">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Construction Status</label>
-                                            </div>
-                                            <select
-                                                value={constructionStatus || ""}
-                                                onChange={(e) => handleConstructionChange(e.target.value)}
-                                                className="w-full border rounded-2xl p-3 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10 transition-all bg-white border-slate-200 text-slate-700 cursor-pointer"
-                                            >
-                                                <option value="" disabled>— Please select —</option>
-                                                {CONSTRUCTION_OPTIONS.map(opt => (
-                                                    <option 
-                                                        key={opt.value} 
-                                                        value={opt.value}
-                                                        disabled={
-                                                            (opt.value === ConstructionStatus.NotYetStarted && [ConstructionStatus.Ongoing, ConstructionStatus.ForFinalInspection, ConstructionStatus.Completed, ConstructionStatus.Suspended, ConstructionStatus.Terminated].includes(project?.status)) ||
-                                                            (opt.value === ConstructionStatus.Ongoing && [ConstructionStatus.ForFinalInspection, ConstructionStatus.Completed, ConstructionStatus.Terminated].includes(project?.status))
-                                                        }
-                                                    >
-                                                        {opt.icon} {opt.label}
-                                                    </option>
-                                                ))}
-                                            </select>
-
-                                            {/* Construction Justification */}
-                                            {REASON_OPTIONS[constructionStatus] && (
-                                                <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300 bg-amber-50/30 p-4 rounded-2xl border border-amber-100/50">
-                                                    <label className="block text-[10px] font-black text-amber-600 uppercase tracking-widest mb-3 flex items-center gap-2">
-                                                        <FiAlertCircle size={12} />
-                                                        Construction Justification:
-                                                    </label>
-                                                    <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
-                                                        {REASON_OPTIONS[constructionStatus].map((reason, idx) => {
-                                                            const isSelected = selectedReasons.includes(reason);
-                                                            return (
-                                                                <label key={idx} className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer group ${isSelected ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
-                                                                    <div className={`mt-0.5 w-4 h-4 rounded flex-shrink-0 border-2 transition-all flex items-center justify-center ${isSelected ? 'bg-amber-600 border-amber-600' : 'bg-white border-slate-300'}`}>
-                                                                        {isSelected && <FiCheck size={10} className="text-white" />}
-                                                                        <input type="checkbox" className="hidden" checked={isSelected}
-                                                                            onChange={() => setSelectedReasons(prev => prev.includes(reason) ? prev.filter(r => r !== reason) : [...prev, reason])} />
-                                                                    </div>
-                                                                    <span className={`text-[10px] font-bold leading-relaxed ${isSelected ? 'text-amber-700' : 'text-slate-600'}`}>{reason}</span>
-                                                                </label>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Accomplishment Slider */}
-                                            <div className={`p-4 rounded-2xl border ${constCols.bg} ${constCols.border} animate-in fade-in zoom-in-95 duration-300`}>
-                                                <div className="flex items-center justify-between mb-3">
-                                                    <label className={`text-[10px] font-black uppercase tracking-widest ${constCols.text}`}>Accomplishment %</label>
-                                                    <span className={`text-xl font-black tabular-nums ${constCols.text}`}>{percentage}%</span>
-                                                </div>
-                                                <input
-                                                    type="range" min="0" max="100" value={percentage}
-                                                    onChange={e => handlePercentageChange(e.target.value)}
-                                                    disabled={[ConstructionStatus.Completed, ConstructionStatus.ForFinalInspection, ConstructionStatus.Suspended, ConstructionStatus.Terminated].includes(constructionStatus)}
-                                                    className="w-full accent-blue-600"
-                                                />
-                                                <div className="flex justify-between text-[9px] text-slate-400 font-bold mt-1">
-                                                    {['0%', '25%', '50%', '75%', '100%'].map(l => <span key={l}>{l}</span>)}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Date and Remarks */}
-                                    <div className="space-y-4">
-                                        {constructionStatus === ConstructionStatus.Completed && (
-                                            <div>
-                                                <label className="block text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2">Actual Completion Date *</label>
-                                                <input type="date" value={actualCompletionDate} onChange={e => setActualCompletionDate(e.target.value)}
-                                                    max={new Date().toISOString().split('T')[0]}
-                                                    className="w-full p-3 rounded-2xl border-2 border-emerald-200 bg-emerald-50/30 text-sm font-bold text-slate-700 outline-none" />
-                                            </div>
-                                        )}
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Status As Of Date</label>
-                                            <input
-                                                type="date"
-                                                value={statusAsOfDate.split('T')[0]}
-                                                max={new Date().toISOString().split('T')[0]}
-                                                onChange={e => {
-                                                    const datePart = e.target.value;
-                                                    const timePart = new Date().toISOString().split('T')[1];
-                                                    setStatusAsOfDate(`${datePart}T${timePart}`);
-                                                }}
-                                                className="w-full p-3 rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-700 outline-none"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Remarks (Optional)</label>
-                                            <textarea rows={3} value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Add any notes..."
-                                                className="w-full p-3 rounded-2xl border border-slate-200 text-xs font-medium outline-none resize-none" />
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* STEP 2: PHOTOS */}
-                            {step === 2 && (
-                                <div className="space-y-4">
-                                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed px-1">
-                                        Attach internal and external site photos. Required for <span className="font-black text-blue-600">Ongoing, For Final Inspection, and Completed</span> statuses.
-                                    </p>
-                                    <div className="flex p-1 bg-slate-100 rounded-2xl gap-1">
-                                        {['Internal', 'External'].map(cat => {
-                                            const count = cat === 'Internal' ? internalFiles.length : externalFiles.length;
+                            {/* Procurement Justification */}
+                            {REASON_OPTIONS[procurementStatus] && (
+                                <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-blue-50/30 p-4 rounded-2xl border border-blue-100/50">
+                                    <label className="block text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                        <FiAlertCircle size={12} />
+                                        Justification:
+                                    </label>
+                                    <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+                                        {REASON_OPTIONS[procurementStatus].map((reason, idx) => {
+                                            const isSelected = selectedReasons.includes(reason);
                                             return (
-                                                <button key={cat} onClick={() => setActivePhotoCategory(cat)}
-                                                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activePhotoCategory === cat ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-white/50'}`}>
-                                                    {cat === 'Internal' ? '🏗️' : '🌳'} {cat}
-                                                    {count > 0 && <span className="bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full text-[9px] font-black">{count}</span>}
-                                                </button>
+                                                <label key={idx} className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
+                                                    <div className={`mt-0.5 w-4 h-4 rounded flex-shrink-0 border-2 transition-all flex items-center justify-center ${isSelected ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300'}`}>
+                                                        {isSelected && <FiCheck size={10} className="text-white" />}
+                                                        <input type="checkbox" className="hidden" checked={isSelected}
+                                                            onChange={() => setSelectedReasons(prev => prev.includes(reason) ? prev.filter(r => r !== reason) : [...prev, reason])} />
+                                                    </div>
+                                                    <span className={`text-[10px] font-bold leading-relaxed ${isSelected ? 'text-blue-700' : 'text-slate-600'}`}>{reason}</span>
+                                                </label>
                                             );
                                         })}
                                     </div>
-                                    <PhotoCard
-                                        categoryColor={categoryColor}
-                                        photoDB={photoDB}
-                                        activePreviews={activePreviews}
-                                        activePhotoCategory={activePhotoCategory}
-                                        removePhoto={removePhoto}
-                                        internalCameraRef={internalCameraRef}
-                                        externalCameraRef={externalCameraRef}
-                                        internalInputRef={internalInputRef}
-                                        externalInputRef={externalInputRef}
-                                    />
-                                    <input ref={internalInputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => handlePhotoSelect(e, 'Internal')} />
-                                    <input ref={internalCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handlePhotoSelect(e, 'Internal')} />
-                                    <input ref={externalInputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => handlePhotoSelect(e, 'External')} />
-                                    <input ref={externalCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handlePhotoSelect(e, 'External')} />
                                 </div>
                             )}
 
-                            {/* STEP 3: VALIDATION */}
-                            {step === 3 && (
-                                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                    <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
-                                        <div className="flex items-center justify-between mb-1">
-                                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">
-                                                Checklist Calculation
-                                            </p>
-                                            <span className="text-xl font-black text-blue-700">{triangulatedPercentage}%</span>
-                                        </div>
-                                        <p className="text-[9px] text-blue-400 font-bold mb-3">
-                                            {project?.numberOfStoreys || 1}-Storey building · {checklist.length} tasks
-                                        </p>
-                                        <div className="w-full bg-blue-100 rounded-full h-2 mb-3">
-                                            <div
-                                                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                                style={{ width: `${triangulatedPercentage}%` }}
-                                            />
-                                        </div>
-                                        <div className="flex items-center justify-between text-[9px] font-bold">
-                                            <span className="text-slate-500">Manual Progress: <span className="text-slate-700">{percentage}%</span></span>
-                                            {Math.abs(triangulatedPercentage - percentage) > 10 && (
-                                                <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                                                    ⚠ {Math.abs(triangulatedPercentage - percentage)}% variance
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        {checklist.map(task => (
-                                            <button
-                                                key={task.id}
-                                                onClick={() => setCheckedState(prev => ({ ...prev, [task.id]: !prev[task.id] }))}
-                                                className={`w-full flex items-center gap-3 p-3 rounded-2xl border text-left transition-all ${checkedState[task.id] ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-100 hover:border-slate-200'}`}
-                                            >
-                                                <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center shrink-0 transition-all ${checkedState[task.id] ? 'bg-emerald-500 border-emerald-500' : 'border-slate-200'}`}>
-                                                    {checkedState[task.id] && <FiCheck size={11} className="text-white" />}
-                                                </div>
-                                                <span className={`text-[11px] font-bold flex-1 leading-tight ${checkedState[task.id] ? 'text-emerald-700' : 'text-slate-600'}`}>
-                                                    {task.task}
-                                                </span>
-                                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full shrink-0 ${checkedState[task.id] ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-50 text-slate-400'}`}>
-                                                    {task.weight}%
-                                                </span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </>
-                    ) : (
-                        <>
-                            {/* PROCUREMENT FLOW */}
-                            {/* STEP 1: STATUS */}
-                            {step === 1 && (
-                                <div className="space-y-6">
-                                    {/* Procurement Selector */}
-                                    <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                                        <div className="flex items-center justify-between ml-1">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Procurement Status</label>
-                                            {constructionStatus && constructionStatus !== ConstructionStatus.NotYetStarted && (
-                                                <span className="text-[8px] font-bold text-amber-500 uppercase tracking-wider mb-3">🔒 Locked (Construction Active)</span>
-                                            )}
-                                        </div>
-                                        <select
-                                            value={procurementStatus || ""}
-                                            onChange={(e) => setProcurementStatus(e.target.value)}
-                                            disabled={constructionStatus && constructionStatus !== ConstructionStatus.NotYetStarted}
-                                            className={`w-full border rounded-2xl p-3 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10 transition-all ${
-                                                (constructionStatus && constructionStatus !== ConstructionStatus.NotYetStarted)
-                                                    ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                                                    : 'bg-white border-slate-200 text-slate-700 cursor-pointer'
-                                            }`}
-                                        >
-                                            <option value="" disabled>— Please select —</option>
-                                            {PROCUREMENT_OPTIONS.map(opt => (
-                                                <option key={opt.value} value={opt.value}>{opt.icon} {opt.label}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    {/* Procurement Justification */}
-                                    {REASON_OPTIONS[procurementStatus] && (
-                                        <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300 bg-blue-50/30 p-4 rounded-2xl border border-blue-100/50">
-                                            <label className="block text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 flex items-center gap-2">
-                                                <FiAlertCircle size={12} />
-                                                Procurement Justification:
-                                            </label>
-                                            <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
-                                                {REASON_OPTIONS[procurementStatus].map((reason, idx) => {
-                                                    const isSelected = selectedReasons.includes(reason);
-                                                    return (
-                                                        <label key={idx} className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer group ${isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
-                                                            <div className={`mt-0.5 w-4 h-4 rounded flex-shrink-0 border-2 transition-all flex items-center justify-center ${isSelected ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300'}`}>
-                                                                {isSelected && <FiCheck size={10} className="text-white" />}
-                                                                <input type="checkbox" className="hidden" checked={isSelected}
-                                                                    onChange={() => setSelectedReasons(prev => prev.includes(reason) ? prev.filter(r => r !== reason) : [...prev, reason])} />
-                                                            </div>
-                                                            <span className={`text-[10px] font-bold leading-relaxed ${isSelected ? 'text-blue-700' : 'text-slate-600'}`}>{reason}</span>
+                            {/* Bidding Milestones (Under Procurement only) */}
+                            {procurementStatus === ProcurementStatus.UnderProcurement && (
+                                <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                                    <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-4 text-center">Bidding Milestones</h4>
+                                    <div className="relative space-y-8">
+                                        <div className="absolute left-[15px] top-2 bottom-2 w-0.5 bg-blue-200 z-0"></div>
+                                        {BIDDING_MILESTONES.map((m, i) => {
+                                            const hasDate = !!biddingDates[m.key];
+                                            return (
+                                                <div key={m.key} className="relative z-10 flex flex-col gap-2">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all ${hasDate ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-300'}`}>
+                                                            {hasDate ? <FiCheck size={14} /> : <span className="text-[10px] font-black">{i + 1}</span>}
+                                                        </div>
+                                                        <label className={`text-[11px] font-black uppercase tracking-tight ${hasDate ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                            {m.label}
                                                         </label>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    )}
-                                    {/* Date and Remarks */}
-                                    <div className="space-y-4">
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Status As Of Date</label>
-                                            <input
-                                                type="date"
-                                                value={statusAsOfDate.split('T')[0]}
-                                                max={new Date().toISOString().split('T')[0]}
-                                                onChange={e => {
-                                                    const datePart = e.target.value;
-                                                    const timePart = new Date().toISOString().split('T')[1];
-                                                    setStatusAsOf(`${datePart}T${timePart}`);
-                                                }}
-                                                className="w-full p-3 rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-700 outline-none"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Remarks (Optional)</label>
-                                            <textarea rows={3} value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Add any notes..."
-                                                className="w-full p-3 rounded-2xl border border-slate-200 text-xs font-medium outline-none resize-none" />
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* STEP 2: BIDDING MILESTONES */}
-                            {step === 2 && (
-                                <div className="space-y-6">
-                                    <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
-                                        <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-4 text-center">Bidding Milestones</h4>
-                                        <div className="relative space-y-8">
-                                            {/* Progress Vertical Line */}
-                                            <div className="absolute left-[15px] top-2 bottom-2 w-0.5 bg-blue-200 z-0"></div>
-                                            
-                                            {BIDDING_MILESTONES.map((m, i) => {
-                                                const hasDate = !!biddingDates[m.key];
-                                                return (
-                                                    <div key={m.key} className="relative z-10 flex flex-col gap-2">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all ${hasDate ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-300'}`}>
-                                                                {hasDate ? <FiCheck size={14} /> : <span className="text-[10px] font-black">{i + 1}</span>}
-                                                            </div>
-                                                            <label className={`text-[11px] font-black uppercase tracking-tight ${hasDate ? 'text-slate-800' : 'text-slate-400'}`}>
-                                                                {m.label}
-                                                            </label>
-                                                        </div>
-                                                        <div className="pl-12">
-                                                            <input
-                                                                type="date"
-                                                                value={biddingDates[m.key]}
-                                                                onChange={(e) => setBiddingDates(prev => ({ ...prev, [m.key]: e.target.value }))}
-                                                                className={`w-full p-2.5 rounded-xl border text-xs font-bold outline-none transition-all ${hasDate ? 'border-blue-200 bg-white text-slate-800 shadow-sm' : 'border-slate-100 bg-slate-50/50 text-slate-400'}`}
-                                                            />
-                                                        </div>
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
+                                                    <div className="pl-12">
+                                                        <input
+                                                            type="date"
+                                                            value={biddingDates[m.key]}
+                                                            onChange={(e) => setBiddingDates(prev => ({ ...prev, [m.key]: e.target.value }))}
+                                                            className={`w-full p-2.5 rounded-xl border text-xs font-bold outline-none transition-all ${hasDate ? 'border-blue-200 bg-white text-slate-800 shadow-sm' : 'border-slate-100 bg-slate-50/50 text-slate-400'}`}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                    <p className="text-[10px] text-slate-400 text-center italic font-medium">Record the dates for each bidding stage to track procurement timeline.</p>
                                 </div>
                             )}
 
-                            {/* STEP 3: CONTRACT AWARD */}
-                            {step === 3 && (
-                                <div className="space-y-5">
-                                    <div className="bg-amber-50/50 p-5 rounded-3xl border border-amber-100/50">
-                                        <h4 className="text-[10px] font-black text-amber-600 uppercase tracking-[0.2em] mb-5">Contract Award & Financials</h4>
-                                        
-                                        <div className="space-y-4">
-                                            {[
-                                                { key: 'contractId', label: 'Contract-ID', placeholder: 'Enter Contract Ref ID', section: 'contract' },
-                                                { key: 'noticeToProceed', label: 'Notice to Proceed', type: 'date', section: 'contract' },
-                                                { key: 'constructionStartDate', label: 'Construction Start', type: 'date', section: 'contract' },
-                                                { key: 'targetCompletionDate', label: 'Target Completion Date', type: 'date', section: 'contract' },
-                                                { key: 'contractorName', label: 'Contractor Name', placeholder: 'Enter Contractor Name', section: 'contract' },
-                                                { key: 'projectAllocation', label: 'Approved Budget (ABC)', placeholder: 'Enter ABC', section: 'details' },
-                                                { key: 'contractAmount', label: 'Contract Amount', placeholder: 'Enter Contract Amount', section: 'details' },
-                                                { key: 'batchOfFunds', label: 'Batch of Funds', placeholder: 'Enter Batch', section: 'details' },
-                                            ].map(field => (
-                                                <div key={field.section + field.key} className="flex flex-col gap-1.5">
-                                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{field.label}</label>
-                                                    <input
-                                                        type={field.type || 'text'}
-                                                        value={field.section === 'contract' ? contractAward[field.key] : details[field.key]}
-                                                        placeholder={field.placeholder}
-                                                        onChange={(e) => {
-                                                            const val = e.target.value;
-                                                            if (field.section === 'contract') setContractAward(p => ({ ...p, [field.key]: val }));
-                                                            else setDetails(p => ({ ...p, [field.key]: val }));
-                                                        }}
-                                                        className="w-full p-3 rounded-2xl border border-slate-200 bg-white text-xs font-bold text-slate-700 outline-none focus:ring-4 focus:ring-amber-500/10 transition-all"
-                                                    />
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
+                            {/* Date and Remarks */}
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Status As Of Date</label>
+                                    <input
+                                        type="date"
+                                        value={statusAsOfDate.split('T')[0]}
+                                        max={new Date().toISOString().split('T')[0]}
+                                        onChange={e => {
+                                            const timePart = new Date().toISOString().split('T')[1];
+                                            setStatusAsOfDate(`${e.target.value}T${timePart}`);
+                                        }}
+                                        className="w-full p-3 rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-700 outline-none"
+                                    />
                                 </div>
-                            )}
-                        </>
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Remarks (Optional)</label>
+                                    <textarea rows={3} value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Add any notes..."
+                                        className="w-full p-3 rounded-2xl border border-slate-200 text-xs font-medium outline-none resize-none" />
+                                </div>
+                            </div>
+                        </div>
                     )}
 
-                    {/* STEP 4: CONFIRM (Unified) */}
-                    {step === STEPS.length && (
-                        <div className="space-y-4">
+                    {/* ── STEP 2: CONSTRUCTION ── */}
+                    {step === 2 && (
+                        <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            {/* Construction Status */}
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">Construction Status</label>
+                                <select
+                                    value={constructionStatus || ""}
+                                    onChange={(e) => handleConstructionChange(e.target.value)}
+                                    className="w-full border rounded-2xl p-3 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10 transition-all bg-white border-slate-200 text-slate-700 cursor-pointer"
+                                >
+                                    <option value="" disabled>— Please select —</option>
+                                    {CONSTRUCTION_OPTIONS.map(opt => (
+                                        <option
+                                            key={opt.value}
+                                            value={opt.value}
+                                            disabled={false}
+                                        >
+                                            {opt.icon} {opt.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Construction Justification */}
+                            {REASON_OPTIONS[constructionStatus] && (
+                                <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-amber-50/30 p-4 rounded-2xl border border-amber-100/50">
+                                    <label className="block text-[10px] font-black text-amber-600 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                        <FiAlertCircle size={12} />
+                                        Construction Justification:
+                                    </label>
+                                    <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+                                        {REASON_OPTIONS[constructionStatus].map((reason, idx) => {
+                                            const isSelected = selectedReasons.includes(reason);
+                                            return (
+                                                <label key={idx} className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${isSelected ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
+                                                    <div className={`mt-0.5 w-4 h-4 rounded flex-shrink-0 border-2 transition-all flex items-center justify-center ${isSelected ? 'bg-amber-600 border-amber-600' : 'bg-white border-slate-300'}`}>
+                                                        {isSelected && <FiCheck size={10} className="text-white" />}
+                                                        <input type="checkbox" className="hidden" checked={isSelected}
+                                                            onChange={() => setSelectedReasons(prev => prev.includes(reason) ? prev.filter(r => r !== reason) : [...prev, reason])} />
+                                                    </div>
+                                                    <span className={`text-[10px] font-bold leading-relaxed ${isSelected ? 'text-amber-700' : 'text-slate-600'}`}>{reason}</span>
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Actual Completion Date */}
+                            {constructionStatus === ConstructionStatus.Completed && (
+                                <div>
+                                    <label className="block text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2">Actual Completion Date *</label>
+                                    <input type="date" value={actualCompletionDate} onChange={e => setActualCompletionDate(e.target.value)}
+                                        max={new Date().toISOString().split('T')[0]}
+                                        className="w-full p-3 rounded-2xl border-2 border-emerald-200 bg-emerald-50/30 text-sm font-bold text-slate-700 outline-none" />
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── STEP 3: ACCOMPLISHMENT ── */}
+                    {step === 3 && (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            {/* Accomplishment Slider */}
+                            <div className={`p-4 rounded-2xl border ${constCols.bg} ${constCols.border}`}>
+                                <div className="flex items-center justify-between mb-3">
+                                    <label className={`text-[10px] font-black uppercase tracking-widest ${constCols.text}`}>Accomplishment %</label>
+                                    <span className={`text-xl font-black tabular-nums ${constCols.text}`}>{percentage}%</span>
+                                </div>
+                                <input
+                                    type="range" min="0" max="100" value={percentage}
+                                    onChange={e => handlePercentageChange(Number(e.target.value))}
+                                    disabled={[ConstructionStatus.Completed, ConstructionStatus.ForFinalInspection, ConstructionStatus.Suspended, ConstructionStatus.Terminated].includes(constructionStatus)}
+                                    className="w-full accent-blue-600"
+                                />
+                                <div className="flex justify-between text-[9px] text-slate-400 font-bold mt-1">
+                                    {['0%', '25%', '50%', '75%', '100%'].map(l => <span key={l}>{l}</span>)}
+                                </div>
+                            </div>
+
+                            {/* Photos */}
+                            <p className="text-[11px] text-slate-500 font-medium leading-relaxed px-1">
+                                Attach internal and external site photos. Required for <span className="font-black text-blue-600">Ongoing, For Final Inspection, and Completed</span> statuses.
+                            </p>
+                            <div className="flex p-1 bg-slate-100 rounded-2xl gap-1">
+                                {['Internal', 'External'].map(cat => {
+                                    const count = cat === 'Internal' ? internalFiles.length : externalFiles.length;
+                                    return (
+                                        <button key={cat} onClick={() => setActivePhotoCategory(cat)}
+                                            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activePhotoCategory === cat ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-white/50'}`}>
+                                            {cat === 'Internal' ? '🏗️' : '🌳'} {cat}
+                                            {count > 0 && <span className="bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full text-[9px] font-black">{count}</span>}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            <PhotoCard
+                                categoryColor={categoryColor}
+                                activePreviews={activePreviews}
+                                activePhotoCategory={activePhotoCategory}
+                                removePhoto={removePhoto}
+                                internalCameraRef={internalCameraRef}
+                                externalCameraRef={externalCameraRef}
+                                internalInputRef={internalInputRef}
+                                externalInputRef={externalInputRef}
+                            />
+                            <input ref={internalInputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => handlePhotoSelect(e, 'Internal')} />
+                            <input ref={internalCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handlePhotoSelect(e, 'Internal')} />
+                            <input ref={externalInputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => handlePhotoSelect(e, 'External')} />
+                            <input ref={externalCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handlePhotoSelect(e, 'External')} />
+                        </div>
+                    )}
+
+                    {/* ── STEP 4: CHECKLIST ── */}
+                    {step === 4 && (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                                <div className="flex items-center justify-between mb-1">
+                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Checklist Calculation</p>
+                                    <span className="text-xl font-black text-blue-700">{triangulatedPercentage}%</span>
+                                </div>
+                                <p className="text-[9px] text-blue-400 font-bold mb-3">
+                                    {project?.numberOfStoreys || 1}-Storey building · {checklist.length} tasks
+                                </p>
+                                <div className="w-full bg-blue-100 rounded-full h-2 mb-3">
+                                    <div className="bg-blue-600 h-2 rounded-full transition-all duration-300" style={{ width: `${triangulatedPercentage}%` }} />
+                                </div>
+                                <div className="flex items-center justify-between text-[9px] font-bold">
+                                    <span className="text-slate-500">Manual Progress: <span className="text-slate-700">{percentage}%</span></span>
+                                    {Math.abs(triangulatedPercentage - percentage) > 10 && (
+                                        <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                                            ⚠ {Math.abs(triangulatedPercentage - percentage)}% variance
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                {checklist.map(task => (
+                                    <button
+                                        key={task.id}
+                                        onClick={() => setCheckedState(prev => ({ ...prev, [task.id]: !prev[task.id] }))}
+                                        className={`w-full flex items-center gap-3 p-3 rounded-2xl border text-left transition-all ${checkedState[task.id] ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-100 hover:border-slate-200'}`}
+                                    >
+                                        <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center shrink-0 transition-all ${checkedState[task.id] ? 'bg-emerald-500 border-emerald-500' : 'border-slate-200'}`}>
+                                            {checkedState[task.id] && <FiCheck size={11} className="text-white" />}
+                                        </div>
+                                        <span className={`text-[11px] font-bold flex-1 leading-tight ${checkedState[task.id] ? 'text-emerald-700' : 'text-slate-600'}`}>
+                                            {task.task}
+                                        </span>
+                                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full shrink-0 ${checkedState[task.id] ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-50 text-slate-400'}`}>
+                                            {task.weight}%
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── STEP 5: CONFIRM ── */}
+                    {step === 5 && (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4">
                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Project</p>
                                 <p className="text-sm font-black text-slate-800 leading-snug">{project?.projectName}</p>
@@ -877,7 +753,6 @@ const UpdateProjectWizard = ({ project, onSave, onClose, isOpen }) => {
                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Changes Summary</p>
 
                             <div className="space-y-3">
-                                {/* Procurement Status Summary */}
                                 <div className={`p-3 rounded-2xl border ${procChanged ? `${procCols.bg} ${procCols.border}` : 'bg-slate-50 border-slate-100'}`}>
                                     <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Procurement Status</p>
                                     <div className="flex items-center gap-2">
@@ -888,33 +763,34 @@ const UpdateProjectWizard = ({ project, onSave, onClose, isOpen }) => {
                                     </div>
                                 </div>
 
-                                {/* Construction Status Summary */}
-                                <div className={`p-3 rounded-2xl border ${constChanged ? `${constCols.bg} ${constCols.border}` : 'bg-slate-50 border-slate-100'}`}>
-                                    <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Construction Status</p>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[10px] font-bold text-slate-500 line-through">{originalConstruction || 'N/A'}</span>
-                                        <span className="text-slate-300">→</span>
-                                        <span className={`text-[11px] font-black ${constCols.text}`}>{constructionStatus || 'NO CHANGE'}</span>
-                                        {constChanged && <span className={`ml-auto text-[8px] font-black px-2 py-0.5 rounded-full border bg-white border-current uppercase ${constCols.text}`}>Changed</span>}
-                                    </div>
-                                </div>
-
-                                {/* Progress Summary (Only if construction changed or started) */}
                                 {constructionStatus && (
-                                    <div className="p-3 rounded-2xl border bg-slate-50 border-slate-100">
-                                        <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Accomplishment</p>
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-[11px] font-black text-slate-700">{percentage}% manual</span>
-                                            {!isProcurementMode && (
-                                                <span className={`text-[11px] font-black ${Math.abs(triangulatedPercentage - percentage) > 10 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                                                    · {triangulatedPercentage}% checklist
-                                                </span>
-                                            )}
+                                    <div className={`p-3 rounded-2xl border ${constChanged ? `${constCols.bg} ${constCols.border}` : 'bg-slate-50 border-slate-100'}`}>
+                                        <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Construction Status</p>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] font-bold text-slate-500 line-through">{originalConstruction || 'N/A'}</span>
+                                            <span className="text-slate-300">→</span>
+                                            <span className={`text-[11px] font-black ${constCols.text}`}>
+                                                {displayedConstructionStatus}
+                                            </span>
+                                            {(constChanged || !isProcurementComplete) && <span className={`ml-auto text-[8px] font-black px-2 py-0.5 rounded-full border bg-white border-current uppercase ${constCols.text}`}>
+                                                {isProcurementComplete ? 'Changed' : 'Reset'}
+                                            </span>}
                                         </div>
                                     </div>
                                 )}
 
-                                {/* Photos Summary */}
+                                {isConstructionActive && (
+                                    <div className="p-3 rounded-2xl border bg-slate-50 border-slate-100">
+                                        <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Accomplishment</p>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-[11px] font-black text-slate-700">{percentage}% manual</span>
+                                            <span className={`text-[11px] font-black ${Math.abs(triangulatedPercentage - percentage) > 10 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                                · {triangulatedPercentage}% checklist
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className={`p-3 rounded-2xl border ${(internalFiles.length + externalFiles.length) > 0 ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-100'}`}>
                                     <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Site Photos</p>
                                     <span className="text-[11px] font-black text-blue-600">
@@ -938,14 +814,19 @@ const UpdateProjectWizard = ({ project, onSave, onClose, isOpen }) => {
 
                 {/* Footer */}
                 <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-3 shrink-0">
-                    <button onClick={step === 1 ? handleClose : () => setStep(s => s - 1)}
-                        className="flex items-center gap-2 px-5 py-3 bg-slate-100 text-slate-600 rounded-2xl text-xs font-bold">
+                    <button
+                        onClick={step === 1 ? handleClose : () => setStep(getPrevStep())}
+                        className="flex items-center gap-2 px-5 py-3 bg-slate-100 text-slate-600 rounded-2xl text-xs font-bold"
+                    >
                         {step === 1 ? "Cancel" : "← Back"}
                     </button>
 
-                    <button onClick={step < STEPS.length ? handleNextStep : handleSubmit} disabled={isUploading}
-                        className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider ${isUploading ? 'bg-slate-200 text-slate-400' : 'bg-blue-600 text-white shadow-lg shadow-blue-500/25 hover:-translate-y-0.5 active:scale-95'}`}>
-                        {isUploading ? "Saving..." : step < STEPS.length ? "Next" : "Submit Update"}
+                    <button
+                        onClick={step === 5 ? handleSubmit : handleNextStep}
+                        disabled={isUploading}
+                        className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider ${isUploading ? 'bg-slate-200 text-slate-400' : 'bg-blue-600 text-white shadow-lg shadow-blue-500/25 hover:-translate-y-0.5 active:scale-95'}`}
+                    >
+                        {isUploading ? "Saving..." : step === 5 ? "Submit Update" : "Next →"}
                     </button>
                 </div>
             </div>

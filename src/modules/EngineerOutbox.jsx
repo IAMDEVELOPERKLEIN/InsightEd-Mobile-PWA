@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getEngineerOutbox, deleteEngineerFromOutbox } from '../db';
+import { getEngineerOutbox, deleteEngineerFromOutbox, clearProjectsCache } from '../db';
 import BottomNav from './BottomNav';
 
 const EngineerOutbox = () => {
@@ -97,6 +97,11 @@ const EngineerOutbox = () => {
             }
         }
 
+        // After all items are synced, clear the projects cache to force fresh fetch on dashboard/list
+        if (items.length > 0) {
+            await clearProjectsCache();
+        }
+        
         setIsSyncing(false);
         loadItems();
     };

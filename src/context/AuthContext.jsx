@@ -1,5 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { clearProjectsCache } from '../db';
 
 const AuthContext = createContext(null);
 
@@ -97,6 +98,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem('userEmail');
         localStorage.removeItem('accountCategory');
         localStorage.removeItem('remembered_user');
+        clearProjectsCache().catch(err => console.warn('[AuthContext] Could not clear projects cache:', err));
         setUser(null);
     };
 

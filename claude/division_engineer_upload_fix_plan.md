@@ -27,13 +27,18 @@ Investigation revealed that `insighted-backend/api/index.js` is missing critical
   - Support multipart file uploads for POW/DUPA/CONTRACT.
 - **Image Uploads**: Update `POST /api/upload-image` to handle `multipart/form-data` and save images to disk.
 
+### [Frontend] src/components
+
+#### [MODIFY] [UpdateProjectWizard.jsx](file:///e:/InsightEd-Mobile-PWA/src/components/UpdateProjectWizard.jsx)
+- **State Reset**: Update the `useEffect` that resets the step to also reset `isUploading` to `false`. This prevents the "Saving..." state from persisting if the step is reset due to a project ID change.
+- **Improved Casing**: Standardize "Saving..." to "SAVING..." if needed, or ensure consistency with the design.
+
 ### [Frontend] src/modules
 
 #### [MODIFY] [EngineerProjects.jsx](file:///e:/InsightEd-Mobile-PWA/src/modules/EngineerProjects.jsx)
-- Update `fetchProjects` mapping to ensure `statusAsOf` correctly picks up the timestamp from the API response.
-
-#### [MODIFY] [DetailedProjInfo.jsx](file:///e:/InsightEd-Mobile-PWA/src/modules/DetailedProjInfo.jsx)
-- Update "Last Update" display to show both date and time if available.
+- **Loading State**: Ensure `setIsUploading(false)` is called in the `finally` block of `handleSaveProject` and all early return paths.
+- **Upload Optimization**: Consider moving the `setIsUpdateModalOpen(false)` call to *before* the image upload loop if images are handled in the background, or add a progress indicator for image uploads.
+- **Bug Fix (Line 863/868)**: Ensure `setIsUploading(false)` would be called if `setIsUploading(true)` was already set (though currently they return before setting it, which is fine but could be safer).
 
 ## Verification Plan
 
@@ -44,3 +49,4 @@ Investigation revealed that `insighted-backend/api/index.js` is missing critical
 1. **Document persistence**: Upload a POW/DUPA, perform a status update, and verify the documents are still there in the new version.
 2. **Image rendering**: Upload a photo and verify it displays (no "broken" icon).
 3. **Timestamp accuracy**: Perform an update and verify the "Last Update" time on the project card changes to the current time.
+4. **Saving Button**: Perform an update with multiple photos and verify the button shows "SAVING..." and the modal closes once finished (no jump back to Step 1 while stuck).

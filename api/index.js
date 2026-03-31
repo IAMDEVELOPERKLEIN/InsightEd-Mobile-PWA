@@ -941,11 +941,10 @@ const initDB = async () => {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             CONSTRAINT unique_project_docs_${dbLabel} UNIQUE(project_id)
           );
-          
-          await checkAndAddColumn('engineer_documents', 'pow_filename', 'TEXT');
-          await checkAndAddColumn('engineer_documents', 'dupa_filename', 'TEXT');
-          await checkAndAddColumn('engineer_documents', 'contract_filename', 'TEXT');
 
+          ALTER TABLE engineer_documents ADD COLUMN IF NOT EXISTS pow_filename TEXT;
+          ALTER TABLE engineer_documents ADD COLUMN IF NOT EXISTS dupa_filename TEXT;
+          ALTER TABLE engineer_documents ADD COLUMN IF NOT EXISTS contract_filename TEXT;
 
           CREATE TABLE IF NOT EXISTS engineer_mother_moa (
             mother_moa_id TEXT PRIMARY KEY,
@@ -6022,7 +6021,7 @@ app.get('/api/school-by-user/:uid', async (req, res) => {
 
   try {
     // 2. PRIMARY LOOKUP (By submitted_by)
-    const result = await pool.query('SELECT * FROM ph_schools /* school_profiles decommissioned */ WHERE submitted_by = $1', [uid]);
+    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
 
     if (result.rows.length > 0) {
       return res.json({ exists: true, data: result.rows[0] });
@@ -7420,7 +7419,7 @@ app.get('/api/school-head/:uid', async (req, res) => {
 app.get('/api/enrolment/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM ph_schools /* school_profiles decommissioned */ WHERE submitted_by = $1', [uid]);
+    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
     if (result.rows.length === 0) return res.json({ exists: false });
     res.json({ exists: true, data: result.rows[0], school_id: result.rows[0].school_id, curricular_offering: result.rows[0].curricular_offering });
   } catch (err) {
@@ -9185,8 +9184,11 @@ app.get('/api/projects', async (req, res) => {
             whereClauses.push(`TRIM(p.region) ILIKE TRIM($${queryParams.length})`);
           }
           if (userProfile.division) {
-            queryParams.push(userProfile.division.trim());
-            whereClauses.push(`TRIM(p.division) ILIKE TRIM($${queryParams.length})`);
+            // Normalize both sides: strip "SDO " / "Division of " prefixes so
+            // "SDO Benguet" in users matches "Benguet" in engineer_form (and vice-versa).
+            const normalizedDivision = userProfile.division.trim().replace(/^(SDO|Division of)\s+/i, '').trim();
+            queryParams.push(normalizedDivision);
+            whereClauses.push(`regexp_replace(TRIM(p.division), '^(SDO|Division of)\\s+', '', 'i') ILIKE $${queryParams.length}`);
           }
         } else {
           queryParams.push(engineer_id);
@@ -10895,7 +10897,7 @@ app.get('/api/buildable-spaces/:schoolId', async (req, res) => {
 app.get('/api/teacher-specialization/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM ph_schools /* school_profiles decommissioned */ WHERE submitted_by = $1', [uid]);
+    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
     if (result.rows.length === 0) return res.json({ exists: false });
 
     // DEBUG LOG
@@ -10910,7 +10912,7 @@ app.get('/api/teacher-specialization/:uid', async (req, res) => {
 app.get('/api/physical-facilities/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM ph_schools /* school_profiles decommissioned */ WHERE submitted_by = $1', [uid]);
+    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
     if (result.rows.length === 0) return res.json({ exists: false });
     res.json({ exists: true, data: result.rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }

@@ -2811,19 +2811,24 @@ app.post('/api/save-project-documents', async (req, res) => {
 });
 
 // --- 20. POST: Upload Project Image (Base64) ---
-app.post('/api/upload-image', async (req, res) => {
-  const { projectId, imageData, uploadedBy, category, ipc: providedIpc } = req.body;
+app.post('/api/upload-image', upload.single('image'), async (req, res) => {
+  let { projectId, imageData, uploadedBy, category, ipc: providedIpc } = req.body;
+  
+  // If multipart/form-data via multer, file is in req.file
+  if (req.file) {
+    const fileName = `${Date.now()}-${req.file.originalname}`;
+    const newPath = path.join(__dirname, '..', '..', 'uploads', fileName);
+    fs.renameSync(req.file.path, newPath);
+    imageData = `/uploads/${fileName}`; // Store the path instead of raw base64
+  }
+
   if (!projectId || !imageData) return res.status(400).json({ error: "Missing required data" });
 
   try {
     let finalIpc = providedIpc;
-
-    // If IPC is not provided, look it up from engineer_form
     if (!finalIpc) {
       const ipcResult = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [projectId]);
-      if (ipcResult.rows.length > 0) {
-        finalIpc = ipcResult.rows[0].ipc;
-      }
+      if (ipcResult.rows.length > 0) finalIpc = ipcResult.rows[0].ipc;
     }
 
     const query = `
@@ -2833,13 +2838,12 @@ app.post('/api/upload-image', async (req, res) => {
     `;
     const result = await pool.query(query, [projectId, imageData, uploadedBy, category || 'Internal', finalIpc]);
 
-    console.log(`📸 Image Saved: ID ${result.rows[0].id} for Project ${projectId} (IPC: ${finalIpc || 'N/A'}, Category: ${category || 'Internal'})`);
-
-    await logActivity(uploadedBy, 'Engineer', 'Engineer', 'UPLOAD', `Project ID: ${projectId}`, `Uploaded a new site image (${category || 'Internal'})`);
-    res.status(201).json({ success: true, imageId: result.rows[0].id });
+    console.log(`📸 Image Saved: ID ${result.rows[0].id} for Project ${projectId} (${imageData.startsWith('/') ? 'FILE' : 'BASE64'})`);
+    await logActivity(uploadedBy, 'Engineer', 'Engineer', 'UPLOAD', `Project ID: ${projectId}`, `Uploaded image: ${category || 'Internal'}`);
+    res.status(201).json({ success: true, imageId: result.rows[0].id, imageUrl: imageData });
   } catch (err) {
     console.error("❌ Image Upload Error:", err.message);
-    res.status(500).json({ error: "Failed to save image to database" });
+    res.status(500).json({ error: "Failed to save image" });
   }
 });
 
