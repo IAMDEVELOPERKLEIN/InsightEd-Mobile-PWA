@@ -160,6 +160,9 @@ const Register = () => {
     const [currentStep, setCurrentStep] = useState(1);
     const maxSteps = formData.role === 'School Head' ? 5 : (formData.role === 'EFD Engineer' ? 3 : 4);
 
+    // Track original location to allow undo
+    const [originalSchoolLocation, setOriginalSchoolLocation] = useState(null);
+
     // --- AUTH TAB STATE (Internal vs External) ---
     const [activeTab, setActiveTab] = useState(pathId === 'path_agencies' ? 'external' : 'internal');
 
@@ -418,8 +421,25 @@ const Register = () => {
         }
 
         const school = availableSchools.find(s => s.school_id === schoolId);
+        // Store original location for undo
+        if (school) {
+            setOriginalSchoolLocation({
+                latitude: school.latitude,
+                longitude: school.longitude
+            });
+        }
         // Create a copy so we can modify latitude/longitude without affecting the source data
         setSelectedSchool({ ...school });
+    };
+
+    const handleUndoLocation = () => {
+        if (originalSchoolLocation) {
+            setSelectedSchool(prev => ({
+                ...prev,
+                latitude: originalSchoolLocation.latitude,
+                longitude: originalSchoolLocation.longitude
+            }));
+        }
     };
 
     // --- OTP HANDLERS ---
@@ -1296,7 +1316,19 @@ const Register = () => {
                                                     <div className="space-y-2">
                                                         <div className="flex items-center justify-between px-1">
                                                             <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Refine School Position</h4>
-                                                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 animate-pulse">DRAG MARKER TO MOVE</span>
+                                                            <div className="flex items-center gap-2">
+                                                                {originalSchoolLocation && (parseFloat(selectedSchool.latitude) !== parseFloat(originalSchoolLocation.latitude) || parseFloat(selectedSchool.longitude) !== parseFloat(originalSchoolLocation.longitude)) && (
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={handleUndoLocation}
+                                                                        className="text-[10px] font-black text-white bg-rose-500 px-3 py-1 rounded-lg border border-rose-600 shadow-sm active:scale-95 transition-all flex items-center gap-1"
+                                                                    >
+                                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+                                                                        UNDO
+                                                                    </button>
+                                                                )}
+                                                                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 animate-pulse">DRAG MARKER TO MOVE</span>
+                                                            </div>
                                                         </div>
                                                         {selectedSchool.latitude && (
                                                             <div className="space-y-4">

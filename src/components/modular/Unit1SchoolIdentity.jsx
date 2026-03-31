@@ -105,6 +105,8 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         ownership_doc_id: null,
     });
 
+    const [originalSchoolLocation, setOriginalSchoolLocation] = useState(null);
+
     // ── School ID Unlock Safeguard ───────────────────────────────────────────
     const [isSchoolIdLocked, setIsSchoolIdLocked] = useState(true);
     const [showUnlockDialog, setShowUnlockDialog] = useState(false);
@@ -313,6 +315,13 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 setIsSchoolIdLocked(false);
             }
 
+            if (merged.latitude && merged.longitude) {
+                setOriginalSchoolLocation({
+                    latitude: merged.latitude,
+                    longitude: merged.longitude
+                });
+            }
+
             setIsModeLoading(false);
         };
         init();
@@ -480,6 +489,16 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             picker.setVisible(true);
         } else {
             alert("Google Picker not loaded. Please paste the link manually instead.");
+        }
+    };
+
+    const handleUndoLocation = () => {
+        if (originalSchoolLocation) {
+            setFormData(prev => ({
+                ...prev,
+                latitude: originalSchoolLocation.latitude,
+                longitude: originalSchoolLocation.longitude
+            }));
         }
     };
 
@@ -1195,6 +1214,12 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 <div className="space-y-2">
                                                     <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Date of Assignment</label>
                                                     <div className="grid grid-cols-3 gap-3">
+                                                        <select name="head_hired_year" value={formData.head_hired_year} onChange={handleChange} className={chunkySelect + " !text-sm text-left px-4"}>
+                                                            <option value="" disabled hidden>Year</option>
+                                                            {Array.from({ length: 70 }, (_, i) => (new Date().getFullYear() - i).toString()).map(y => (
+                                                                <option key={y} value={y}>{y}</option>
+                                                            ))}
+                                                        </select>
                                                         <select name="head_hired_month" value={formData.head_hired_month} onChange={handleChange} className={chunkySelect + " !text-sm text-left px-4"}>
                                                             <option value="" disabled hidden>Month</option>
                                                             {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, idx) => {
@@ -1206,15 +1231,28 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                         </select>
                                                         <select name="head_hired_day" value={formData.head_hired_day} onChange={handleChange} className={chunkySelect + " !text-sm text-left px-4"}>
                                                             <option value="" disabled hidden>Day</option>
-                                                            {Array.from({ length: 31 }, (_, i) => (i + 1).toString()).map(d => (
-                                                                <option key={d} value={d}>{d}</option>
-                                                            ))}
-                                                        </select>
-                                                        <select name="head_hired_year" value={formData.head_hired_year} onChange={handleChange} className={chunkySelect + " !text-sm text-left px-4"}>
-                                                            <option value="" disabled hidden>Year</option>
-                                                            {Array.from({ length: 70 }, (_, i) => (new Date().getFullYear() - i).toString()).map(y => (
-                                                                <option key={y} value={y}>{y}</option>
-                                                            ))}
+                                                            {(() => {
+                                                                const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                                                                const mIdx = monthNames.indexOf(formData.head_hired_month);
+                                                                const year = parseInt(formData.head_hired_year);
+                                                                
+                                                                let maxDays = 31;
+                                                                if (mIdx !== -1 && !isNaN(year)) {
+                                                                    maxDays = new Date(year, mIdx + 1, 0).getDate();
+                                                                }
+                                                                
+                                                                const currentYear = new Date().getFullYear();
+                                                                const currentMonth = new Date().getMonth();
+                                                                const currentDay = new Date().getDate();
+
+                                                                return Array.from({ length: maxDays }, (_, i) => (i + 1).toString()).map(d => {
+                                                                    const dayNum = parseInt(d);
+                                                                    const isFutureDay = formData.head_hired_year === currentYear.toString() && 
+                                                                                        mIdx === currentMonth && 
+                                                                                        dayNum > currentDay;
+                                                                    return <option key={d} value={d} disabled={isFutureDay}>{d}</option>;
+                                                                });
+                                                            })()}
                                                         </select>
                                                     </div>
                                                 </div>
@@ -1225,8 +1263,24 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
                                 {currentStep === 5 && (
                                     <div className="space-y-4 pb-20">
+                                        <div className="flex items-center justify-between px-1">
+                                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Refine School Position</h4>
+                                            <div className="flex items-center gap-2">
+                                                {originalSchoolLocation && (parseFloat(formData.latitude) !== parseFloat(originalSchoolLocation.latitude) || parseFloat(formData.longitude) !== parseFloat(originalSchoolLocation.longitude)) && (
+                                                    <button 
+                                                        type="button"
+                                                        onClick={handleUndoLocation}
+                                                        className="text-[10px] font-black text-white bg-rose-500 px-3 py-1 rounded-lg border border-rose-600 shadow-sm active:scale-95 transition-all flex items-center gap-1"
+                                                    >
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+                                                        UNDO
+                                                    </button>
+                                                )}
+                                                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 animate-pulse">DRAG MARKER TO MOVE</span>
+                                            </div>
+                                        </div>
                                         
-                                        <div className="h-48 rounded-[2rem] overflow-hidden border-2 border-gray-100 shadow-inner relative mt-4">
+                                        <div className="h-48 rounded-[2rem] overflow-hidden border-2 border-gray-100 shadow-inner relative mt-0">
                                             <LocationPickerMap
                                                 latitude={formData.latitude}
                                                 longitude={formData.longitude}
@@ -1248,6 +1302,17 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                         <div className="space-y-3">
                                             <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Year Established</label>
                                             <div className="grid grid-cols-2 gap-4">
+                                                <select
+                                                    name="established_year"
+                                                    value={formData.established_year}
+                                                    onChange={handleChange}
+                                                    className={chunkySelect}
+                                                >
+                                                    <option value="" disabled hidden style={{color: '#999'}}>Year...</option>
+                                                    {Array.from({ length: new Date().getFullYear() - 1900 + 1 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                                                        <option key={y} value={y}>{y}</option>
+                                                    ))}
+                                                </select>
                                                 <select 
                                                     name="established_month" 
                                                     value={formData.established_month} 
@@ -1261,17 +1326,6 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                         const isFuture = formData.established_year === currentYear.toString() && idx > currentMonth;
                                                         return <option key={m} value={m} disabled={isFuture}>{m}</option>;
                                                     })}
-                                                </select>
-                                                <select
-                                                    name="established_year"
-                                                    value={formData.established_year}
-                                                    onChange={handleChange}
-                                                    className={chunkySelect}
-                                                >
-                                                    <option value="" disabled hidden style={{color: '#999'}}>Year...</option>
-                                                    {Array.from({ length: new Date().getFullYear() - 1900 + 1 }, (_, i) => new Date().getFullYear() - i).map(y => (
-                                                        <option key={y} value={y}>{y}</option>
-                                                    ))}
                                                 </select>
                                             </div>
                                         </div>
