@@ -903,6 +903,7 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS head_date_hired            TEXT,
             ADD COLUMN IF NOT EXISTS unit1                      INTEGER DEFAULT 0,
             ADD COLUMN IF NOT EXISTS unit1_completed            BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS submitted_by               TEXT,
             ADD COLUMN IF NOT EXISTS unit1_updated_at           TIMESTAMP;
         `);
 
@@ -1271,7 +1272,65 @@ const runMigrations = async (client, dbLabel) => {
     // NOTE: Unit 7 condition & utility columns are now included in the
     // canonical ph_schools schema block above (migration #17). Removed
     // duplicate migrations #22 and #23.
-    
+
+    // --- 22. IPC INDEXING & BACKFILL ---
+    try {
+        // Ensure ipc column exists on engineer_image for older installs
+        await client.query(`ALTER TABLE engineer_image ADD COLUMN IF NOT EXISTS ipc TEXT;`);
+
+        // B-tree indices for fast IPC-based lookups across all asset tables
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_engineer_form_ipc      ON engineer_form(ipc);`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_engineer_image_ipc     ON engineer_image(ipc);`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_engineer_documents_ipc ON engineer_documents(ipc);`);
+
+        // Partial index: most IPC queries exclude null rows; this index is smaller and faster
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_engineer_form_ipc_partial ON engineer_form(ipc) WHERE ipc IS NOT NULL;`);
+
+        // Dedicated file_path column for disk-based images (image_data may still hold legacy base64)
+        await client.query(`ALTER TABLE engineer_image ADD COLUMN IF NOT EXISTS file_path TEXT;`);
+
+        // Deduplicate engineer_documents: keep only the latest row per IPC before adding unique constraint
+        // The latest row always carries the most complete set of documents (due to carry-over logic in save-project)
+        await client.query(`
+            DELETE FROM engineer_documents
+            WHERE doc_id NOT IN (
+                SELECT DISTINCT ON (ipc) doc_id
+                FROM engineer_documents
+                WHERE ipc IS NOT NULL
+                ORDER BY ipc, created_at DESC NULLS LAST
+            )
+            AND ipc IS NOT NULL;
+        `);
+
+        // Partial UNIQUE index: one canonical document record per IPC
+        // Rows with null IPC (legacy records without backfilled IPC) are excluded
+        await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_engineer_documents_ipc_unique ON engineer_documents(ipc) WHERE ipc IS NOT NULL;`);
+
+        // Backfill null ipc in engineer_image by joining on project_id
+        await client.query(`
+            UPDATE engineer_image ei
+            SET ipc = ef.ipc
+            FROM engineer_form ef
+            WHERE ei.project_id = ef.project_id
+              AND ei.ipc IS NULL
+              AND ef.ipc IS NOT NULL;
+        `);
+
+        // Backfill null ipc in engineer_documents by joining on project_id
+        await client.query(`
+            UPDATE engineer_documents ed
+            SET ipc = ef.ipc
+            FROM engineer_form ef
+            WHERE ed.project_id = ef.project_id
+              AND ed.ipc IS NULL
+              AND ef.ipc IS NOT NULL;
+        `);
+
+        console.log(`✅ [${dbLabel}] IPC Indices and Backfill Complete`);
+    } catch (ipcErr) {
+        console.error(`❌ [${dbLabel}] IPC Migration Failed:`, ipcErr.message);
+    }
+
 };
 
 export { initOtpTable, runMigrations };

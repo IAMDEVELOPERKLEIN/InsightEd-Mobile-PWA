@@ -56,7 +56,7 @@ const Field = ({ label, children }) => (
 
 // ---- Main Modal ----
 const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, onSaveRealign }) => {
-    const [activeTab, setActiveTab] = useState('details'); // 'details' | 'vo' | 'realign'
+    const [activeTab, setActiveTab] = useState('vo'); // 'vo' | 'realign'
     const [detailsStep, setDetailsStep] = useState(1);
     const [formData, setFormData] = useState({});
     const [voForm, setVoForm] = useState({});
@@ -77,7 +77,7 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
 
     useEffect(() => {
         if (isOpen && project) {
-            setActiveTab('details');
+            setActiveTab('vo');
             setDetailsStep(1);
             setDocumentFiles({ POW: null, DUPA: null, CONTRACT: null });
             setInternalFiles([]);
@@ -487,18 +487,6 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                             />
                         </Field>
 
-                        <Field label="Remarks (Optional)">
-                            <textarea name="otherRemarks" rows={3} value={formData.otherRemarks} onChange={handleChange}
-                                placeholder="Any additional notes about the current status..."
-                                className={inputCls + " resize-none"} />
-                        </Field>
-                    </div>
-                );
-
-            // STEP 3: CONTRACT
-            case 3:
-                return (
-                    <div className="space-y-4">
                         <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 space-y-3">
                             <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Bidding Milestones</p>
                             <div className="grid grid-cols-1 gap-3">
@@ -517,7 +505,7 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                         </div>
 
                         <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
-                            <p className="text-[8px] font-black tracking-widest text-slate-400 mb-1">STEP {detailsStep} / 7 — {DETAILS_STEPS[detailsStep - 1].desc.toUpperCase()}</p>
+                            <p className="text-[8px] font-black tracking-widest text-slate-400 mb-1">CONTRACT DETAILS</p>
                             <Field label="Contract ID">
                                 <input name="contractId" value={formData.contractId} onChange={handleChange} className={inputCls} placeholder="Contract reference number" />
                             </Field>
@@ -781,7 +769,6 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                     {/* 3 Tabs */}
                     <div className="flex gap-1 p-1 bg-slate-100 rounded-2xl">
                         {[
-                            { id: 'details', label: '🔧 Details', color: 'blue' },
                             { id: 'vo', label: '⚖️ V.O.', color: 'amber' },
                             { id: 'realign', label: '🔄 Realign', color: 'purple' },
                         ].map(tab => (
@@ -793,38 +780,10 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                             </button>
                         ))}
                     </div>
-
-                    {/* Details: Progress Bar */}
-                    {activeTab === 'details' && (
-                        <div className="mt-4">
-                            {/* Step Labels */}
-                            <div className="flex justify-between mb-2">
-                                {DETAILS_STEPS.map(s => (
-                                    <button key={s.id} onClick={() => setDetailsStep(s.id)}
-                                        className={`flex flex-col items-center gap-0.5 group transition-all ${detailsStep === s.id ? 'scale-105' : 'opacity-50 hover:opacity-70'}`}
-                                    >
-                                            {detailsStep > s.id ? '✓' : s.icon}
-                                        <span className={`text-[8px] font-black uppercase tracking-widest hidden sm:block ${detailsStep === s.id ? 'text-blue-600' : 'text-slate-400'}`}>{s.label}</span>
-                                    </button>
-                                ))}
-                            </div>
-                            {/* Progress bar */}
-                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                <div className="h-full bg-blue-500 rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} />
-                            </div>
-                            {/* Current step desc */}
-                            <p className="text-[9px] text-slate-400 font-bold mt-1.5 text-center uppercase tracking-wider">
-                                Step {detailsStep} / {DETAILS_STEPS.length} — {DETAILS_STEPS[detailsStep - 1].desc}
-                            </p>
-                        </div>
-                    )}
                 </div>
 
                 {/* Scrollable Body */}
                 <div ref={bodyRef} className="flex-1 overflow-y-auto p-6 space-y-4">
-
-                    {/* ----- DETAILS TAB ----- */}
-                    {activeTab === 'details' && renderDetailsStep()}
 
                     {/* ----- VO TAB ----- */}
                     {activeTab === 'vo' && (
@@ -911,31 +870,7 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
 
                 {/* Footer */}
                 <div className="px-6 py-4 border-t border-slate-100 shrink-0 flex items-center gap-3">
-                    {activeTab === 'details' ? (
-                        <>
-                            {detailsStep > 1 ? (
-                                <button onClick={() => setDetailsStep(s => s - 1)} className="flex items-center gap-2 px-5 py-3 bg-slate-100 text-slate-600 rounded-2xl text-xs font-bold hover:bg-slate-200 transition-all">
-                                    â† Back
-                                </button>
-                            ) : (
-                                <button onClick={onClose} className="flex items-center gap-2 px-5 py-3 bg-slate-100 text-slate-600 rounded-2xl text-xs font-bold hover:bg-slate-200 transition-all">
-                                    Cancel
-                                </button>
-                            )}
-                            <div className="flex-1" />
-                            {detailsStep < DETAILS_STEPS.length ? (
-                                <button onClick={() => setDetailsStep(s => s + 1)}
-                                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-wider hover:bg-blue-700 shadow-lg shadow-blue-500/25 transition-all hover:-translate-y-0.5 active:scale-95">
-                                    Next <FiChevronRight size={14} />
-                                </button>
-                            ) : (
-                                <button onClick={handleSaveDetails} disabled={isSaving}
-                                    className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider ${isSaving ? 'bg-slate-200 text-slate-400' : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-500/25 hover:-translate-y-0.5 active:scale-95'}`}>
-                                    {isSaving ? <><div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> Saving...</> : <><FiCheck size={14} /> Save Details</>}
-                                </button>
-                            )}
-                        </>
-                    ) : activeTab === 'vo' ? (
+                    {activeTab === 'vo' ? (
                         <>
                             <button onClick={onClose} className="flex items-center gap-2 px-5 py-3 bg-slate-100 text-slate-600 rounded-2xl text-xs font-bold hover:bg-slate-200 transition-all">Cancel</button>
                             <div className="flex-1" />
