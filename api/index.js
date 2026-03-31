@@ -343,7 +343,7 @@ app.delete('/api/schools/:iern/ownership-docs/:id', async (req, res) => {
   }
 });
 
-const processPdfFile = async (file) => {
+const processPdfFile = async (file, outputFilename = null) => {
     if (!file) return null;
 
     // Multer saves files WITHOUT extensions - PyMuPDF needs .pdf to detect format
@@ -353,13 +353,15 @@ const processPdfFile = async (file) => {
     // Permanent output path in uploads/project_docs/
     const docsDir = path.resolve(__dirname, '..', 'uploads/project_docs');
     if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir, { recursive: true });
-    const outputFilename = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.pdf`;
-    const outputPath = path.join(docsDir, outputFilename);
+    // Use caller-supplied name (e.g. IPC-named) or fall back to a random one
+    const finalFilename = outputFilename || `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.pdf`;
+    const outputPath = path.join(docsDir, finalFilename);
 
     const inputPath = path.resolve(renamedInput);
     const scriptPath = path.resolve(__dirname, '..', 'compress_pdf.py');
 
-    console.log(`📄 Processing PDF: ${inputPath}`);
+    const inputSizeKB = Math.round(fs.statSync(inputPath).size / 1024);
+    console.log(`📄 Processing PDF: ${inputPath} (${inputSizeKB} KB)`);
 
     try {
         const cmd = (pythonCmd) => `${pythonCmd} "${scriptPath}" "${inputPath}" "${outputPath}"`;
@@ -382,8 +384,10 @@ const processPdfFile = async (file) => {
             }
         }
 
-        console.log("✅ PDF Compression Output:", stdout);
-        return `/uploads/project_docs/${outputFilename}`;
+        const outputSizeKB = fs.existsSync(outputPath) ? Math.round(fs.statSync(outputPath).size / 1024) : 0;
+        const ratio = outputSizeKB > 0 ? Math.round((1 - outputSizeKB / inputSizeKB) * 100) : 0;
+        console.log(`✅ PDF compressed: ${inputSizeKB} KB → ${outputSizeKB} KB (${ratio}% reduction)`);
+        return `/uploads/project_docs/${finalFilename}`;
     } catch (err) {
         console.error("PDF Compression Error - Message:", err.message);
         console.error("PDF Compression Error - Stderr:", err.stderr);
@@ -403,22 +407,44 @@ const processPdfInBackground = (file, projectId, type, ipc, uid, isLgu = false) 
         'RTA': 'rta_pdf',
         'MOA': 'moa_pdf'
     };
+    const filenameFieldMap = {
+        'POW': 'pow_filename',
+        'DUPA': 'dupa_filename',
+        'CONTRACT': 'contract_filename'
+    };
     const field = fieldMap[type];
     if (!field) return;
 
-    processPdfFile(file).then(async (base64) => {
-        if (!base64) return;
+    const originalFilename = file?.originalname || null;
+    const filenameField = filenameFieldMap[type] || null;
+
+    // Use IPC-named output file (e.g. INF-01-2024-00001_POW.pdf) for deterministic, overwritable storage
+    const ipcFilename = ipc ? `${ipc}_${type}.pdf` : null;
+    console.log(`📄 [BG] Queuing ${type} compression for Project ${projectId} (${originalFilename || 'unknown filename'}) → ${ipcFilename || 'random name'}`);
+
+    processPdfFile(file, ipcFilename).then(async (filePath) => {
+        if (!filePath) return;
         try {
             const table = isLgu ? 'lgu_forms' : 'engineer_documents';
             if (isLgu) {
-                await pool.query(`UPDATE ${table} SET ${field} = $1 WHERE project_id = $2`, [base64, projectId]);
+                await pool.query(`UPDATE ${table} SET ${field} = $1 WHERE project_id = $2`, [filePath, projectId]);
             } else {
-                // UPSERT so the document is saved even if no engineer_documents row exists yet
-                await pool.query(`
-                    INSERT INTO engineer_documents (project_id, ipc, ${field}, uploader_id)
-                    VALUES ($1, $2, $3, $4)
-                    ON CONFLICT (project_id) DO UPDATE SET ${field} = EXCLUDED.${field}, uploader_id = EXCLUDED.uploader_id
-                `, [projectId, ipc, base64, uid]);
+                // UPSERT keyed on IPC — one canonical document row per project lineage
+                if (filenameField && originalFilename) {
+                    await pool.query(`
+                        INSERT INTO engineer_documents (project_id, ipc, ${field}, ${filenameField}, uploader_id)
+                        VALUES ($1, $2, $3, $4, $5)
+                        ON CONFLICT (ipc) WHERE ipc IS NOT NULL
+                        DO UPDATE SET ${field} = EXCLUDED.${field}, ${filenameField} = EXCLUDED.${filenameField}, uploader_id = EXCLUDED.uploader_id
+                    `, [projectId, ipc, filePath, originalFilename, uid]);
+                } else {
+                    await pool.query(`
+                        INSERT INTO engineer_documents (project_id, ipc, ${field}, uploader_id)
+                        VALUES ($1, $2, $3, $4)
+                        ON CONFLICT (ipc) WHERE ipc IS NOT NULL
+                        DO UPDATE SET ${field} = EXCLUDED.${field}, uploader_id = EXCLUDED.uploader_id
+                    `, [projectId, ipc, filePath, uid]);
+                }
             }
             console.log(`✅ [BG] ${type} compressed and saved for ${isLgu ? 'LGU ' : ''}Project ${projectId}`);
             
@@ -426,7 +452,7 @@ const processPdfInBackground = (file, projectId, type, ipc, uid, isLgu = false) 
                 try {
                     const targetId = isLgu ? (ipc || projectId) : projectId;
                     const targetCol = isLgu ? (ipc ? 'ipc' : 'project_id') : 'project_id';
-                    await poolNew.query(`UPDATE ${table} SET ${field} = $1 WHERE ${targetCol} = $2`, [base64, targetId]);
+                    await poolNew.query(`UPDATE ${table} SET ${field} = $1 WHERE ${targetCol} = $2`, [filePath, targetId]);
                 } catch (dwErr) {
                     console.error(`❌ [BG] Dual-Write Update Failed for ${field}:`, dwErr.message);
                 }
@@ -7757,8 +7783,7 @@ app.post('/api/save-project', async (req, res) => {
     // --- MIGRATION: ADD PDF COLUMNS IF NOT EXIST ---
     // MOVED TO initDB() AT STARTUP TO ENSURE COLUMNS EXIST IMMEDATELY
 
-    // 1. Resolve Project Category ID and Generate IPC (INF-CATID-YYYY-XXXXX)
-    const year = data.fundingYear || new Date().getFullYear();
+    // --- 1. Resolve Project Category ID and Generate IPC ---
     const categoryMapping = {
       "New Construction": "01",
       "Repair and Rehab": "02",
@@ -7771,21 +7796,27 @@ app.post('/api/save-project', async (req, res) => {
       "Midrise School Building": "09"
     };
     const catId = categoryMapping[data.projectCategory] || "10";
-    
-    const ipcResult = await client.query(
-      "SELECT ipc FROM engineer_form WHERE ipc LIKE $1 ORDER BY ipc DESC LIMIT 1",
-      [`INF-${catId}-${year}-%`]
-    );
+    let newIpc = data.ipc;
 
-    let nextSeq = 1;
-    if (ipcResult.rows.length > 0) {
-      const lastIpc = ipcResult.rows[0].ipc;
-      const parts = lastIpc.split('-');
-      if (parts.length === 4 && !isNaN(parts[3])) {
-        nextSeq = parseInt(parts[3]) + 1;
-      }
+    // Only generate a NEW IPC if one isn't provided OR it's invalid
+    if (!newIpc || !newIpc.startsWith('INF-')) {
+        const year = data.fundingYear || new Date().getFullYear();
+        
+        const ipcResult = await client.query(
+            "SELECT ipc FROM engineer_form WHERE ipc LIKE $1 ORDER BY ipc DESC LIMIT 1",
+            [`INF-${catId}-${year}-%`]
+        );
+
+        let nextSeq = 1;
+        if (ipcResult.rows.length > 0) {
+            const lastIpc = ipcResult.rows[0].ipc;
+            const parts = lastIpc.split('-');
+            if (parts.length === 4 && !isNaN(parts[3])) {
+                nextSeq = parseInt(parts[3]) + 1;
+            }
+        }
+        newIpc = `INF-${catId}-${year}-${String(nextSeq).padStart(5, '0')}`;
     }
-    const newIpc = `INF-${catId}-${year}-${String(nextSeq).padStart(5, '0')}`;
 
     // 2. Prepare Project Data
     const engineerName = await getUserFullName(data.uid);
@@ -7807,11 +7838,11 @@ app.post('/api/save-project', async (req, res) => {
     const normalizedConstructionStatus = statusMapping[data.statusOfConstructionPhase?.toLowerCase()] || data.statusOfConstructionPhase || '';
     const normalizedDesignStatus = statusMapping[data.statusDesignPhase?.toLowerCase()] || data.statusDesignPhase || '';
 
-    // Extract Documents
-    const docs = data.documents || [];
-    const powDoc = docs.find(d => d.type === 'POW')?.base64 || null;
-    const dupaDoc = docs.find(d => d.type === 'DUPA')?.base64 || null;
-    const contractDoc = docs.find(d => d.type === 'CONTRACT')?.base64 || null;
+    // Extract Documents with defensive check
+    const docs = Array.isArray(data.documents) ? data.documents : [];
+    const powDoc = docs.find(d => d && d.type === 'POW')?.base64 || null;
+    const dupaDoc = docs.find(d => d && d.type === 'DUPA')?.base64 || null;
+    const contractDoc = docs.find(d => d && d.type === 'CONTRACT')?.base64 || null;
 
     const projectValues = [
       data.projectName, data.schoolName, data.schoolId, // $1, $2, $3
@@ -7898,13 +7929,58 @@ app.post('/api/save-project', async (req, res) => {
     const newProject = projectResult.rows[0];
     const newProjectId = newProject.project_id;
 
-    // --- 3.1 Insert into engineer_documents ---
-    const moaDoc = docs.find(d => d.type === 'MOA')?.base64 || null;
-    const rtaDoc = docs.find(d => d.type === 'RTA')?.base64 || null;
+    // --- 3.1 Insert into engineer_documents (Carry Over Logic) ---
+    const moaDoc = docs.find(d => d && d.type === 'MOA')?.base64 || null;
+    const rtaDoc = docs.find(d => d && d.type === 'RTA')?.base64 || null;
+
+    // --- 3.1 Robust Document Carry-Over (Across IPC History) ---
+    const aggregatedDocsQuery = `
+      SELECT 
+        (SELECT pow_pdf FROM engineer_documents WHERE ipc = $1 AND pow_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as pow_pdf,
+        (SELECT dupa_pdf FROM engineer_documents WHERE ipc = $1 AND dupa_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as dupa_pdf,
+        (SELECT contract_pdf FROM engineer_documents WHERE ipc = $1 AND contract_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as contract_pdf,
+        (SELECT moa_pdf FROM engineer_documents WHERE ipc = $1 AND moa_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as moa_pdf,
+        (SELECT rta_pdf FROM engineer_documents WHERE ipc = $1 AND rta_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as rta_pdf,
+        (SELECT pow_filename FROM engineer_documents WHERE ipc = $1 AND pow_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as pow_filename,
+        (SELECT dupa_filename FROM engineer_documents WHERE ipc = $1 AND dupa_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as dupa_filename,
+        (SELECT contract_filename FROM engineer_documents WHERE ipc = $1 AND contract_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as contract_filename
+    `;
+    const oldDocsRes = await client.query(aggregatedDocsQuery, [newIpc]);
+    const d = oldDocsRes.rows[0] || {};
+
+    const finalPow = powDoc || data.pow_pdf || d.pow_pdf || null;
+    const finalDupa = dupaDoc || data.dupa_pdf || d.dupa_pdf || null;
+    const finalContract = contractDoc || data.contract_pdf || d.contract_pdf || null;
+    const finalMoa = moaDoc || data.moa_pdf || d.moa_pdf || null;
+    const finalRta = rtaDoc || data.rta_pdf || d.rta_pdf || null;
+
+    const finalPowFn = data.pow_filename || d.pow_filename || null;
+    const finalDupaFn = data.dupa_filename || d.dupa_filename || null;
+    const finalContractFn = data.contract_filename || d.contract_filename || null;
+
     await client.query(`
-      INSERT INTO engineer_documents (project_id, ipc, pow_pdf, dupa_pdf, contract_pdf, moa_pdf, rta_pdf, uploader_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    `, [newProjectId, newIpc, powDoc, dupaDoc, contractDoc, moaDoc, rtaDoc, data.uid]);
+      INSERT INTO engineer_documents (
+          project_id, ipc, pow_pdf, dupa_pdf, contract_pdf, moa_pdf, rta_pdf, uploader_id,
+          pow_filename, dupa_filename, contract_filename
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      ON CONFLICT (ipc) WHERE ipc IS NOT NULL DO UPDATE SET
+          project_id      = EXCLUDED.project_id,
+          pow_pdf         = EXCLUDED.pow_pdf,
+          dupa_pdf        = EXCLUDED.dupa_pdf,
+          contract_pdf    = EXCLUDED.contract_pdf,
+          moa_pdf         = EXCLUDED.moa_pdf,
+          rta_pdf         = EXCLUDED.rta_pdf,
+          uploader_id     = EXCLUDED.uploader_id,
+          pow_filename    = EXCLUDED.pow_filename,
+          dupa_filename   = EXCLUDED.dupa_filename,
+          contract_filename = EXCLUDED.contract_filename
+    `, [
+        newProjectId, newIpc,
+        finalPow, finalDupa, finalContract, finalMoa, finalRta,
+        data.uid,
+        finalPowFn, finalDupaFn, finalContractFn
+    ]);
 
     // --- 3.5 Insert into Extension Tables (Conditional) ---
     // HRODI Extension - Merged into engineer_form directly above
@@ -8038,8 +8114,29 @@ app.post('/api/save-project', async (req, res) => {
   } catch (err) {
     if (client) await client.query('ROLLBACK');
     if (clientNew) await clientNew.query('ROLLBACK').catch(e => console.error("Dual-Write Rollback Err:", e.message)); // Rollback secondary too
-    console.error("â Œ SQL ERROR:", err.message);
-    res.status(500).json({ message: "Database error", error: err.message });
+    
+    // --- MAD DEBUGGER LOGGING (v1.1.0) ---
+    console.group(`❌ FAILURE: save-project crashed!`);
+    console.error(`🛑 Error Message: ${err.message}`);
+    console.error(`🪲 Stack Trace: ${err.stack}`);
+    
+    console.group('🛠️ Recommended Troubleshooting Steps:');
+    if (err instanceof ReferenceError) {
+        console.warn('1. Missing Dependencies/Scope: Look for variables like "catId" used outside their definition block.');
+    } else if (err.message.includes('column')) {
+        console.warn('1. DB Schema Mismatch: Check if "file_path" or other columns exist in both primary and secondary DBs.');
+    } else {
+        console.warn('1. Check the SQL syntax near placeholders ($1..$58).');
+    }
+    console.groupEnd();
+    console.groupEnd();
+
+    res.status(500).json({ 
+      message: "Database error during save-project", 
+      error: err.message,
+      stack: err.stack,
+      detail: err.detail || null 
+    });
   } finally {
     if (client) client.release();
     if (clientNew) clientNew.release();
@@ -8088,10 +8185,10 @@ app.put('/api/update-project/:id', upload.fields([
     const oldDocsRes = await client.query('SELECT * FROM engineer_documents WHERE project_id = $1', [id]);
     const d = oldDocsRes.rows[0];
 
-    // 2. Handle File Uploads
-    let pow_pdf_base64 = data.pow_pdf || (d ? d.pow_pdf : null);
-    let dupa_pdf_base64 = data.dupa_pdf || (d ? d.dupa_pdf : null);
-    let contract_pdf_base64 = data.contract_pdf || (d ? d.contract_pdf : null);
+    // 2. Handle File Uploads (Standardize to Paths)
+    let pow_pdf_val = data.pow_pdf || (d ? d.pow_pdf : null);
+    let dupa_pdf_val = data.dupa_pdf || (d ? d.dupa_pdf : null);
+    let contract_pdf_val = data.contract_pdf || (d ? d.contract_pdf : null);
     
     let pow_filename = data.pow_filename || (d ? d.pow_filename : null);
     let dupa_filename = data.dupa_filename || (d ? d.dupa_filename : null);
@@ -8099,16 +8196,22 @@ app.put('/api/update-project/:id', upload.fields([
 
     if (req.files) {
         if (req.files['pow_pdf']) {
-            pow_pdf_base64 = fs.readFileSync(req.files['pow_pdf'][0].path, { encoding: 'base64' });
-            pow_filename = req.files['pow_pdf'][0].originalname;
+            try {
+              pow_pdf_val = await processPdfFile(req.files['pow_pdf'][0]);
+              pow_filename = req.files['pow_pdf'][0].originalname;
+            } catch (err) { console.error("POW Process Err:", err.message); }
         }
         if (req.files['dupa_pdf']) {
-            dupa_pdf_base64 = fs.readFileSync(req.files['dupa_pdf'][0].path, { encoding: 'base64' });
-            dupa_filename = req.files['dupa_pdf'][0].originalname;
+            try {
+              dupa_pdf_val = await processPdfFile(req.files['dupa_pdf'][0]);
+              dupa_filename = req.files['dupa_pdf'][0].originalname;
+            } catch (err) { console.error("DUPA Process Err:", err.message); }
         }
         if (req.files['contract_pdf']) {
-            contract_pdf_base64 = fs.readFileSync(req.files['contract_pdf'][0].path, { encoding: 'base64' });
-            contract_filename = req.files['contract_pdf'][0].originalname;
+            try {
+              contract_pdf_val = await processPdfFile(req.files['contract_pdf'][0]);
+              contract_filename = req.files['contract_pdf'][0].originalname;
+            } catch (err) { console.error("Contract Process Err:", err.message); }
         }
     }
 
@@ -8220,7 +8323,7 @@ app.put('/api/update-project/:id', upload.fields([
       valueOrNull(data.province) || oldData.province,
       valueOrNull(data.city) || oldData.city,
       valueOrNull(data.municipality) || oldData.municipality,
-      pow_pdf_base64, dupa_pdf_base64, contract_pdf_base64,
+      pow_pdf_val, dupa_pdf_val, contract_pdf_val,
       newProcurementStatus,
       oldData.mother_moa_id,
       oldData.supplamental_moa_id,
@@ -8268,38 +8371,34 @@ app.put('/api/update-project/:id', upload.fields([
 
     const newData = result.rows[0];
 
-    // --- 2.2a Handle Documents Insert for new snapshot (engineer_documents) ---
-    // NOTE: Each update creates a NEW engineer_form row (append-only snapshot), so project_id
-    // is always brand new here. Plain INSERT is correct — no conflict is possible.
+    // --- 2.2a Handle Documents Upsert for new snapshot (engineer_documents) ---
+    // UPSERT keyed on IPC: one canonical document row per project lineage.
+    // Updating project_id keeps the link pointing to the latest snapshot.
     await client.query(`
       INSERT INTO engineer_documents (project_id, ipc, pow_pdf, pow_filename, dupa_pdf, dupa_filename, contract_pdf, contract_filename, rta_pdf, moa_pdf, uploader_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      ON CONFLICT (ipc) WHERE ipc IS NOT NULL DO UPDATE SET
+          project_id        = EXCLUDED.project_id,
+          pow_pdf           = EXCLUDED.pow_pdf,
+          pow_filename      = EXCLUDED.pow_filename,
+          dupa_pdf          = EXCLUDED.dupa_pdf,
+          dupa_filename     = EXCLUDED.dupa_filename,
+          contract_pdf      = EXCLUDED.contract_pdf,
+          contract_filename = EXCLUDED.contract_filename,
+          rta_pdf           = EXCLUDED.rta_pdf,
+          moa_pdf           = EXCLUDED.moa_pdf,
+          uploader_id       = EXCLUDED.uploader_id
     `, [
       newData.project_id, newData.ipc,
-      pow_pdf_base64, pow_filename,
-      dupa_pdf_base64, dupa_filename,
-      contract_pdf_base64, contract_filename,
+      pow_pdf_val, pow_filename,
+      dupa_pdf_val, dupa_filename,
+      contract_pdf_val, contract_filename,
       data.rta_pdf || (d ? d.rta_pdf : null),
       data.moa_pdf || (d ? d.moa_pdf : null),
       (data.pow_pdf || data.dupa_pdf || data.contract_pdf || (req.files && Object.keys(req.files).length > 0)) ? data.uid : (d ? d.uploader_id : null)
     ]);
 
-    // Handle background compression if new files were uploaded
-    if (req.files) {
-        ['pow_pdf', 'dupa_pdf', 'contract_pdf'].forEach(field => {
-            if (req.files[field] && req.files[field][0]) {
-                processPdfFile(req.files[field][0]).then(async compressedBase64 => {
-                    try {
-                        await pool.query(`UPDATE engineer_documents SET ${field} = $1 WHERE project_id = $2`, [compressedBase64, newData.project_id]);
-                        await pool.query(`UPDATE engineer_form SET ${field} = $1 WHERE project_id = $2`, [compressedBase64, newData.project_id]);
-                        console.log(`✅ Background ${field} Compression Success for project ${newData.project_id}`);
-                    } catch (e) {
-                        console.error(`❌ Background ${field} Update Failed`, e);
-                    }
-                }).catch(err => console.error(`${field} bg compress err`, err));
-            }
-        });
-    }
+    // Background compression removed (already handled synchronously)
 
     // --- 2.3 Handle Extension Tables Update (Conditional Carry Over + Changes) ---
     // HRODI Extension - Merged into engineer_form directly above
@@ -8473,33 +8572,7 @@ app.put('/api/update-project/:id', upload.fields([
 });
 
 // --- 9.4 POST: Upload Project Document (POW / DUPA / CONTRACT) ---
-app.post('/api/upload-project-document', upload.single('document_pdf'), async (req, res) => {
-  const { project_id, type, uid, ipc } = req.body;
-  const validTypes = ['POW', 'DUPA', 'CONTRACT'];
-
-  if (!project_id || !validTypes.includes(type?.toUpperCase())) {
-    return res.status(400).json({ error: 'project_id and a valid type (POW, DUPA, CONTRACT) are required.' });
-  }
-  if (!req.file) {
-    return res.status(400).json({ error: 'No PDF file provided.' });
-  }
-
-  try {
-    // Verify project exists
-    const check = await pool.query('SELECT project_id FROM engineer_form WHERE project_id = $1', [project_id]);
-    if (check.rows.length === 0) {
-      return res.status(404).json({ error: 'Project not found.' });
-    }
-
-    res.json({ success: true, message: `${type} upload received. Compressing in background…` });
-
-    // Background compression + save (reuses existing processPdfInBackground helper)
-    processPdfInBackground(req.file, project_id, type.toUpperCase(), ipc || null, uid || null);
-  } catch (err) {
-    console.error('❌ upload-project-document error:', err.message);
-    res.status(500).json({ error: 'Internal Server Error', message: err.message });
-  }
-});
+// (route consolidated — see app.post('/api/upload-project-document') below)
 
 // --- 9.5 GET: Variation Orders by IPC ---
 app.get('/api/projects/variation-orders/:ipc', async (req, res) => {
@@ -9116,7 +9189,14 @@ app.get('/api/projects', async (req, res) => {
           FROM engineer_form e
           LEFT JOIN co_finance f ON e.project_id = f.project_id
           LEFT JOIN ph_schools sp ON e.school_id = sp.school_id
-          LEFT JOIN engineer_documents d ON e.project_id = d.project_id
+          LEFT JOIN LATERAL (
+              SELECT pow_pdf, dupa_pdf, contract_pdf, moa_pdf, rta_pdf,
+                     pow_filename, dupa_filename, contract_filename
+              FROM engineer_documents
+              WHERE ipc = e.ipc
+              ORDER BY created_at DESC
+              LIMIT 1
+          ) d ON true
       ),
       LatestProjects AS (
           SELECT * FROM RankedProjects WHERE rn = 1
@@ -9523,7 +9603,17 @@ app.get('/api/projects/:id', async (req, res) => {
         e.implementing_agency AS "implementingAgency",
         e.implementing_agency_specific AS "implementingAgencySpecific"
       FROM engineer_form e
-      LEFT JOIN engineer_documents d ON e.project_id = d.project_id
+      LEFT JOIN LATERAL (
+        SELECT 
+          (SELECT pow_pdf FROM engineer_documents WHERE ipc = e.ipc AND pow_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as pow_pdf,
+          (SELECT dupa_pdf FROM engineer_documents WHERE ipc = e.ipc AND dupa_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as dupa_pdf,
+          (SELECT contract_pdf FROM engineer_documents WHERE ipc = e.ipc AND contract_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as contract_pdf,
+          (SELECT moa_pdf FROM engineer_documents WHERE ipc = e.ipc AND moa_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as moa_pdf,
+          (SELECT rta_pdf FROM engineer_documents WHERE ipc = e.ipc AND rta_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as rta_pdf,
+          (SELECT pow_filename FROM engineer_documents WHERE ipc = e.ipc AND pow_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as pow_filename,
+          (SELECT dupa_filename FROM engineer_documents WHERE ipc = e.ipc AND dupa_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as dupa_filename,
+          (SELECT contract_filename FROM engineer_documents WHERE ipc = e.ipc AND contract_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as contract_filename
+      ) d ON true
       WHERE e.project_id = $1;
     `;
     const result = await pool.query(query, [id]);
@@ -9577,8 +9667,20 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
         funding_year AS "fundingYear",
         funding_year AS "funding_year",
         funding_year_justification AS "fundingYearJustification"
-      FROM engineer_form WHERE TRIM(school_id) = TRIM($1)
-      ORDER BY project_id DESC;
+      FROM engineer_form e
+      LEFT JOIN LATERAL (
+        SELECT 
+          (SELECT pow_pdf FROM engineer_documents WHERE ipc = e.ipc AND pow_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as pow_pdf,
+          (SELECT dupa_pdf FROM engineer_documents WHERE ipc = e.ipc AND dupa_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as dupa_pdf,
+          (SELECT contract_pdf FROM engineer_documents WHERE ipc = e.ipc AND contract_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as contract_pdf,
+          (SELECT moa_pdf FROM engineer_documents WHERE ipc = e.ipc AND moa_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as moa_pdf,
+          (SELECT rta_pdf FROM engineer_documents WHERE ipc = e.ipc AND rta_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as rta_pdf,
+          (SELECT pow_filename FROM engineer_documents WHERE ipc = e.ipc AND pow_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as pow_filename,
+          (SELECT dupa_filename FROM engineer_documents WHERE ipc = e.ipc AND dupa_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as dupa_filename,
+          (SELECT contract_filename FROM engineer_documents WHERE ipc = e.ipc AND contract_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as contract_filename
+      ) d ON true
+      WHERE TRIM(e.school_id) = TRIM($1)
+      ORDER BY e.project_id DESC;
     `;
     const result = await pool.query(query, [schoolId]);
     res.json(result.rows);
@@ -9833,8 +9935,10 @@ app.post('/api/upload-image', (req, res, next) => {
     }
 
     // 3. Insert with Latest Project ID
-    const query = `INSERT INTO engineer_image (project_id, image_data, uploaded_by, category, ipc) VALUES ($1, $2, $3, $4, $5) RETURNING id;`;
-    const result = await pool.query(query, [finalProjectId, imageValue, uploadedBy, category || 'Internal', ipc]);
+    // file_path stores disk-relative path for file uploads; image_data holds the same for compatibility
+    const filePath = req.file ? imageValue : null;
+    const query = `INSERT INTO engineer_image (project_id, image_data, file_path, uploaded_by, category, ipc) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;`;
+    const result = await pool.query(query, [finalProjectId, imageValue, filePath, uploadedBy, category || 'Internal', ipc]);
 
     await logActivity(uploadedBy, 'Engineer', 'Engineer', 'UPLOAD', `Project ID: ${projectId}`, `Uploaded a new site image (${category || 'Internal'})`);
     res.status(201).json({ success: true, imageId: result.rows[0].id });
@@ -9846,18 +9950,23 @@ app.post('/api/upload-image', (req, res, next) => {
         const scriptPath = path.resolve(__dirname, '..', 'compress_image.py');
         const cmd = (py) => `${py} "${scriptPath}" "${filePath}" "${tmpOut}"`;
         const tryCompress = async () => {
+            console.log(`🖼️ [BG] Attempting image optimization: ${req.file.filename}`);
             for (const py of ['python', 'py', 'python3']) {
                 try {
                     await execAsync(cmd(py));
-                    fs.renameSync(tmpOut, filePath);
-                    console.log(`✅ [BG] Image optimized: ${req.file.filename}`);
-                    return;
-                } catch (_) {}
+                    if (fs.existsSync(tmpOut)) {
+                        fs.renameSync(tmpOut, filePath);
+                        console.log(`✅ [BG] Image optimized: ${req.file.filename}`);
+                        return;
+                    }
+                } catch (e) {
+                    // console.warn(`   - [BG] ${py} optimizer failed:`, e.message);
+                }
             }
-            console.warn(`⚠️ [BG] Image compression skipped (Python/Pillow unavailable)`);
+            console.warn(`⚠️ [BG] Image compression skipped or failed (Python/Pillow unavailable or error encountered)`);
             if (fs.existsSync(tmpOut)) fs.unlinkSync(tmpOut);
         };
-        tryCompress().catch(() => {});
+        tryCompress().catch(err => console.error("❌ [BG] Fatal optimization error:", err.message));
     }
 
     // --- DUAL WRITE: UPLOAD IMAGE ---
@@ -9865,10 +9974,10 @@ app.post('/api/upload-image', (req, res, next) => {
       try {
         if (ipc) {
           const dwQuery = `
-                INSERT INTO engineer_image (project_id, image_data, uploaded_by, category, ipc)
-                VALUES ((SELECT project_id FROM engineer_form WHERE ipc = $1 ORDER BY project_id DESC LIMIT 1), $2, $3, $4, $1);
+                INSERT INTO engineer_image (project_id, image_data, file_path, uploaded_by, category, ipc)
+                VALUES ((SELECT project_id FROM engineer_form WHERE ipc = $1 ORDER BY project_id DESC LIMIT 1), $2, $3, $4, $5, $1);
             `;
-          await poolNew.query(dwQuery, [ipc, imageValue, uploadedBy, category || 'Internal']);
+          await poolNew.query(dwQuery, [ipc, imageValue, filePath, uploadedBy, category || 'Internal']);
         }
       } catch (dwErr) {
         console.error("❌ Dual-Write Error (Upload Image):", dwErr.message);
@@ -9881,63 +9990,102 @@ app.post('/api/upload-image', (req, res, next) => {
 });
 
 // --- 20b. POST: Upload Project Document (Append Version) ---
-app.post('/api/upload-project-document', async (req, res) => {
-  const { projectId, type, base64, uid } = req.body;
+app.post('/api/upload-project-document', (req, res, next) => {
+  // Support both multipart/form-data AND application/json (legacy/offline)
+  const ct = req.headers['content-type'] || '';
+  if (ct.includes('multipart/form-data')) {
+    upload.single('document_pdf')(req, res, next);
+  } else {
+    next();
+  }
+}, async (req, res) => {
+  // Accept both camelCase (frontend) and snake_case (legacy callers)
+  const { projectId, project_id, type, uid, ipc: bodyIpc } = req.body;
+  const finalProjectId = projectId || project_id;
+  let base64 = req.body.base64;
+  let filename = req.body.filename || (req.file ? req.file.originalname : null);
 
-  console.log(`📂 Incoming Doc Upload: [${type}] for Project [${projectId}]`);
+  // --- MAD DEBUGGER LOGGING ---
+  console.group(`📂 Incoming Doc Upload: [${type}]`);
+  console.log(`🔍 DEBUG: Received ID [${projectId}] or [${project_id}] -> Selected: ${finalProjectId}`);
+  console.log(`- Multipart File: ${req.file ? req.file.originalname : 'NONE'}`);
+  console.log(`- Base64 Length: ${base64 ? base64.length : 0}`);
+  console.log(`- IPC from body: ${bodyIpc || 'none (will resolve from DB)'}`);
 
-  if (!projectId || !type || !base64) {
+  if (!finalProjectId || !type || (!base64 && !req.file)) {
+    console.error("❌ FAILURE: Missing required data (projectId/project_id, type, or file content)");
+    console.groupEnd();
     return res.status(400).json({ error: "Missing required data" });
   }
 
   let column = '';
-  if (type === 'POW') column = 'pow_pdf';
-  else if (type === 'DUPA') column = 'dupa_pdf';
-  else if (type === 'CONTRACT') column = 'contract_pdf';
-  else if (type === 'RTA') column = 'rta_pdf';
-  else if (type === 'MOA') column = 'moa_pdf';
-  else return res.status(400).json({ error: "Invalid document type" });
+  let filenameColumn = '';
+  if (type === 'POW') { column = 'pow_pdf'; filenameColumn = 'pow_filename'; }
+  else if (type === 'DUPA') { column = 'dupa_pdf'; filenameColumn = 'dupa_filename'; }
+  else if (type === 'CONTRACT') { column = 'contract_pdf'; filenameColumn = 'contract_filename'; }
+  else if (type === 'RTA') { column = 'rta_pdf'; }
+  else if (type === 'MOA') { column = 'moa_pdf'; }
+  else {
+    console.error(`❌ FAILURE: Invalid document type [${type}]`);
+    console.groupEnd();
+    return res.status(400).json({ error: "Invalid document type" });
+  }
 
   let client;
   try {
     client = await pool.connect();
 
-    // 1. Get the IPC from engineer_form to ensure consistent records
-    const projectRes = await client.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
-    if (projectRes.rows.length === 0) {
-      return res.status(404).json({ error: "Project not found" });
+    // 1. Get the IPC — prefer the one from the request body (already resolved by frontend) to save a DB round-trip
+    let ipc = bodyIpc || null;
+    if (!ipc) {
+      const projectRes = await client.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [parseInt(finalProjectId)]);
+      if (projectRes.rows.length === 0) {
+        console.error(`❌ FAILURE: Project ID ${finalProjectId} not found in engineer_form`);
+        console.groupEnd();
+        return res.status(404).json({ error: "Project not found" });
+      }
+      ipc = projectRes.rows[0].ipc;
     }
-    const { ipc } = projectRes.rows[0];
+    console.log(`- Resolved IPC: ${ipc}`);
 
-    // 2. UPSERT into engineer_documents
+    // 2. Process File — use IPC-named output for deterministic overwritable storage
+    let finalDocValue = base64;
+    if (req.file) {
+      const ipcFilename = ipc ? `${ipc}_${type}.pdf` : null;
+      try {
+        finalDocValue = await processPdfFile(req.file, ipcFilename);
+        console.log(`✅ SUCCESS: PDF processed to: ${finalDocValue}`);
+      } catch (err) {
+        console.warn(`⚠️ WARNING: PDF processing failed, falling back to temp path: ${err.message}`);
+        finalDocValue = `/uploads/${req.file.filename}`;
+      }
+    }
+
+    // 3. UPSERT keyed on IPC — one canonical document row per project lineage
     const upsertQuery = `
-      INSERT INTO engineer_documents (project_id, ipc, ${column}, uploader_id)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (project_id) 
-      DO UPDATE SET 
+      INSERT INTO engineer_documents (project_id, ipc, ${column}, uploader_id, ${filenameColumn ? filenameColumn + ',' : ''} created_at)
+      VALUES ($1, $2, $3, $4, ${filenameColumn ? '$5,' : ''} CURRENT_TIMESTAMP)
+      ON CONFLICT (ipc) WHERE ipc IS NOT NULL
+      DO UPDATE SET
         ${column} = EXCLUDED.${column},
+        ${filenameColumn ? filenameColumn + ' = EXCLUDED.' + filenameColumn + ',' : ''}
         uploader_id = EXCLUDED.uploader_id,
         created_at = CURRENT_TIMESTAMP
       RETURNING project_id;
     `;
 
-    const result = await client.query(upsertQuery, [parseInt(projectId), ipc, base64, uid]);
+    const queryParams = [parseInt(finalProjectId), ipc, finalDocValue, uid];
+    if (filenameColumn) queryParams.push(filename);
 
-    console.log(`✅ Updated ${type} in engineer_documents for project_id ${projectId}`);
+    await client.query(upsertQuery, queryParams);
+    console.log(`✅ SUCCESS: Updated ${column} for project_id ${finalProjectId}`);
+    console.groupEnd();
 
-    // --- DUAL WRITE ---
-    if (poolNew) {
-      try {
-        await poolNew.query(upsertQuery, [parseInt(projectId), ipc, base64, uid]);
-        console.log(`✅ Dual-Write: ${type} UPSERT Synced!`);
-      } catch (dwErr) {
-        console.error("❌ Dual-Write Doc UPSERT Error:", dwErr.message);
-      }
-    }
-
-    res.json({ success: true, projectId: projectId });
+    res.json({ success: true, projectId: finalProjectId, filePath: finalDocValue });
   } catch (err) {
-    console.error("❌ Doc Upload Error:", err.message);
+    console.error(`❌ FAILURE: ${err.message}`);
+    console.error(err.stack);
+    console.groupEnd();
     res.status(500).json({ error: "Failed to save document" });
   } finally {
     if (client) client.release();
@@ -10140,7 +10288,49 @@ app.delete('/api/project-images/:id', async (req, res) => {
   }
 });
 
-// --- 21b. GET: Fetch Single Image Content (BLOB) ---
+// --- 21b. GET: Diagnostics — broken file links ---
+app.get('/api/projects/diagnostics/links', authMiddleware, async (req, res) => {
+  try {
+    const uploadsRoot = path.resolve(__dirname, '..');
+
+    // Find image records with a disk path that no longer exists
+    const imgRes = await pool.query(
+      `SELECT id, ipc, image_data FROM engineer_image WHERE image_data LIKE '/uploads/%'`
+    );
+    const brokenImages = imgRes.rows.filter(row => {
+      const abs = path.join(uploadsRoot, row.image_data);
+      return !fs.existsSync(abs);
+    }).map(r => ({ id: r.id, ipc: r.ipc, path: r.image_data }));
+
+    // Find document records with a disk path that no longer exists
+    const docCols = ['pow_pdf', 'dupa_pdf', 'contract_pdf', 'rta_pdf', 'moa_pdf'];
+    const docRes = await pool.query(
+      `SELECT project_id, ipc, ${docCols.join(', ')} FROM engineer_documents`
+    );
+    const brokenDocs = [];
+    for (const row of docRes.rows) {
+      for (const col of docCols) {
+        const val = row[col];
+        if (val && val.startsWith('/uploads/')) {
+          const abs = path.join(uploadsRoot, val);
+          if (!fs.existsSync(abs)) {
+            brokenDocs.push({ project_id: row.project_id, ipc: row.ipc, field: col, path: val });
+          }
+        }
+      }
+    }
+
+    res.json({
+      brokenImages: { count: brokenImages.length, records: brokenImages },
+      brokenDocuments: { count: brokenDocs.length, records: brokenDocs }
+    });
+  } catch (err) {
+    console.error('❌ Diagnostics error:', err.message);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// --- 21c. GET: Fetch Single Image Content (BLOB) ---
 app.get('/api/image/:id', async (req, res) => {
   const { id } = req.params;
   try {

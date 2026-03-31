@@ -505,6 +505,8 @@ const DetailedProjInfo = () => {
     const [accountCategory, setAccountCategory] = useState(null);
     
     const [pendingDocs, setPendingDocs] = useState({ POW: null, DUPA: null, CONTRACT: null });
+    // 'idle' | 'uploading' | 'success' | 'error'
+    const [docStatus, setDocStatus] = useState({ POW: 'idle', DUPA: 'idle', CONTRACT: 'idle' });
 
     // Edit Modal State (single modal with 3 tabs)
     const [editModalOpen, setEditModalOpen] = useState(false);
@@ -554,11 +556,7 @@ const DetailedProjInfo = () => {
             return data;
         }
         if (data.startsWith('/uploads/')) {
-            const baseUrl = import.meta.env.BASE_URL || "/";
-            // Ensure baseUrl ends with / and data doesn't start with / for joining
-            const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-            const normalizedData = data.startsWith('/') ? data.substring(1) : data;
-            return `${normalizedBase}${normalizedData}`;
+            return data; // Already an absolute path from root — do not prepend BASE_URL
         }
 
         // 5. Otherwise assume it's raw base64 and wrap it
@@ -915,13 +913,16 @@ const DetailedProjInfo = () => {
                 update_type: 'Details Update'
             };
 
-            const response = await fetch(`${API_BASE}/api/projects`, {
+            const response = await fetch(`${API_BASE}/api/save-project`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
             });
             
-            if (!response.ok) throw new Error("Failed to append new project version");
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error || errData.message || "Failed to append new project version");
+            }
             const resData = await response.json();
 
             // Handle images if any new ones were added
@@ -935,7 +936,7 @@ const DetailedProjInfo = () => {
                     try {
                         const formData = new FormData();
                         formData.append('image', item.file);
-                        formData.append('projectId', resData.id);
+                        formData.append('projectId', resData.project?.project_id || resData.id);
                         formData.append('uploadedBy', uid);
                         formData.append('category', item.category);
                         await fetch(`${API_BASE}/api/upload-image`, { method: "POST", body: formData });
@@ -951,18 +952,20 @@ const DetailedProjInfo = () => {
                     try {
                         const docFormData = new FormData();
                         docFormData.append('document_pdf', file);
-                        docFormData.append('project_id', resData.id || project.id);
+                        docFormData.append('projectId', resData.project?.project_id || resData.id || project.id);
                         docFormData.append('type', type);
                         docFormData.append('ipc', project.ipc || '');
                         docFormData.append('uid', uid);
                         
-                        await fetch('/api/upload-project-document', {
+                        const docRes = await fetch(`${API_BASE}/api/upload-project-document`, {
                             method: 'POST',
                             headers: localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {},
                             body: docFormData,
                         });
+                        if (!docRes.ok) throw new Error(`${type} upload failed on server`);
                     } catch (err) {
                         console.error(`${type} upload failed`, err);
+                        alert(`❌ ${type} upload failed: ${err.message}`);
                     }
                 }
             }
@@ -977,9 +980,65 @@ const DetailedProjInfo = () => {
 
         } catch (err) {
             console.error("Save Error:", err);
-            alert("Sync error. Try again later.");
+            const detailMsg = err.message || "Unknown Error";
+            alert("Sync error:\n\n" + detailMsg + (err.stack ? "\n\nCheck console for full stack trace." : ""));
         } finally {
             setIsUploading(false);
+        }
+    };
+
+    // Atomic document upload — fires immediately on file selection, independent of Save
+    const handleAtomicUpload = async (key, file) => {
+        if (!project?.ipc) {
+            alert('Cannot upload: this project does not have an IPC assigned yet.');
+            return;
+        }
+        if (!file) return;
+
+        const uid = user ? user.uid : localStorage.getItem('uid');
+
+        // Diagnostic log (helps confirm IPC/path before network call)
+        console.log(`📎 [DOC UPLOAD] key=${key} ipc=${project.ipc} projectId=${project.id} file=${file.name} online=${navigator.onLine}`);
+        if (!navigator.onLine) {
+            console.warn('⚠️ [DOC UPLOAD] Device is offline — upload may fail');
+        }
+
+        setDocStatus(prev => ({ ...prev, [key]: 'uploading' }));
+
+        try {
+            const fd = new FormData();
+            fd.append('document_pdf', file);
+            fd.append('type', key);
+            fd.append('projectId', String(project.id));
+            fd.append('ipc', project.ipc);
+            fd.append('uid', uid || '');
+
+            const headers = {};
+            const token = localStorage.getItem('token');
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const res = await fetch(`${API_BASE}/api/upload-project-document`, {
+                method: 'POST',
+                headers,
+                body: fd,
+            });
+
+            if (!res.ok) {
+                const errBody = await res.json().catch(() => ({}));
+                throw new Error(errBody.error || `HTTP ${res.status}`);
+            }
+
+            // File will appear at the predictable IPC-named path once background compression finishes
+            const expectedPath = `/uploads/project_docs/${project.ipc}_${key}.pdf`;
+            console.log(`✅ [DOC UPLOAD] Queued. Expected path: ${expectedPath}`);
+
+            setProject(prev => ({ ...prev, [`${key.toLowerCase()}_pdf`]: expectedPath }));
+            setDocStatus(prev => ({ ...prev, [key]: 'success' }));
+            // Reset to idle after 3 s so the user can re-upload
+            setTimeout(() => setDocStatus(prev => ({ ...prev, [key]: 'idle' })), 3000);
+        } catch (err) {
+            console.error(`❌ [DOC UPLOAD] ${key} failed:`, err.message);
+            setDocStatus(prev => ({ ...prev, [key]: 'error' }));
         }
     };
 
@@ -1189,51 +1248,74 @@ const DetailedProjInfo = () => {
                 {['POW', 'DUPA', 'CONTRACT'].map(key => {
                     const docKey = `${key.toLowerCase()}_pdf`;
                     const hasExisting = !!project[docKey];
-                    const pendingFile = pendingDocs[key];
-                    
+                    const status = docStatus[key]; // 'idle' | 'uploading' | 'success' | 'error'
+
                     return (
                         <div key={key} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 gap-4 group">
+                            {/* Left: icon + label */}
                             <div className="flex items-center gap-4">
-                                <div className={`w-10 h-10 ${hasExisting ? 'bg-blue-50 text-blue-500' : 'bg-slate-50 text-slate-300'} rounded-xl flex items-center justify-center`}>
-                                    <LuFileText size={20} />
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                                    status === 'success' ? 'bg-emerald-50 text-emerald-500' :
+                                    status === 'error'   ? 'bg-red-50 text-red-400' :
+                                    hasExisting         ? 'bg-blue-50 text-blue-500' :
+                                                          'bg-slate-50 text-slate-300'
+                                }`}>
+                                    {status === 'uploading'
+                                        ? <div className="w-4 h-4 border-2 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
+                                        : <LuFileText size={20} />
+                                    }
                                 </div>
                                 <div>
                                     <p className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{key}</p>
-                                    {pendingFile && <p className="text-[8px] font-bold text-emerald-500 mt-0.5 truncate max-w-[150px]">Selected: {pendingFile.name}</p>}
+                                    <p className={`text-[8px] font-bold mt-0.5 ${
+                                        status === 'uploading' ? 'text-blue-400' :
+                                        status === 'success'   ? 'text-emerald-500' :
+                                        status === 'error'     ? 'text-red-400' :
+                                        hasExisting           ? 'text-slate-400' :
+                                                                'text-slate-300'
+                                    }`}>
+                                        {status === 'uploading' ? 'Uploading...' :
+                                         status === 'success'   ? '✅ Saved — compressing in background' :
+                                         status === 'error'     ? '❌ Upload failed' :
+                                         hasExisting           ? 'On file' :
+                                                                 'Not uploaded'}
+                                    </p>
                                 </div>
                             </div>
 
+                            {/* Right: actions */}
                             <div className="flex items-center gap-2 w-full sm:w-auto">
-                                {hasExisting && (
-                                    <a 
-                                        href={project[docKey].startsWith('data:') ? project[docKey] : (project[docKey].startsWith('/uploads/') ? `${API_BASE}${project[docKey]}` : `data:application/pdf;base64,${project[docKey]}`)} 
-                                        download={`${project.schoolName}_${key}.pdf`} 
+                                {hasExisting && status !== 'uploading' && (
+                                    <a
+                                        href={project[docKey].startsWith('/uploads/') ? `${API_BASE}${project[docKey]}` : project[docKey]}
+                                        download={`${project.schoolName}_${key}.pdf`}
                                         className="flex-1 sm:flex-none text-center bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-[9px] font-black uppercase hover:bg-slate-200 transition-all active:scale-95"
                                     >
                                         Download
                                     </a>
                                 )}
-                                
-                                {isEditMode && (
-                                    <label className="flex-1 sm:flex-none cursor-pointer">
-                                        <div className={`text-center px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all active:scale-95 border ${pendingFile ? 'bg-emerald-50 text-emerald-600 border-emerald-200 shadow-sm' : 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100'}`}>
-                                            {pendingFile ? 'Change File' : (hasExisting ? 'Update' : 'Upload')}
-                                        </div>
-                                        <input 
-                                            type="file" 
-                                            accept="application/pdf" 
-                                            className="hidden" 
-                                            onChange={(e) => {
-                                                const file = e.target.files[0];
-                                                if (file) setPendingDocs(prev => ({ ...prev, [key]: file }));
-                                            }}
-                                        />
-                                    </label>
-                                )}
-                                
-                                {!hasExisting && !isEditMode && (
-                                    <span className="text-[10px] font-black text-slate-300 uppercase italic px-4">Missing</span>
-                                )}
+
+                                {/* Upload / Replace — always available, not gated by isEditMode */}
+                                <label className={`flex-1 sm:flex-none cursor-pointer ${status === 'uploading' ? 'pointer-events-none opacity-50' : ''}`}>
+                                    <div className={`text-center px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all active:scale-95 border ${
+                                        status === 'error'   ? 'bg-red-50 text-red-600 border-red-200' :
+                                        status === 'success' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
+                                        hasExisting         ? 'bg-white text-slate-500 border-slate-200 hover:border-blue-300' :
+                                                             'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100'
+                                    }`}>
+                                        {status === 'error' ? 'Retry' : hasExisting ? 'Replace' : 'Upload'}
+                                    </div>
+                                    <input
+                                        type="file"
+                                        accept="application/pdf"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            const file = e.target.files[0];
+                                            if (file) handleAtomicUpload(key, file);
+                                            e.target.value = ''; // allow re-selecting the same file
+                                        }}
+                                    />
+                                </label>
                             </div>
                         </div>
                     );
@@ -1290,12 +1372,6 @@ const DetailedProjInfo = () => {
                                     </button>
                                 </>
                              )}
-                             <button
-                                onClick={() => setEditModalOpen(true)}
-                                className="px-4 py-2 bg-white/20 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/30 active:scale-95 transition-all border border-white/20"
-                             >
-                                Edit Details
-                             </button>
                         </div>
                     </div>
 
@@ -1307,14 +1383,14 @@ const DetailedProjInfo = () => {
                         <h1 className="text-2xl font-black text-white leading-tight tracking-tight mb-4">{project.schoolName}</h1>
                         
                         {/* Tab Stepper */}
-                        <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
+                        <div className="flex gap-2 overflow-x-auto pb-2 pr-10">
                             {TABS.map(tab => (
                                 <button
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
                                     className={`flex-none flex items-center gap-2 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                                        activeTab === tab.id 
-                                        ? 'bg-white text-[#004A99] shadow-lg scale-105' 
+                                        activeTab === tab.id
+                                        ? 'bg-white text-[#004A99] shadow-lg scale-105'
                                         : 'bg-white/10 text-white/60 hover:bg-white/20'
                                     }`}
                                 >
@@ -1322,6 +1398,13 @@ const DetailedProjInfo = () => {
                                     <span className="hidden sm:inline">{tab.label}</span>
                                 </button>
                             ))}
+                            <button
+                                onClick={() => setEditModalOpen(true)}
+                                className="flex-none flex items-center gap-2 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-amber-400/20 text-amber-200 hover:bg-amber-400/30 border border-amber-400/30"
+                            >
+                                <span className="hidden sm:inline">Variation</span>
+                                <span className="sm:hidden">V.O.</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1486,16 +1569,15 @@ const DetailedProjInfo = () => {
 
                     for (const item of siteImages) {
                         try {
-                            const base64Image = await compressImage(item.file);
+                            const imgFormData = new FormData();
+                            imgFormData.append('image', item.file);
+                            imgFormData.append('projectId', resData.project?.project_id || resData.id);
+                            imgFormData.append('uploadedBy', user?.uid);
+                            imgFormData.append('category', item.category);
+
                             await fetch(`/api/upload-image`, {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    projectId: resData.project.project_id, // Link to the NEW snapshot ID
-                                    imageData: base64Image,
-                                    uploadedBy: user?.uid,
-                                    category: item.category
-                                }),
+                                body: imgFormData,
                             });
                         } catch (err) {
                             console.error("Image upload failed:", err);
