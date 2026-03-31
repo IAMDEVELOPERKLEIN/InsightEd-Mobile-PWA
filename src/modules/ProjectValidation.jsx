@@ -156,6 +156,20 @@ const ProjectValidation = () => {
         return new Date(dateStr).toLocaleDateString();
     };
 
+    const getImageSrc = (data) => {
+        if (!data) return "";
+        if (data.startsWith('data:') || data.startsWith('blob:') || data.startsWith('http')) {
+            return data;
+        }
+        if (data.startsWith('/uploads/')) {
+            const baseUrl = import.meta.env.BASE_URL || "/";
+            const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+            const normalizedData = data.startsWith('/') ? data.substring(1) : data;
+            return `${normalizedBase}${normalizedData}`;
+        }
+        return `data:image/jpeg;base64,${data}`;
+    };
+
     return (
         <PageTransition>
             <div className="min-h-screen bg-slate-50 pb-20 relative">
@@ -323,7 +337,7 @@ const ProjectValidation = () => {
                                     <div className="grid grid-cols-2 gap-3">
                                         {projectImages.map((img, idx) => (
                                             <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden bg-slate-200 shadow-sm border border-white group">
-                                                <img src={img.image_url || img.image_data} alt={`Project ${idx}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                                <img src={getImageSrc(img.image_url || img.image_data)} alt={`Project ${idx}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                                                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end p-3">
                                                     <p className="text-white text-[10px] font-medium truncate w-full">Uploaded by {img.uploaded_by}</p>
                                                 </div>

@@ -152,41 +152,44 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, onVariati
                     IPC {p.ipc}
                   </div>
                 )}
-                {/* Updated By Info - Premium Design */}
-                {p.engineerName && (
-                  <div className="flex items-center gap-1.5 mt-1 bg-white/50 dark:bg-slate-900/40 px-2 py-1 rounded-lg border border-slate-100 dark:border-slate-700/50 shadow-sm transition-all hover:shadow-md">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></div>
-                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none">Last updated by</span>
-                    <span className="text-[9px] font-black text-[#004A99] dark:text-blue-400 leading-none">{p?.engineerName}</span>
-                  </div>
-                )}
-                {/* Accomplishment Percentage Badge */}
-                <div className="relative mt-2">
-                  <div className="px-3 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300 rounded-xl border-2 border-emerald-100 dark:border-emerald-800 shadow-sm flex flex-col items-center leading-tight">
-                    <div className="flex items-center gap-1.5">
-                      {(p?.previousPercentage !== undefined && p?.previousPercentage !== null && Number(p?.previousPercentage) !== Number(p?.accomplishmentPercentage)) || (p?.previousPercentage === null && Number(p?.accomplishmentPercentage) !== 0) ? (
-                        <>
-                          <span className="text-[10px] font-bold opacity-40 line-through">{p?.previousPercentage ?? 0}%</span>
-                          <span className="text-[10px] font-black opacity-30">→</span>
-                        </>
-                      ) : null}
-                      <span className="text-[18px] font-black">{p?.accomplishmentPercentage || 0}%</span>
-                    </div>
-                    { (p.statusAsOf || p.statusAsOfDate) && (
-                      <span className="text-[7px] font-black uppercase tracking-tighter opacity-60 mt-0.5">
-                        As of {new Date(p.statusAsOf || p.statusAsOfDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} {new Date(p.statusAsOf || p.statusAsOfDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    )}
-                  </div>
-                  {p?.status === "Terminated" && (
-                    <div className="absolute -top-2 -right-2 bg-red-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full shadow-lg border border-white animate-pulse">
-                      🚫 TERMINATED
+                {/* Combined Row for Last Updated By and Percentage */}
+                <div className="flex items-center gap-2 mt-1">
+                  {p.engineerName && (
+                    <div className="flex items-center gap-1.5 bg-white/50 dark:bg-slate-900/40 px-2 py-1 rounded-lg border border-slate-100 dark:border-slate-700/50 shadow-sm transition-all hover:shadow-md">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></div>
+                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none">Last updated by</span>
+                      <span className="text-[9px] font-black text-[#004A99] dark:text-blue-400 leading-none">{p?.engineerName}</span>
                     </div>
                   )}
-                  {p?.status === "Suspended" && (
-                    <div className="absolute -top-2 -right-2 bg-amber-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full shadow-lg border border-white animate-pulse">
-                      ⏸ SUSPENDED
+                  {/* Accomplishment Percentage Badge */}
+                  <div className="relative">
+                    <div className="px-3 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300 rounded-xl border-2 border-emerald-100 dark:border-emerald-800 shadow-sm flex flex-col items-center leading-tight">
+                      <div className="flex items-center gap-1.5">
+                        {(p?.previousPercentage !== undefined && p?.previousPercentage !== null && Number(p?.previousPercentage) !== Number(p?.accomplishmentPercentage)) || (p?.previousPercentage === null && Number(p?.accomplishmentPercentage) !== 0) ? (
+                          <>
+                            <span className="text-[10px] font-bold opacity-40 line-through">{p?.previousPercentage ?? 0}%</span>
+                            <span className="text-[10px] font-black opacity-30">→</span>
+                          </>
+                        ) : null}
+                        <span className="text-[18px] font-black">{p?.accomplishmentPercentage || 0}%</span>
+                      </div>
+                      { (p.statusAsOf || p.statusAsOfDate) && (
+                        <span className="text-[7px] font-black uppercase tracking-tighter opacity-60 mt-0.5">
+                          As of {new Date(p.statusAsOf || p.statusAsOfDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} {new Date(p.statusAsOf || p.statusAsOfDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
                     </div>
+                    {p?.status === "Terminated" && (
+                      <div className="absolute -top-2 -right-2 bg-red-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full shadow-lg border border-white animate-pulse">
+                        🚫 TERMINATED
+                      </div>
+                    )}
+                    {p?.status === "Suspended" && (
+                      <div className="absolute -top-2 -right-2 bg-amber-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full shadow-lg border border-white animate-pulse">
+                        ⏸ SUSPENDED
+                      </div>
+                    )}
+                  </div>
                   )}
                   {p?.approvalStatus === "Pending" && (
                     <div className="absolute -top-2 -right-2 bg-orange-400 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full shadow-lg border border-white animate-pulse">

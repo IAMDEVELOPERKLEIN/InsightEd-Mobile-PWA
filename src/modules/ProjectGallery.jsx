@@ -27,7 +27,10 @@ const LazyImage = ({ imageId, meta, onClick }) => {
 
             // File-path based storage (new)
             if (typeof base64 === 'string' && base64.startsWith('/uploads/')) {
-                setSrc(base64);
+                const baseUrl = import.meta.env.BASE_URL || "/";
+                const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+                const normalizedData = base64.startsWith('/') ? base64.substring(1) : base64;
+                setSrc(`${normalizedBase}${normalizedData}`);
                 setLoading(false);
                 return;
             }

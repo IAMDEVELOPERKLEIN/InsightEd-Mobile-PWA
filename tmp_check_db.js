@@ -1,20 +1,25 @@
-const pg = require('pg');
-const pool = new pg.Pool({
-  connectionString: 'postgres://Administrator1:pRZTbQ2T1JD7@stride-posgre-prod-01.postgres.database.azure.com:5432/insightEd',
-  ssl: { rejectUnauthorized: false }
-});
-async function check() {
+import pg from 'pg';
+import dotenv from 'dotenv';
+dotenv.config();
+
+async function checkTables() {
+  const pool = new pg.Pool({ 
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
   try {
-    const res = await pool.query("SELECT * FROM information_schema.tables WHERE table_name = 'activity_logs'");
-    console.log('Tables found:', res.rowCount);
-    if (res.rowCount > 0) {
-      const cols = await pool.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'activity_logs'");
-      console.log('Columns:', cols.rows);
-    }
+    console.log("--- schools_IERN ---");
+    const res1 = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'schools_IERN'");
+    console.log(res1.rows.map(r => r.column_name).sort());
+
+    console.log("\n--- all_locations ---");
+    const res2 = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'all_locations'");
+    console.log(res2.rows.map(r => r.column_name).sort());
   } catch (err) {
-    console.error('Check failed:', err);
+    console.error("ERROR:", err.message);
   } finally {
-    pool.end();
+    await pool.end();
   }
 }
-check();
+
+checkTables();

@@ -266,7 +266,11 @@ const Register = () => {
         if (selectedRegion) {
             fetch(`/api/locations/divisions?region=${encodeURIComponent(selectedRegion)}`)
                 .then(res => res.json())
-                .then(data => setDivisions(data || []))
+                .then(data => {
+                    const options = data || [];
+                    if (selectedRegion === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    setDivisions(options);
+                })
                 .catch(console.error);
         }
     }, [selectedRegion]);
@@ -277,7 +281,11 @@ const Register = () => {
         if (selectedRegion && selectedDivision) {
             fetch(`/api/locations/districts?region=${encodeURIComponent(selectedRegion)}&division=${encodeURIComponent(selectedDivision)}`)
                 .then(res => res.json())
-                .then(data => setDistricts(data || []))
+                .then(data => {
+                    const options = data || [];
+                    if (selectedDivision === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    setDistricts(options);
+                })
                 .catch(console.error);
         }
     }, [selectedRegion, selectedDivision]);
@@ -288,7 +296,11 @@ const Register = () => {
         if (selectedRegion && selectedDivision && selectedDistrict) {
             fetch(`/api/locations/municipalities?region=${encodeURIComponent(selectedRegion)}&division=${encodeURIComponent(selectedDivision)}&district=${encodeURIComponent(selectedDistrict)}`)
                 .then(res => res.json())
-                .then(data => setMunicipalities(data || []))
+                .then(data => {
+                    const options = data || [];
+                    if (selectedDistrict === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    setMunicipalities(options);
+                })
                 .catch(console.error);
         }
     }, [selectedRegion, selectedDivision, selectedDistrict]);
@@ -299,7 +311,24 @@ const Register = () => {
         if (selectedRegion && selectedDivision && selectedDistrict && selectedMunicipality) {
             fetch(`/api/locations/schools?region=${encodeURIComponent(selectedRegion)}&division=${encodeURIComponent(selectedDivision)}&district=${encodeURIComponent(selectedDistrict)}&municipality=${encodeURIComponent(selectedMunicipality)}`)
                 .then(res => res.json())
-                .then(data => setAvailableSchools(data || []))
+                .then(data => {
+                    const options = data || [];
+                    if (selectedMunicipality === 'Blank' && !options.some(s => s.school_id === '000000')) {
+                        options.unshift({ 
+                            school_id: '000000', 
+                            school_name: 'Blank School',
+                            region: 'Blank',
+                            division: 'Blank',
+                            district: 'Blank',
+                            municipality: 'Blank',
+                            province: 'Blank',
+                            barangay: 'Blank',
+                            latitude: 0,
+                            longitude: 0
+                        });
+                    }
+                    setAvailableSchools(options);
+                })
                 .catch(console.error);
         }
     }, [selectedRegion, selectedDivision, selectedDistrict, selectedMunicipality]);
@@ -464,7 +493,13 @@ const Register = () => {
         // Cascading API load for Province/City/Barangay
         if (region) {
             fetch(`/api/locations/provinces?region=${encodeURIComponent(region)}`)
-                .then(r => r.json()).then(setProvinceOptions).catch(() => setProvinceOptions([]));
+                .then(r => r.json())
+                .then(data => {
+                    const options = data || [];
+                    if (region === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    setProvinceOptions(options);
+                })
+                .catch(() => setProvinceOptions([]));
         } else {
             setProvinceOptions([]);
         }
@@ -482,7 +517,13 @@ const Register = () => {
 
         if (province && formData.region) {
             fetch(`/api/locations/municipalities-by-province?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(province)}`)
-                .then(r => r.json()).then(setCityOptions).catch(() => setCityOptions([]));
+                .then(r => r.json())
+                .then(data => {
+                    const options = data || [];
+                    if (province === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    setCityOptions(options);
+                })
+                .catch(() => setCityOptions([]));
         } else {
             setCityOptions([]);
         }
@@ -499,7 +540,13 @@ const Register = () => {
 
         if (city && formData.province && formData.region) {
             fetch(`/api/locations/barangays?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(formData.province)}&municipality=${encodeURIComponent(city)}`)
-                .then(r => r.json()).then(setBarangayOptions).catch(() => setBarangayOptions([]));
+                .then(r => r.json())
+                .then(data => {
+                    const options = data || [];
+                    if (city === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    setBarangayOptions(options);
+                })
+                .catch(() => setBarangayOptions([]));
         } else {
             setBarangayOptions([]);
         }
