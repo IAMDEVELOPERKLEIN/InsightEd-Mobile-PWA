@@ -311,11 +311,11 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                         const pOpts = provinces || [];
                         const lOpts = legDistricts || [];
                         const mOpts = municipalities || [];
-                        if (region === 'Blank') {
-                            if (!pOpts.includes('Blank')) pOpts.unshift('Blank');
-                            if (!lOpts.includes('Blank')) lOpts.unshift('Blank');
+                        if (region === 'Blank Region') {
+                            if (!pOpts.includes('Blank Province')) pOpts.unshift('Blank Province');
+                            if (!lOpts.includes('Blank District')) lOpts.unshift('Blank District');
                         }
-                        if (province === 'Blank' && !mOpts.includes('Blank')) mOpts.unshift('Blank');
+                        if (province === 'Blank Province' && !mOpts.includes('Blank Municipality')) mOpts.unshift('Blank Municipality');
                         setLookupOptions(prev => ({ ...prev, provinces: pOpts, legDistricts: lOpts, municipalities: mOpts }));
                     }).catch(err => console.error("Error fetching location options:", err));
                 }

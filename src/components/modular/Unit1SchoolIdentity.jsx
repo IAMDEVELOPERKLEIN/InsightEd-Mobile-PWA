@@ -334,7 +334,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             .then(r => r.json())
             .then(data => {
                 const options = data || [];
-                if (formData.region === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                if (formData.region === 'Blank Region' && !options.includes('Blank Province')) options.unshift('Blank Province');
                 setProvinceOptions(options);
             })
             .catch(() => {});
@@ -346,7 +346,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             .then(r => r.json())
             .then(data => {
                 const options = data || [];
-                if (formData.province === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                if (formData.province === 'Blank Province' && !options.includes('Blank Municipality')) options.unshift('Blank Municipality');
                 setCityOptions(options);
             })
             .catch(() => {});
@@ -358,7 +358,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             .then(r => r.json())
             .then(data => {
                 const options = data || [];
-                if (formData.municipality === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                if (formData.municipality === 'Blank Municipality' && !options.includes('Blank Barangay')) options.unshift('Blank Barangay');
                 setBarangayOptions(options);
             })
             .catch(() => {});
@@ -372,9 +372,9 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         ]).then(([divs, legs]) => { 
             const dOptions = divs || [];
             const lOptions = legs || [];
-            if (formData.region === 'Blank') {
-                if (!dOptions.includes('Blank')) dOptions.unshift('Blank');
-                if (!lOptions.includes('Blank')) lOptions.unshift('Blank');
+            if (formData.region === 'Blank Region') {
+                if (!dOptions.includes('Blank Division')) dOptions.unshift('Blank Division');
+                if (!lOptions.includes('Blank District')) lOptions.unshift('Blank District');
             }
             setDivisionOptions(dOptions); 
             setLegDistrictOptions(lOptions); 
@@ -387,7 +387,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             .then(r => r.json())
             .then(data => {
                 const options = data || [];
-                if (formData.division === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                if (formData.division === 'Blank Division' && !options.includes('Blank District')) options.unshift('Blank District');
                 setDistrictOptions(options);
             })
             .catch(() => {});
@@ -398,7 +398,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             .then(r => r.json())
             .then(data => {
                 const options = data || [];
-                if (!options.includes('Blank')) options.unshift('Blank');
+                if (!options.includes('Blank Region')) options.unshift('Blank Region');
                 setRegionOptions(options);
             })
             .catch(() => {});
