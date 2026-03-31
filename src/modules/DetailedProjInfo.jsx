@@ -979,7 +979,7 @@ const DetailedProjInfo = () => {
                       onClick={() => setEditModalOpen(true)}
                       className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[9px] font-black uppercase tracking-widest border border-blue-100 active:scale-95 transition-all"
                     >
-                      Update Status
+                      Edit Details
                     </button>
                 </div>
             </div>
