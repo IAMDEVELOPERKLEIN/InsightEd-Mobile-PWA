@@ -1,15 +1,16 @@
-# Task Checklist — Unified Engineer Workflow Remediation
-**Date:** 2026-03-31
+# Task Checklist - School Registration List Display
 
-## Gaps Fixed
-
-- [x] GAP 1: `api/index.js` — Physical file deletion (local `/uploads/` + Azure blob) on `DELETE /api/project-images/:id`
-- [x] GAP 2: `EngineerProjects.jsx` — Moved UPDATE button from bottom action bar to top-right of card header
-- [x] GAP 3: `EngineerProjects.jsx` — Removed Upload Docs modal, all state variables, and `handleDocumentUpload`
-
-## Verification
-
-- [x] `npm run build` passes with 0 errors (✓ built in 43.15s)
-- [x] Photo delete removes file from disk (fs.unlink + Azure SDK)
-- [x] UPDATE button appears top-right on project cards
-- [x] Upload Docs fully purged from EngineerProjects.jsx
+- [x] 1. Backend Verification
+    - [x] Check if `/api/monitoring/schools` handles `region`, `division`, and `district` correctly.
+    - [x] Ensure the registration status is clearly identifiable (registered vs unregistered).
+- [x] 2. MonitoringDashboard.jsx Refactor
+    - [x] Ensure `fetchData` in `MonitoringDashboard.jsx` correctly calls the endpoint with current filters.
+    - [x] Add a `useEffect` if needed to re-fetch when `coDivision` or `coDistrict` changes at a high level.
+- [x] 3. UI Implementation
+    - [x] Add a "Regional School List" section below the existing summary cards in the `accomplishment/all` tab.
+    - [x] Implement search and pagination within this new list.
+    - [x] Use existing card style or a more compact table view.
+- [x] 4. Polish & Test
+    - [x] Verify that sensitive columns are hidden for certain roles.
+    - [x] Ensure name-based search is case-insensitive.
+    - [x] Test drill-down behavior and list updates.
