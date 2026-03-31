@@ -268,7 +268,7 @@ const Register = () => {
                 .then(res => res.json())
                 .then(data => {
                     const options = data || [];
-                    if (selectedRegion === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    if (selectedRegion === 'Blank Region' && !options.includes('Blank Division')) options.unshift('Blank Division');
                     setDivisions(options);
                 })
                 .catch(console.error);
@@ -283,7 +283,7 @@ const Register = () => {
                 .then(res => res.json())
                 .then(data => {
                     const options = data || [];
-                    if (selectedDivision === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    if (selectedDivision === 'Blank Division' && !options.includes('Blank District')) options.unshift('Blank District');
                     setDistricts(options);
                 })
                 .catch(console.error);
@@ -298,7 +298,7 @@ const Register = () => {
                 .then(res => res.json())
                 .then(data => {
                     const options = data || [];
-                    if (selectedDistrict === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    if (selectedDistrict === 'Blank District' && !options.includes('Blank Municipality')) options.unshift('Blank Municipality');
                     setMunicipalities(options);
                 })
                 .catch(console.error);
@@ -313,16 +313,16 @@ const Register = () => {
                 .then(res => res.json())
                 .then(data => {
                     const options = data || [];
-                    if (selectedMunicipality === 'Blank' && !options.some(s => s.school_id === '000000')) {
+                    if (selectedMunicipality === 'Blank Municipality' && !options.some(s => s.school_id === '000000')) {
                         options.unshift({ 
                             school_id: '000000', 
                             school_name: 'Blank School',
-                            region: 'Blank',
-                            division: 'Blank',
-                            district: 'Blank',
-                            municipality: 'Blank',
-                            province: 'Blank',
-                            barangay: 'Blank',
+                            region: 'Blank Region',
+                            division: 'Blank Division',
+                            district: 'Blank District',
+                            municipality: 'Blank Municipality',
+                            province: 'Blank Province',
+                            barangay: 'Blank Barangay',
                             latitude: 0,
                             longitude: 0
                         });
@@ -496,7 +496,7 @@ const Register = () => {
                 .then(r => r.json())
                 .then(data => {
                     const options = data || [];
-                    if (region === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    if (region === 'Blank Region' && !options.includes('Blank Province')) options.unshift('Blank Province');
                     setProvinceOptions(options);
                 })
                 .catch(() => setProvinceOptions([]));
@@ -520,7 +520,7 @@ const Register = () => {
                 .then(r => r.json())
                 .then(data => {
                     const options = data || [];
-                    if (province === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    if (province === 'Blank Province' && !options.includes('Blank Municipality')) options.unshift('Blank Municipality');
                     setCityOptions(options);
                 })
                 .catch(() => setCityOptions([]));
@@ -543,7 +543,7 @@ const Register = () => {
                 .then(r => r.json())
                 .then(data => {
                     const options = data || [];
-                    if (city === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    if (city === 'Blank Municipality' && !options.includes('Blank Barangay')) options.unshift('Blank Barangay');
                     setBarangayOptions(options);
                 })
                 .catch(() => setBarangayOptions([]));

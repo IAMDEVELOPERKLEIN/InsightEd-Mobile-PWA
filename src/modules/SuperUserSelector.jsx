@@ -37,7 +37,7 @@ const SuperUserSelector = () => {
             .then(res => res.json())
             .then(data => {
                 const options = data || [];
-                if (!options.includes('Blank')) options.unshift('Blank');
+                if (!options.includes('Blank Region')) options.unshift('Blank Region');
                 setRegions(options);
             })
             .catch(err => console.error("Failed to load regions:", err));
@@ -52,7 +52,7 @@ const SuperUserSelector = () => {
                 .then(res => res.json())
                 .then(data => {
                     const options = data || [];
-                    if (selectedRegion === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    if (selectedRegion === 'Blank Region' && !options.includes('Blank Division')) options.unshift('Blank Division');
                     setSdoDivisions(options);
                 })
                 .catch(console.error);
@@ -68,7 +68,7 @@ const SuperUserSelector = () => {
                 .then(res => res.json())
                 .then(data => {
                     const options = data || [];
-                    if (engRegion === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    if (engRegion === 'Blank Region' && !options.includes('Blank Division')) options.unshift('Blank Division');
                     setEngDivisions(options);
                 })
                 .catch(console.error);
@@ -85,7 +85,7 @@ const SuperUserSelector = () => {
                 .then(res => res.json())
                 .then(data => {
                     const options = data || [];
-                    if (lguRegion === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    if (lguRegion === 'Blank Region' && !options.includes('Blank Province')) options.unshift('Blank Province');
                     setLguProvinces(options);
                 })
                 .catch(console.error);
@@ -101,7 +101,7 @@ const SuperUserSelector = () => {
                 .then(res => res.json())
                 .then(data => {
                     const options = data || [];
-                    if (lguProvince === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    if (lguProvince === 'Blank Province' && !options.includes('Blank Municipality')) options.unshift('Blank Municipality');
                     setLguMunicipalities(options);
                 })
                 .catch(console.error);
