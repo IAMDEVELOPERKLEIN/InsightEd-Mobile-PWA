@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FiSearch,
@@ -12,7 +12,9 @@ import {
   FiGrid,
   FiCheckCircle,
   FiClock,
-  FiAlertCircle
+  FiAlertCircle,
+  FiFileText,
+  FiRefreshCw
 } from 'react-icons/fi';
 import { TbSchool } from 'react-icons/tb';
 import PageTransition from '../components/PageTransition';
@@ -68,20 +70,20 @@ const TopStatCard = ({ title, value, icon: Icon, color, subtext, secondaryValue 
     <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col justify-between"
+        className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col justify-between"
     >
-        <div className="flex justify-between items-start mb-6">
-            <div className={`p-4 rounded-2xl ${color} bg-opacity-10 dark:bg-opacity-20 text-current`}>
-                <Icon size={28} className={color.replace('bg-', 'text-')} />
+        <div className="flex justify-between items-start mb-4 sm:mb-6">
+            <div className={`p-2 sm:p-4 rounded-xl sm:rounded-2xl ${color} bg-opacity-10 dark:bg-opacity-20 text-current`}>
+                <Icon size={20} className={`${color.replace('bg-', 'text-')} sm:w-[28px] sm:h-[28px]`} />
             </div>
-            {subtext && <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800/50 px-2 py-1 rounded-md">{subtext}</span>}
+            {subtext && <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800/50 px-2 py-1 rounded-md">{subtext}</span>}
         </div>
         <div>
             <div className="flex items-baseline gap-1">
-                <h3 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">{value}</h3>
-                {secondaryValue && <span className="text-lg font-bold text-slate-400 dark:text-slate-600">/ {secondaryValue}</span>}
+                <h3 className="text-xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">{value}</h3>
+                {secondaryValue && <span className="text-xs sm:text-lg font-bold text-slate-400 dark:text-slate-600">/ {secondaryValue}</span>}
             </div>
-            <p className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-1">{title}</p>
+            <p className="text-[9px] sm:text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-1">{title}</p>
         </div>
     </motion.div>
 );
@@ -100,6 +102,7 @@ const MonitoringDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [totalResults, setTotalResults] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
   // --- Drill-down navigation state ---
   // level: 'division' | 'district' | 'schools'
@@ -109,31 +112,34 @@ const MonitoringDashboard = () => {
   const [navDir, setNavDir] = useState(1); // 1 = drilling down, -1 = going back
 
   // Fetch ALL schools once (with RBAC filter) — we group on the client
-  useEffect(() => {
-    const fetchAllSchools = async () => {
-      setLoading(true);
-      try {
-        const params = new URLSearchParams({ limit: 5000 });
+  const fetchAllSchools = async () => {
+    setLoading(true);
+    setRefreshing(true);
+    try {
+      const params = new URLSearchParams({ limit: 5000 });
 
-        if (userRole === 'Regional Office' && userRegion) {
-          params.append('region', userRegion);
-        } else if (userRole === 'School Division Office') {
-          if (userRegion) params.append('region', userRegion);
-          if (userDivision) params.append('division', userDivision);
-        }
-
-        const res = await fetch(`/api/monitoring/schools?${params.toString()}`);
-        if (res.ok) {
-          const result = await res.json();
-          setSchools(result.data || []);
-          setTotalResults(result.total || 0);
-        }
-      } catch (e) {
-        console.error('Failed to fetch schools:', e);
-      } finally {
-        setLoading(false);
+      if (userRole === 'Regional Office' && userRegion) {
+        params.append('region', userRegion);
+      } else if (userRole === 'School Division Office') {
+        if (userRegion) params.append('region', userRegion);
+        if (userDivision) params.append('division', userDivision);
       }
-    };
+
+      const res = await fetch(`/api/monitoring/schools?${params.toString()}`);
+      if (res.ok) {
+        const result = await res.json();
+        setSchools(result.data || []);
+        setTotalResults(result.total || 0);
+      }
+    } catch (e) {
+      console.error('Failed to fetch schools:', e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
     fetchAllSchools();
   }, [userRole, userRegion, userDivision]);
 
@@ -156,8 +162,10 @@ const MonitoringDashboard = () => {
     const avgProgress = registered > 0 
       ? filteredSchools.reduce((sum, s) => sum + parseFloat(s.completion_percentage || 0), 0) / registered 
       : 0;
+    
+    const esf7Submissions = filteredSchools.filter(s => s.esf7_status === 'VERIFIED' || s.esf7_status === 'PENDING_SDO').length;
 
-    return { total, registered, completed, inProgress, avgProgress };
+    return { total, registered, completed, inProgress, avgProgress, esf7Submissions };
   }, [schools, level, selectedDivision, selectedDistrict]);
 
   // --- Grouping logic ---
@@ -177,6 +185,11 @@ const MonitoringDashboard = () => {
       return { name, count: list.length, avgPct, completed, schools: list };
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [groupedByDivision]);
+
+  const leadingDivision = useMemo(() => {
+    if (divisionList.length === 0) return null;
+    return [...divisionList].sort((a, b) => b.avgPct - a.avgPct)[0];
+  }, [divisionList]);
 
   const districtList = useMemo(() => {
     if (!selectedDivision) return [];
@@ -284,6 +297,14 @@ const MonitoringDashboard = () => {
             </div>
 
             <div className="flex items-center gap-3 ml-auto">
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={fetchAllSchools}
+                disabled={refreshing}
+                className={`p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all shadow-sm flex items-center justify-center ${refreshing ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+              >
+                <FiRefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
+              </motion.button>
               <div className="hidden sm:flex items-center gap-2 bg-slate-50 dark:bg-slate-800 px-4 py-2 rounded-2xl border border-slate-100 dark:border-slate-700">
                 <FiZap size={14} className="text-blue-500" />
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">{totalResults.toLocaleString()} Schools</span>
@@ -314,7 +335,7 @@ const MonitoringDashboard = () => {
         </div>
 
         {/* ===== STAT CARDS ===== */}
-        <div className="px-6 md:px-8 grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+        <div className="px-4 sm:px-8 grid grid-cols-2 gap-3 sm:gap-6 mb-10">
             <TopStatCard 
                 title="Registration Participation" 
                 value={stats.registered.toLocaleString()} 
@@ -329,6 +350,21 @@ const MonitoringDashboard = () => {
                 icon={TbSchool} 
                 color="bg-emerald-600" 
                 subtext="100% Completed"
+            />
+            <TopStatCard 
+                title="ESF7 Submissions" 
+                value={stats.esf7Submissions.toLocaleString()} 
+                icon={FiFileText} 
+                color="bg-indigo-600" 
+                subtext="Staged / Verified"
+            />
+            <TopStatCard 
+                title="Leading Division" 
+                value={leadingDivision ? leadingDivision.name : 'N/A'} 
+                secondaryValue={leadingDivision ? `${Math.round(leadingDivision.avgPct)}%` : ''}
+                icon={FiZap} 
+                color="bg-amber-500" 
+                subtext="Rank 1 Completion"
             />
         </div>
 
@@ -449,11 +485,10 @@ const MonitoringDashboard = () => {
               >
                 <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
                   {/* Table header */}
-                  <div className="grid grid-cols-[1fr_auto_auto_140px_auto] gap-4 px-6 py-4 bg-slate-50/70 dark:bg-slate-800/30 border-b border-slate-100 dark:border-slate-700">
+                  <div className="grid grid-cols-[1fr_auto_auto] md:grid-cols-[1fr_auto_140px_auto] gap-4 px-6 py-4 bg-slate-50/70 dark:bg-slate-800/30 border-b border-slate-100 dark:border-slate-700">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">School</span>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">ID</span>
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Enrolled</span>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Progress</span>
+                    <span className="hidden md:block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Progress</span>
                     <span></span>
                   </div>
 
@@ -465,11 +500,16 @@ const MonitoringDashboard = () => {
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.03 }}
-                      className="group grid grid-cols-[1fr_auto_auto_140px_auto] gap-4 items-center px-6 py-5 border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors"
+                      className="group grid grid-cols-[1fr_auto_auto] md:grid-cols-[1fr_auto_140px_auto] gap-4 items-center px-6 py-5 border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-blue-600 transition-colors truncate">{school.school_name}</p>
+                          <p className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-blue-600 transition-colors truncate">
+                            {school.school_name}
+                            <span className="md:hidden ml-1.5 text-[10px] font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded">
+                              {Math.round(school.completion_percentage || 0)}%
+                            </span>
+                          </p>
                           {!school.is_registered && (
                             <span className="flex-shrink-0 bg-rose-50 dark:bg-rose-900/20 text-rose-500 text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter border border-rose-100 dark:border-rose-900/30 flex items-center gap-0.5">
                               <FiAlertCircle size={10} /> Unregistered
@@ -478,16 +518,24 @@ const MonitoringDashboard = () => {
                         </div>
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mt-0.5 flex items-center gap-1">
                           <FiActivity size={9} />
-                          {school.district || 'District N/A'}
+                          {school.school_id} • {school.district || 'District N/A'}
+                          {school.esf7_status && school.esf7_status !== 'NOT_STARTED' && (
+                            <span className={`ml-2 px-1.5 py-0.5 rounded text-[8px] font-black tracking-tighter uppercase ${
+                              school.esf7_status === 'VERIFIED' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 border border-emerald-100' :
+                              school.esf7_status === 'REJECTED' ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-600 border border-rose-100' :
+                              'bg-amber-50 dark:bg-amber-900/20 text-amber-600 border border-amber-100'
+                            }`}>
+                              ESF7: {school.esf7_status.replace('_', ' ')}
+                            </span>
+                          )}
                         </p>
                       </div>
-                      <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 px-2.5 py-1 rounded-lg tracking-wider whitespace-nowrap">
-                        {school.school_id}
-                      </span>
                       <span className="font-bold text-slate-700 dark:text-slate-300 text-sm whitespace-nowrap text-right">
                         {Number(school.total_enrollment || 0).toLocaleString()}
                       </span>
-                      <ProgressBar pct={parseFloat(school.completion_percentage)} />
+                      <div className="hidden md:block">
+                        <ProgressBar pct={parseFloat(school.completion_percentage)} />
+                      </div>
                       <button className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-400 hover:text-blue-600 hover:border-blue-200 dark:hover:border-blue-900 transition-all active:scale-90 flex-shrink-0">
                         <FiChevronRight size={16} />
                       </button>

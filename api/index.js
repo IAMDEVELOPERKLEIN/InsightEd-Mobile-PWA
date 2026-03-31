@@ -3032,9 +3032,9 @@ app.get('/api/offline/schools', async (req, res) => {
     // Fetch only necessary fields to keep payload light
     // CHANGED: Use 'schools' table instead of 'ph_schools'
     const query = `
-            SELECT school_id, school_name, region, division, latitude, longitude 
-            FROM schools 
-            WHERE school_id IS NOT NULL
+            SELECT "SchoolID" as school_id, "School_Name" as school_name, "Region" as region, "Division" as division, "Latitude" as latitude, "Longitude" as longitude 
+            FROM "schools_IERN" 
+            WHERE "SchoolID" IS NOT NULL
         `;
     const result = await pool.query(query);
 
@@ -3051,8 +3051,7 @@ app.get('/api/school-profile/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
     // CHANGED: Use 'schools' table instead of 'ph_schools'
-    console.log(`🔎 Searching for School ID: ${schoolId} in 'schools' table...`);
-    const query = `SELECT * FROM schools WHERE school_id = $1`;
+    const query = `SELECT "SchoolID" as school_id, "School_Name" as school_name, "Region" as region, "Division" as division, "District" as district, "Province" as province, "Municipality" as municipality, "Legislative_District" as leg_district, "Barangay" as barangay, "Street_Address" as address, "Curricular_Offering" as curricular_offering_classification FROM "schools_IERN" WHERE "SchoolID" = $1`;
     const result = await pool.query(query, [schoolId]);
 
     if (result.rows.length > 0) {
@@ -4982,9 +4981,9 @@ app.get('/api/sdo/location-options', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT DISTINCT 
-        province, municipality, district, leg_district, barangay
-      FROM schools
-      WHERE region = $1 AND division = $2
+        "Province" as province, "Municipality" as municipality, "District" as district, "Legislative_District" as leg_district, "Barangay" as barangay
+      FROM "schools_IERN"
+      WHERE "Region" = $1 AND "Division" = $2
       ORDER BY province, municipality, district, barangay
     `, [region, division]);
 
@@ -5002,7 +5001,7 @@ app.get('/api/master-list/school/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
-    const result = await pool.query('SELECT * FROM schools WHERE school_id = $1', [id]);
+    const result = await pool.query('SELECT "SchoolID" as school_id, "School_Name" as school_name, "Region" as region, "Division" as division, "District" as district, "Province" as province, "Municipality" as municipality, "Legislative_District" as leg_district, "Barangay" as barangay, "Street_Address" as address, "Curricular_Offering" as curricular_offering_classification FROM "schools_IERN" WHERE "SchoolID" = $1', [id]);
     if (result.rows.length > 0) {
       res.json(result.rows[0]);
     } else {
@@ -5026,7 +5025,7 @@ app.post('/api/sdo/convert-school', async (req, res) => {
   try {
     // 1. Fetch Original Data
     console.log(`Querying original school data for ID: ${school_id}`); // DEBUG LOG
-    const originalRes = await pool.query('SELECT * FROM schools WHERE school_id = $1', [school_id]);
+    const originalRes = await pool.query('SELECT "SchoolID" as school_id, "School_Name" as school_name, "Region" as region, "Division" as division, "District" as district, "Province" as province, "Municipality" as municipality, "Legislative_District" as leg_district, "Barangay" as barangay, "Street_Address" as address, "Curricular_Offering" as curricular_offering_classification FROM "schools_IERN" WHERE "SchoolID" = $1', [school_id]);
     console.log(`Original school query found rows: ${originalRes.rows.length}`); // DEBUG LOG
 
     if (originalRes.rows.length === 0) {
@@ -5320,10 +5319,10 @@ app.get('/api/sdo/first-school-location', async (req, res) => {
     const { region, division, province, municipality, district, legislative_district } = req.query;
 
     let query = `
-            SELECT latitude as lat, longitude as lng 
-            FROM schools 
-            WHERE region = $1 AND division = $2 
-            AND latitude IS NOT NULL AND longitude IS NOT NULL
+            SELECT "Latitude" as lat, "Longitude" as lng 
+            FROM "schools_IERN" 
+            WHERE "Region" = $1 AND "Division" = $2 
+            AND "Latitude" IS NOT NULL AND "Longitude" IS NOT NULL
         `;
     const params = [region, division];
     let paramIndex = 3;
@@ -5375,11 +5374,11 @@ app.get('/api/sdo/location-coordinates', async (req, res) => {
     // SAFE QUERY: Cast to text first to handle both NUMERIC and VARCHAR columns safely with NULLIF
     const result = await pool.query(`
       SELECT 
-        province, municipality, barangay,
-        AVG(CAST(NULLIF(latitude::text, '') AS DOUBLE PRECISION)) as lat, 
-        AVG(CAST(NULLIF(longitude::text, '') AS DOUBLE PRECISION)) as lng
-      FROM schools
-      WHERE region = $1 AND division = $2
+        "Province" as province, "Municipality" as municipality, "Barangay" as barangay,
+        AVG(CAST(NULLIF("Latitude"::text, '') AS DOUBLE PRECISION)) as lat, 
+        AVG(CAST(NULLIF("Longitude"::text, '') AS DOUBLE PRECISION)) as lng
+      FROM "schools_IERN"
+      WHERE "Region" = $1 AND "Division" = $2
       GROUP BY province, municipality, barangay
     `, [region, division]);
 
@@ -11049,9 +11048,95 @@ app.post('/api/save-physical-facilities', async (req, res) => {
 
   try {
     if (!sId) throw new Error("Missing schoolId in payload");
+
+    // --- Ensure all required Unit 7 tables/columns exist (idempotent DDL outside transaction) ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ph_buildings_inventory (
+        id SERIAL PRIMARY KEY,
+        school_id TEXT,
+        iern TEXT,
+        building_name TEXT,
+        room_name TEXT,
+        category TEXT,
+        storey INTEGER,
+        classroom INTEGER,
+        room_length NUMERIC,
+        room_width NUMERIC,
+        less_than_7x9 INTEGER DEFAULT 0,
+        "7x9" INTEGER DEFAULT 0,
+        above_7x9 INTEGER DEFAULT 0,
+        grade_level TEXT,
+        advisory_teacher TEXT,
+        year_completed INTEGER,
+        remarks TEXT,
+        status TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `).catch(e => console.warn('[Unit7] ph_buildings_inventory creation skip:', e.message));
+
+    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS room_name TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS status TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS grade_level TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS advisory_teacher TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS less_than_7x9 INTEGER DEFAULT 0`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS "7x9" INTEGER DEFAULT 0`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS above_7x9 INTEGER DEFAULT 0`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS iern TEXT`).catch(() => {});
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ph_buildings_repairs (
+        id SERIAL PRIMARY KEY,
+        school_id TEXT,
+        iern TEXT,
+        building_name TEXT,
+        room_name TEXT,
+        item_name TEXT,
+        oms TEXT,
+        condition TEXT,
+        damage_ratio INTEGER,
+        recommended_action TEXT,
+        demo_justification TEXT,
+        remarks TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `).catch(e => console.warn('[Unit7] ph_buildings_repairs creation skip:', e.message));
+
+    await pool.query(`ALTER TABLE ph_buildings_repairs ADD COLUMN IF NOT EXISTS room_name TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_buildings_repairs ADD COLUMN IF NOT EXISTS oms TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_buildings_repairs ADD COLUMN IF NOT EXISTS demo_justification TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_buildings_repairs ADD COLUMN IF NOT EXISTS iern TEXT`).catch(() => {});
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ph_buildings_demolition (
+        id SERIAL PRIMARY KEY,
+        school_id TEXT,
+        iern TEXT,
+        building_name TEXT,
+        room_name TEXT,
+        less_than_7x9 INTEGER DEFAULT 0,
+        "7x9" INTEGER DEFAULT 0,
+        above_7x9 INTEGER DEFAULT 0,
+        age BOOLEAN DEFAULT FALSE,
+        safety BOOLEAN DEFAULT FALSE,
+        calamity BOOLEAN DEFAULT FALSE,
+        upgrade BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `).catch(e => console.warn('[Unit7] ph_buildings_demolition creation skip:', e.message));
+
+    await pool.query(`ALTER TABLE ph_buildings_demolition ADD COLUMN IF NOT EXISTS room_name TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_buildings_demolition ADD COLUMN IF NOT EXISTS iern TEXT`).catch(() => {});
+
+    // --- Ensure ph_schools has summary columns for Unit 7 ---
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_total INTEGER DEFAULT 0`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_new INTEGER DEFAULT 0`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_good INTEGER DEFAULT 0`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_repair INTEGER DEFAULT 0`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_demolition INTEGER DEFAULT 0`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`).catch(() => {});
+
     await client.query('BEGIN');
-    // Schema should be initialized via manual SQL or startup, removing to prevent transactional locks
-    // await ensureUnit10Tables(client);
+    // Schema ensured above via idempotent DDL
 
     // 1. Update Main Profile
     let anchorClause = 'school_id = $1';
@@ -12903,7 +12988,8 @@ app.get('/api/monitoring/schools', async (req, res) => {
       sp.unit10_completed as school_head_validation,
       ss.data_health_description,
       ss.data_health_score,
-      ss.issues as data_quality_issues
+      ss.issues as data_quality_issues,
+      COALESCE(e.status, 'NOT_STARTED') as esf7_status
     `;
 
     // ADDED: Strip validation fields if role is RO/SDO (Optional param for now to avoid breaking existing users)
@@ -12918,6 +13004,7 @@ app.get('/api/monitoring/schools', async (req, res) => {
       FROM "schools_IERN" s
       LEFT JOIN ph_schools sp ON s."SchoolID" = sp.school_id
       LEFT JOIN school_summary ss ON s."SchoolID" = ss.school_id
+      LEFT JOIN (SELECT DISTINCT ON (school_id) school_id, status FROM esf7_database ORDER BY school_id, id DESC) e ON s."SchoolID" = e.school_id
       ${whereSql}
     `;
     console.log("DEBUG: Running Schools List Count for Region:", region, "Division:", division);
@@ -12930,6 +13017,7 @@ app.get('/api/monitoring/schools', async (req, res) => {
       FROM "schools_IERN" s
       LEFT JOIN ph_schools sp ON s."SchoolID" = sp.school_id
       LEFT JOIN school_summary ss ON s."SchoolID" = ss.school_id
+      LEFT JOIN (SELECT DISTINCT ON (school_id) school_id, status FROM esf7_database ORDER BY school_id, id DESC) e ON s."SchoolID" = e.school_id
       ${whereSql}
       ORDER BY COALESCE(sp.unit_completion, 0) DESC, s."School_Name" ASC
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
