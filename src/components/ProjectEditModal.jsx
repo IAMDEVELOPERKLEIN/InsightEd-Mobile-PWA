@@ -11,12 +11,10 @@ import { FiX, FiCheck, FiChevronRight } from 'react-icons/fi';
 
 const DETAILS_STEPS = [
     { id: 1, label: "Info", icon: "🏫", desc: "Project name, school & classification" },
-    { id: 2, label: "Status", icon: "📊", desc: "Construction phase & accomplishment" },
-    { id: 3, label: "Contract", icon: "📋", desc: "Bidding milestones & contract" },
-    { id: 4, label: "Finance", icon: "💰", desc: "Costs & contractor details" },
-    { id: 5, label: "Location", icon: "📍", desc: "Coordinates & address" },
-    { id: 6, label: "Docs", icon: "📂", desc: "Upload POW, DUPA & Contract PDF" },
-    { id: 7, label: "Photos", icon: "📸", desc: "Attach site progress photos" },
+    { id: 2, label: "Contract", icon: "📋", desc: "Bidding milestones & contract" },
+    { id: 3, label: "Finance", icon: "💰", desc: "Costs & contractor details" },
+    { id: 4, label: "Location", icon: "📍", desc: "Coordinates & address" },
+    { id: 5, label: "Docs", icon: "📂", desc: "Upload POW, DUPA & Contract PDF" },
 ];
 
 const STATUS_OPTIONS = [
@@ -269,77 +267,8 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                     </div>
                 );
 
-            // STEP 2: STATUS
+            // STEP 2: CONTRACT
             case 2:
-                return (
-                    <div className="space-y-4">
-                        <div>
-                            <p className={labelCls}>Construction Phase Status</p>
-                            <div className="space-y-2">
-                                {STATUS_OPTIONS.map(opt => {
-                                    const c = colorMap[opt.color];
-                                    const sel = formData.status === opt.value;
-                                    return (
-                                        <button key={opt.value}
-                                            onClick={() => {
-                                                const updates = { status: opt.value };
-                                                if (['Not Yet Started', 'Under Procurement'].includes(opt.value)) {
-                                                    // Remove automatic status reset to 'Not Yet Started' to allow placeholder
-                                                    // updates.accomplishmentPercentage = 0;
-                                                }
-                                                else if (['For Final Inspection', 'Completed'].includes(opt.value)) updates.accomplishmentPercentage = 100;
-                                                setFormData(p => ({ ...p, ...updates }));
-                                            }}
-                                            className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border-2 text-left transition-all ${sel ? `${c.bg} ${c.border}` : 'bg-white border-slate-100 hover:border-slate-200'}`}
-                                        >
-                                            <span className="text-lg">{opt.icon}</span>
-                                            <span className={`flex-1 text-xs font-black ${sel ? c.text : 'text-slate-600'}`}>{opt.label}</span>
-                                            {sel && <FiCheck size={16} className={c.text} />}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {!['Not Yet Started', 'Under Procurement'].includes(formData.status) && (
-                            <div className={`p-4 rounded-2xl border ${statusColors.bg} ${statusColors.border}`}>
-                                <div className="flex items-center justify-between mb-3">
-                                    <p className={`text-[10px] font-black uppercase tracking-widest ${statusColors.text}`}>Accomplishment %</p>
-                                    <span className={`text-2xl font-black tabular-nums ${statusColors.text}`}>{formData.accomplishmentPercentage}%</span>
-                                </div>
-                                <input type="range" min="0" max="100"
-                                    value={formData.accomplishmentPercentage}
-                                    onChange={e => setFormData(p => ({ ...p, accomplishmentPercentage: Number(e.target.value) }))}
-                                    disabled={['Completed', 'For Final Inspection'].includes(formData.status)}
-                                    className="w-full accent-blue-600"
-                                />
-                                <div className="flex justify-between text-[9px] text-slate-400 font-bold mt-1">
-                                    {['0%', '25%', '50%', '75%', '100%'].map(l => <span key={l}>{l}</span>)}
-                                </div>
-                            </div>
-                        )}
-
-                        {formData.status === 'Completed' && (
-                            <Field label="Actual Completion Date *">
-                                <input type="date" name="actualCompletionDate" value={formData.actualCompletionDate} onChange={handleChange}
-                                    className={inputCls + " border-emerald-200 bg-emerald-50/40 focus:ring-emerald-100"} />
-                            </Field>
-                        )}
-
-                        <Field label="Status As Of Date">
-                            <input type="date" name="statusAsOfDate" value={formData.statusAsOfDate} onChange={handleChange} className={inputCls} />
-                        </Field>
-
-                        <Field label="Remarks (Optional)">
-                            <textarea name="otherRemarks" rows={3} value={formData.otherRemarks} onChange={handleChange}
-                                placeholder="Any additional notes about the current status..."
-                                className={inputCls + " resize-none"} />
-                        </Field>
-                    </div>
-                );
-
-            // STEP 3: CONTRACT
-            case 3:
                 return (
                     <div className="space-y-4">
                         <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 space-y-3">
@@ -382,8 +311,8 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                     </div>
                 );
 
-            // STEP 4: FINANCE
-            case 4:
+            // STEP 3: FINANCE
+            case 3:
                 return (
                     <div className="space-y-4">
                         <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 space-y-3">
@@ -408,8 +337,8 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                     </div>
                 );
 
-            // STEP 5: LOCATION
-            case 5:
+            // STEP 4: LOCATION
+            case 4:
                 return (
                     <div className="space-y-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -432,8 +361,8 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                     </div>
                 );
 
-            // STEP 6: DOCUMENTATION
-            case 6: {
+            // STEP 5: DOCUMENTATION
+            case 5: {
                 const DOCS = [
                     { key: 'POW', label: 'Program of Works / POW', icon: '📐', desc: 'Upload the Program of Works or Progress of Work PDF', hasExisting: project.hasPow || project.pow_pdf },
                     { key: 'DUPA', label: 'DUPA', icon: '📊', desc: 'Detailed Unit Price Analysis document', hasExisting: project.hasDupa || project.dupa_pdf },
@@ -480,73 +409,6 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                                 )}
                             </div>
                         ))}
-                    </div>
-                );
-            }
-
-            // STEP 7: SITE PHOTOS
-            case 7: {
-                const activeFiles = activePhotoCategory === 'Internal' ? internalFiles : externalFiles;
-                return (
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-3 p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
-                            <span className="text-2xl">📸</span>
-                            <div>
-                                <p className="text-xs font-black text-slate-700">Progress Photos</p>
-                                <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">Attach internal and external site photos to document progress.</p>
-                            </div>
-                        </div>
-
-                        <div className="flex p-1 bg-slate-100 rounded-2xl gap-1">
-                            {['Internal', 'External'].map(cat => {
-                                const count = cat === 'Internal' ? internalFiles.length : externalFiles.length;
-                                return (
-                                    <button key={cat} onClick={() => setActivePhotoCategory(cat)}
-                                        className={`flex-1 py-2 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1.5 ${activePhotoCategory === cat ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-white/50'}`}>
-                                        {cat === 'Internal' ? '🏗️' : '🌳'} {cat}
-                                        {count > 0 && <span className="bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full text-[9px] font-black">{count}</span>}
-                                    </button>
-                                );
-                            })}
-                        </div>
-
-                        <div className={`border-2 rounded-3xl overflow-hidden border-${activePhotoCategory === 'Internal' ? 'blue' : 'emerald'}-100`}>
-                            {activeFiles.length > 0 ? (
-                                <div className="grid grid-cols-3 gap-2 p-3">
-                                    {activeFiles.map((file, i) => (
-                                        <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-slate-100 group">
-                                            <img src={URL.createObjectURL(file)} alt="" className="w-full h-full object-cover" />
-                                            <button 
-                                                onClick={() => {
-                                                    const setter = activePhotoCategory === 'Internal' ? setInternalFiles : setExternalFiles;
-                                                    setter(p => p.filter((_, idx) => idx !== i));
-                                                }}
-                                                className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow"
-                                            >
-                                                ✕
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="py-8 text-center text-slate-300">
-                                    <p className="text-3xl mb-1">📷</p>
-                                    <p className="text-[10px] font-black uppercase tracking-widest">No photos attached</p>
-                                </div>
-                            )}
-
-                            <div className="flex gap-2 p-3 pt-0">
-                                <button onClick={() => (activePhotoCategory === 'Internal' ? internalInputRef : externalInputRef).current.click()}
-                                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 text-slate-500 text-[10px] font-black uppercase hover:bg-slate-100 transition-all`}>
-                                    Upload File
-                                </button>
-                            </div>
-                        </div>
-
-                        <input ref={internalInputRef} type="file" accept="image/*" multiple className="hidden" 
-                            onChange={e => setInternalFiles(p => [...p, ...Array.from(e.target.files)])} />
-                        <input ref={externalInputRef} type="file" accept="image/*" multiple className="hidden" 
-                            onChange={e => setExternalFiles(p => [...p, ...Array.from(e.target.files)])} />
                     </div>
                 );
             }
