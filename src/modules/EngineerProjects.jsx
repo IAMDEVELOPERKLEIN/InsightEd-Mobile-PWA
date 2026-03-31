@@ -623,7 +623,7 @@ const EngineerProjects = () => {
           previousPercentage: project.accomplishmentPercentage,
           uid: user?.uid,
           modifiedBy: userName,
-          statusAsOfDate: new Date().toISOString().split('T')[0],
+          statusAsOf: new Date().toISOString(),
           update_type: 'Status Quick Update'
         }),
       });
@@ -636,11 +636,12 @@ const EngineerProjects = () => {
       console.log(`Status (${type}) updated to: ${newValue}`);
       
       // Update local state with the actual data from server
-      setProjects(prev => prev.map(p => (p.id === project.id || (p.ipc && p.ipc === project.ipc)) ? { 
-        ...p, 
-        ...updatedProject, 
+      setProjects(prev => prev.map(p => (p.id === project.id || (p.ipc && p.ipc === project.ipc)) ? {
+        ...p,
+        ...updatedProject,
         id: updatedProject.project_id, // Important: Use the NEW project_id for the next update
-        previousPercentage: project.accomplishmentPercentage 
+        statusAsOf: updatedProject.statusAsOf || updatedProject.status_as_of,
+        previousPercentage: project.accomplishmentPercentage
       } : p));
 
       alert(`✅ ${type === 'procurement' ? 'Procurement' : 'Construction'} status updated successfully!`);
@@ -936,6 +937,7 @@ const EngineerProjects = () => {
         project_category_id: resData.project.project_category_id,
         projectCategory: resData.project.project_category || updatedProject.projectCategory,
         savings: resData.project.savings,
+        statusAsOf: resData.project.statusAsOf || resData.project.status_as_of,
       };
 
       // Online Upload Images

@@ -228,11 +228,52 @@ const UpdateProjectWizard = ({ project, onSave, onClose, isOpen }) => {
         { id: 8, task: 'Final Painting & Cleansing', weight: 10 }
     ];
 
-    const [checkedState, setCheckedState] = useState(() => {
-        const stored = {};
-        checklist.forEach(task => { stored[task.id] = false; });
-        return stored;
-    });
+    // Reset state when opened for a different project
+    useEffect(() => {
+        if (isOpen && project) {
+            setStep(1);
+            setProcurementStatus(project.procurement_status || "");
+            setConstructionStatus((project.status === ConstructionStatus.NotYetStarted || !project.status) ? "" : project.status); // Force placeholder if not yet started
+            setPercentage(Number(project.accomplishmentPercentage || 0));
+            setRemarks('');
+            setStatusAsOf(new Date().toISOString());
+            setActualCompletionDate(project.actualCompletionDate || '');
+            const saved = project.checklist;
+            setCheckedState((saved && typeof saved === 'object' && !Array.isArray(saved)) ? saved : {});
+            setInternalFiles([]);
+            setInternalPreviews([]);
+            setExternalFiles([]);
+            setExternalPreviews([]);
+
+            setBiddingDates({
+                issuanceOfInvitationToBid: project.issuanceOfInvitationToBid || '',
+                preBidConference: project.preBidConference || '',
+                openingOfTechnicalProposal: project.openingOfTechnicalProposal || '',
+                openingOfFinancialProposal: project.openingOfFinancialProposal || '',
+                dateNoticeOfAward: project.dateNoticeOfAward || '',
+            });
+
+            setContractAward({
+                contractId: project.contractId || '',
+                noticeToProceed: project.noticeToProceed || '',
+                constructionStartDate: project.constructionStartDate || '',
+                targetCompletionDate: project.targetCompletionDate || '',
+                contractorName: project.contractorName || '',
+            });
+
+            setDetails({
+                projectCategory: project.projectCategory || '',
+                scopeOfWork: project.scopeOfWork || '',
+                numberOfClassrooms: project.numberOfClassrooms || 0,
+                numberOfStoreys: project.numberOfStoreys || 0,
+                numberOfSites: project.numberOfSites || 1,
+                fundsUtilized: project.fundsUtilized || 0,
+                projectAllocation: project.projectAllocation || project.amount || 0,
+                contractAmount: project.contractAmount || project.contract_amount || 0,
+                batchOfFunds: project.batchOfFunds || '',
+            });
+        }
+    }, [isOpen, project?.id]);
 
     const triangulatedPercentage = Object.entries(checkedState).reduce((acc, [id, checked]) => {
         if (!checked) return acc;
@@ -734,7 +775,7 @@ const UpdateProjectWizard = ({ project, onSave, onClose, isOpen }) => {
                                                 onChange={e => {
                                                     const datePart = e.target.value;
                                                     const timePart = new Date().toISOString().split('T')[1];
-                                                    setStatusAsOfDate(`${datePart}T${timePart}`);
+                                                    setStatusAsOf(`${datePart}T${timePart}`);
                                                 }}
                                                 className="w-full p-3 rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-700 outline-none"
                                             />

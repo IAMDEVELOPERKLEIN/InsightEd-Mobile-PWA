@@ -410,7 +410,16 @@ const processPdfInBackground = (file, projectId, type, ipc, uid, isLgu = false) 
         if (!base64) return;
         try {
             const table = isLgu ? 'lgu_forms' : 'engineer_documents';
-            await pool.query(`UPDATE ${table} SET ${field} = $1 WHERE project_id = $2`, [base64, projectId]);
+            if (isLgu) {
+                await pool.query(`UPDATE ${table} SET ${field} = $1 WHERE project_id = $2`, [base64, projectId]);
+            } else {
+                // UPSERT so the document is saved even if no engineer_documents row exists yet
+                await pool.query(`
+                    INSERT INTO engineer_documents (project_id, ipc, ${field}, uploader_id)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (project_id) DO UPDATE SET ${field} = EXCLUDED.${field}, uploader_id = EXCLUDED.uploader_id
+                `, [projectId, ipc, base64, uid]);
+            }
             console.log(`✅ [BG] ${type} compressed and saved for ${isLgu ? 'LGU ' : ''}Project ${projectId}`);
             
             if (poolNew) {
@@ -921,14 +930,21 @@ const initDB = async () => {
             project_id INTEGER NOT NULL,
             ipc TEXT,
             pow_pdf TEXT,
+            pow_filename TEXT,
             dupa_pdf TEXT,
+            dupa_filename TEXT,
             contract_pdf TEXT,
+            contract_filename TEXT,
             rta_pdf TEXT,
             moa_pdf TEXT,
             uploader_id TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             CONSTRAINT unique_project_docs_${dbLabel} UNIQUE(project_id)
           );
+          
+          await checkAndAddColumn('engineer_documents', 'pow_filename', 'TEXT');
+          await checkAndAddColumn('engineer_documents', 'dupa_filename', 'TEXT');
+          await checkAndAddColumn('engineer_documents', 'contract_filename', 'TEXT');
 
 
           CREATE TABLE IF NOT EXISTS engineer_mother_moa (
@@ -1096,6 +1112,9 @@ const initDB = async () => {
     await checkAndAddColumn('engineer_form', 'program_type', 'TEXT');
     await checkAndAddColumn('engineer_form', 'checklist', 'JSONB');
     await checkAndAddColumn('engineer_form', 'triangulated_percentage', 'NUMERIC DEFAULT 0');
+    await checkAndAddColumn('engineer_form', 'pow_filename', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'dupa_filename', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'contract_filename', 'TEXT');
 
     // Migration: Change status_as_of to TIMESTAMP WITH TIME ZONE
     await pool.query(`
@@ -8072,16 +8091,23 @@ app.put('/api/update-project/:id', upload.fields([
     let pow_pdf_base64 = data.pow_pdf || (d ? d.pow_pdf : null);
     let dupa_pdf_base64 = data.dupa_pdf || (d ? d.dupa_pdf : null);
     let contract_pdf_base64 = data.contract_pdf || (d ? d.contract_pdf : null);
+    
+    let pow_filename = data.pow_filename || (d ? d.pow_filename : null);
+    let dupa_filename = data.dupa_filename || (d ? d.dupa_filename : null);
+    let contract_filename = data.contract_filename || (d ? d.contract_filename : null);
 
     if (req.files) {
         if (req.files['pow_pdf']) {
             pow_pdf_base64 = fs.readFileSync(req.files['pow_pdf'][0].path, { encoding: 'base64' });
+            pow_filename = req.files['pow_pdf'][0].originalname;
         }
         if (req.files['dupa_pdf']) {
             dupa_pdf_base64 = fs.readFileSync(req.files['dupa_pdf'][0].path, { encoding: 'base64' });
+            dupa_filename = req.files['dupa_pdf'][0].originalname;
         }
         if (req.files['contract_pdf']) {
             contract_pdf_base64 = fs.readFileSync(req.files['contract_pdf'][0].path, { encoding: 'base64' });
+            contract_filename = req.files['contract_pdf'][0].originalname;
         }
     }
 
@@ -8200,7 +8226,10 @@ app.put('/api/update-project/:id', upload.fields([
       oldData.sangguniang_resolution_id,
       newCatId,
       newChecklist,
-      newTriangulatedPercentage
+      newTriangulatedPercentage,
+      pow_filename,
+      dupa_filename,
+      contract_filename
     ];
 
     const insertQuery = `
@@ -8225,8 +8254,9 @@ app.put('/api/update-project/:id', upload.fields([
         pow_pdf, dupa_pdf, contract_pdf,
         procurement_status,
         mother_moa_id, supplamental_moa_id, sangguniang_resolution_id, project_category_id,
-        checklist, triangulated_percentage
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69)
+        checklist, triangulated_percentage,
+        pow_filename, dupa_filename, contract_filename
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $70, $71, $72)
       RETURNING *;
     `;
 
@@ -8241,13 +8271,13 @@ app.put('/api/update-project/:id', upload.fields([
     // NOTE: Each update creates a NEW engineer_form row (append-only snapshot), so project_id
     // is always brand new here. Plain INSERT is correct — no conflict is possible.
     await client.query(`
-      INSERT INTO engineer_documents (project_id, ipc, pow_pdf, dupa_pdf, contract_pdf, rta_pdf, moa_pdf, uploader_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO engineer_documents (project_id, ipc, pow_pdf, pow_filename, dupa_pdf, dupa_filename, contract_pdf, contract_filename, rta_pdf, moa_pdf, uploader_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     `, [
       newData.project_id, newData.ipc,
-      pow_pdf_base64,
-      dupa_pdf_base64,
-      contract_pdf_base64,
+      pow_pdf_base64, pow_filename,
+      dupa_pdf_base64, dupa_filename,
+      contract_pdf_base64, contract_filename,
       data.rta_pdf || (d ? d.rta_pdf : null),
       data.moa_pdf || (d ? d.moa_pdf : null),
       (data.pow_pdf || data.dupa_pdf || data.contract_pdf || (req.files && Object.keys(req.files).length > 0)) ? data.uid : (d ? d.uploader_id : null)
@@ -9069,6 +9099,7 @@ app.get('/api/projects', async (req, res) => {
             (NULLIF(d.pow_pdf, '') IS NOT NULL) AS has_pow,
             (NULLIF(d.dupa_pdf, '') IS NOT NULL) AS has_dupa,
             (NULLIF(d.contract_pdf, '') IS NOT NULL) AS has_contract,
+            d.pow_filename, d.dupa_filename, d.contract_filename,
             e.implementing_agency,
             e.implementing_agency_specific,
             COALESCE(f.tranche_1, 0) as tranche_1,
@@ -9124,6 +9155,9 @@ app.get('/api/projects', async (req, res) => {
         p.has_pow AS "hasPow",
         p.has_dupa AS "hasDupa",
         p.has_contract AS "hasContract",
+        p.pow_filename AS "pow_filename",
+        p.dupa_filename AS "dupa_filename",
+        p.contract_filename AS "contract_filename",
         p.implementing_agency AS "implementingAgency",
         p.implementing_agency_specific AS "implementingAgencySpecific",
         p.province, p.city, p.municipality,
@@ -9320,16 +9354,16 @@ app.post('/api/upload/pdf-chunk', (req, res) => {
   req.pipe(bb);
 });
 
-// 2. Finalize Multipart Upload (Concatenate to Base64)
+// 2. Finalize Multipart Upload (Concatenate → Compress at 96 DPI → Store as file)
 app.post('/api/upload/multipart-finalize', async (req, res) => {
   const { fileUUID, totalChunks, contentType } = req.body;
   if (!fileUUID || !totalChunks) return res.status(400).json({ error: "Missing required metadata" });
 
+  const chunkDir = path.join(process.cwd(), 'api', 'tmp_chunks', fileUUID);
+  let tempInput = null;
+
   try {
-    const chunkDir = path.join(process.cwd(), 'api', 'tmp_chunks', fileUUID);
-    if (!fs.existsSync(chunkDir)) {
-      throw new Error("Chunk directory not found");
-    }
+    if (!fs.existsSync(chunkDir)) throw new Error("Chunk directory not found");
 
     // Read all chunks in order
     const chunkBuffers = [];
@@ -9338,25 +9372,46 @@ app.post('/api/upload/multipart-finalize', async (req, res) => {
       if (!fs.existsSync(chunkPath)) throw new Error(`Missing chunk ${i}`);
       chunkBuffers.push(fs.readFileSync(chunkPath));
     }
-
-    // Concatenate all chunks
     const finalBuffer = Buffer.concat(chunkBuffers);
 
-    // Convert to Base64
-    const base64Content = finalBuffer.toString('base64');
-    const dataUrl = `data:${contentType || 'application/pdf'};base64,${base64Content}`;
+    // Attempt compression via compress_pdf.py (96 DPI)
+    const isPdf = (contentType || '').includes('pdf') || finalBuffer.slice(0, 4).toString() === '%PDF';
+    if (isPdf) {
+      const docsDir = path.resolve(__dirname, '..', 'uploads', 'project_docs');
+      if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir, { recursive: true });
 
-    // Cleanup: Remove temporary chunks
+      const outputFilename = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.pdf`;
+      const outputPath = path.join(docsDir, outputFilename);
+      tempInput = path.join(docsDir, `tmp_${fileUUID}.pdf`);
+      fs.writeFileSync(tempInput, finalBuffer);
+
+      const scriptPath = path.resolve(__dirname, '..', 'compress_pdf.py');
+      const cmd = (py) => `${py} "${scriptPath}" "${tempInput}" "${outputPath}"`;
+
+      try {
+        try { await execAsync(cmd('python')); } catch {
+          try { await execAsync(cmd('py')); } catch { await execAsync(cmd('python3')); }
+        }
+        console.log(`✅ Chunked PDF compressed to 96 DPI: ${outputFilename}`);
+        fs.rmSync(chunkDir, { recursive: true, force: true });
+        return res.status(200).json({ success: true, url: `/uploads/project_docs/${outputFilename}` });
+      } catch (compressErr) {
+        console.error('⚠️ Compression failed, falling back to base64:', compressErr.message);
+        if (outputPath && fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+        // Fall through to base64 fallback below
+      }
+    }
+
+    // Fallback: return raw base64 data URL
+    const dataUrl = `data:${contentType || 'application/pdf'};base64,${finalBuffer.toString('base64')}`;
     fs.rmSync(chunkDir, { recursive: true, force: true });
-
-    res.status(200).json({
-      success: true,
-      message: 'Upload complete',
-      url: dataUrl // Returning the full data URL to be stored in DB
-    });
+    res.status(200).json({ success: true, url: dataUrl });
   } catch (err) {
     console.error(`❌ Finalize Error:`, err.message);
     res.status(500).json({ error: "Failed to merge chunk blocks" });
+  } finally {
+    if (tempInput && fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
+    if (fs.existsSync(chunkDir)) fs.rmSync(chunkDir, { recursive: true, force: true });
   }
 });
 // --- 11f. GET: List Engineers (For EFD Assignment) ---
@@ -9457,6 +9512,7 @@ app.get('/api/projects/:id', async (req, res) => {
         e.is_donated AS "isDonated",
         e.is_donated AS "is_donated",
         d.moa_pdf, d.rta_pdf, d.pow_pdf, d.dupa_pdf, d.contract_pdf,
+        d.pow_filename, d.dupa_filename, d.contract_filename,
         (NULLIF(d.moa_pdf, '') IS NOT NULL) AS "hasMoa",
         (NULLIF(d.rta_pdf, '') IS NOT NULL) AS "hasRta",
         e.implementing_agency AS "implementingAgency",
@@ -9487,7 +9543,7 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
         contract_amount AS "contract_amount", contract_amount AS "contractAmount",
         batch_of_funds AS "batchOfFunds",
         contractor_name AS "contractorName", other_remarks AS "otherRemarks",
-        TO_CHAR(status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
+        status_as_of AS "statusAsOf",
         TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
         TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
         TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
@@ -9498,6 +9554,7 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
         (NULLIF(pow_pdf, '') IS NOT NULL) AS "hasPow",
         (NULLIF(dupa_pdf, '') IS NOT NULL) AS "hasDupa",
         (NULLIF(contract_pdf, '') IS NOT NULL) AS "hasContract",
+        pow_filename, dupa_filename, contract_filename,
         latitude, longitude,
         actions AS "updateType",
         savings,
