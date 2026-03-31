@@ -13,12 +13,10 @@ import LocationPickerMap from './LocationPickerMap';
 
 const DETAILS_STEPS = [
     { id: 1, label: "Info", icon: "🏫", desc: "Project name, school & classification" },
-    { id: 2, label: "Status", icon: "📊", desc: "Construction phase & accomplishment" },
-    { id: 3, label: "Contract", icon: "📋", desc: "Bidding milestones & contract" },
-    { id: 4, label: "Finance", icon: "💰", desc: "Costs & contractor details" },
-    { id: 5, label: "Location", icon: "📍", desc: "Coordinates & address" },
-    { id: 6, label: "Docs", icon: "📂", desc: "Upload POW, DUPA & Contract PDF" },
-    { id: 7, label: "Photos", icon: "📸", desc: "Attach site progress photos" },
+    { id: 2, label: "Contract", icon: "📋", desc: "Bidding milestones & contract" },
+    { id: 3, label: "Finance", icon: "💰", desc: "Costs & contractor details" },
+    { id: 4, label: "Location", icon: "📍", desc: "Coordinates & address" },
+    { id: 5, label: "Docs", icon: "📂", desc: "Upload POW, DUPA & Contract PDF" },
 ];
 
 const STATUS_OPTIONS = [
@@ -375,77 +373,8 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                     </div>
                 );
 
-            // STEP 2: STATUS
+            // STEP 2: CONTRACT
             case 2:
-                return (
-                    <div className="space-y-4">
-                        <div>
-                            <p className={labelCls}>Construction Phase Status</p>
-                            <div className="space-y-2">
-                                {STATUS_OPTIONS.map(opt => {
-                                    const c = colorMap[opt.color];
-                                    const sel = formData.status === opt.value;
-                                    return (
-                                        <button key={opt.value}
-                                            onClick={() => {
-                                                const updates = { status: opt.value };
-                                                if (['Not Yet Started', 'Under Procurement'].includes(opt.value)) {
-                                                    // Remove automatic status reset to 'Not Yet Started' to allow placeholder
-                                                    // updates.accomplishmentPercentage = 0;
-                                                }
-                                                else if (['For Final Inspection', 'Completed'].includes(opt.value)) updates.accomplishmentPercentage = 100;
-                                                setFormData(p => ({ ...p, ...updates }));
-                                            }}
-                                            className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border-2 text-left transition-all ${sel ? `${c.bg} ${c.border}` : 'bg-white border-slate-100 hover:border-slate-200'}`}
-                                        >
-                                            <span className="text-lg">{opt.icon}</span>
-                                            <span className={`flex-1 text-xs font-black ${sel ? c.text : 'text-slate-600'}`}>{opt.label}</span>
-                                            {sel && <FiCheck size={16} className={c.text} />}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {!['Not Yet Started', 'Under Procurement'].includes(formData.status) && (
-                            <div className={`p-4 rounded-2xl border ${statusColors.bg} ${statusColors.border}`}>
-                                <div className="flex items-center justify-between mb-3">
-                                    <p className={`text-[10px] font-black uppercase tracking-widest ${statusColors.text}`}>Accomplishment %</p>
-                                    <span className={`text-2xl font-black tabular-nums ${statusColors.text}`}>{formData.accomplishmentPercentage}%</span>
-                                </div>
-                                <input type="range" min="0" max="100"
-                                    value={formData.accomplishmentPercentage}
-                                    onChange={e => setFormData(p => ({ ...p, accomplishmentPercentage: Number(e.target.value) }))}
-                                    disabled={['Completed', 'For Final Inspection'].includes(formData.status)}
-                                    className="w-full accent-blue-600"
-                                />
-                                <div className="flex justify-between text-[9px] text-slate-400 font-bold mt-1">
-                                    {['0%', '25%', '50%', '75%', '100%'].map(l => <span key={l}>{l}</span>)}
-                                </div>
-                            </div>
-                        )}
-
-                        {formData.status === 'Completed' && (
-                            <Field label="Actual Completion Date *">
-                                <input type="date" name="actualCompletionDate" value={formData.actualCompletionDate} onChange={handleChange}
-                                    className={inputCls + " border-emerald-200 bg-emerald-50/40 focus:ring-emerald-100"} />
-                            </Field>
-                        )}
-
-                        <Field label="Status As Of Date">
-                            <input type="date" name="statusAsOfDate" value={formData.statusAsOfDate} onChange={handleChange} className={inputCls} />
-                        </Field>
-
-                        <Field label="Remarks (Optional)">
-                            <textarea name="otherRemarks" rows={3} value={formData.otherRemarks} onChange={handleChange}
-                                placeholder="Any additional notes about the current status..."
-                                className={inputCls + " resize-none"} />
-                        </Field>
-                    </div>
-                );
-
-            // STEP 3: CONTRACT
-            case 3:
                 return (
                     <div className="space-y-4">
                         <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 space-y-3">
@@ -488,8 +417,8 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                     </div>
                 );
 
-            // STEP 4: FINANCE
-            case 4:
+            // STEP 3: FINANCE
+            case 3:
                 return (
                     <div className="space-y-4">
                         <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 space-y-3">
@@ -514,8 +443,8 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                     </div>
                 );
 
-            // STEP 5: LOCATION
-            case 5:
+            // STEP 4: LOCATION
+            case 4:
                 return (
                     <div className="space-y-4">
                         <div className="rounded-2xl border-2 border-slate-100 overflow-hidden bg-slate-50 shadow-sm transition-all hover:border-slate-200">
@@ -576,8 +505,8 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                     </div>
                 );
 
-            // STEP 6: DOCUMENTATION
-            case 6: {
+            // STEP 5: DOCUMENTATION
+            case 5: {
                 const DOCS = [
                     { key: 'POW', label: 'Program of Works / POW', icon: '📋', desc: 'Upload the Program of Works or Progress of Work PDF', hasExisting: project.hasPow || project.pow_pdf },
                     { key: 'DUPA', label: 'DUPA', icon: '📊', desc: 'Detailed Unit Price Analysis document', hasExisting: project.hasDupa || project.dupa_pdf },
