@@ -84,17 +84,15 @@ const BottomNav = ({ userRole: propRole }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Regional Office': [
-            { label: 'InsightED', path: '/monitoring-dashboard', icon: TbHomeEdit },
+            { label: 'Home', path: '/monitoring-dashboard', icon: TbHomeEdit },
+            { label: 'Schools', path: '/school-management', icon: TbSchool },
             { label: 'Insights', path: '/monitoring-dashboard', state: { activeTab: 'insights' }, icon: TbChartBar },
-            { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
-            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Division Office': [
             { label: 'Home', path: '/monitoring-dashboard', icon: TbHomeEdit },
+            { label: 'Schools', path: '/school-management', icon: TbSchool },
             { label: 'Insights', path: '/monitoring-dashboard', state: { activeTab: 'insights' }, icon: TbChartBar },
-            { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
-            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Central Office': [
