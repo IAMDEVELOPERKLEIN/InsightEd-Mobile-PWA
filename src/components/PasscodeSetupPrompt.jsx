@@ -182,15 +182,6 @@ const PasscodeSetupPrompt = () => {
                                         Protect My Account
                                         <span className="group-hover:translate-x-1 transition-transform">→</span>
                                     </button>
-                                    <button
-                                        onClick={() => {
-                                            setIsOpen(false);
-                                            localStorage.removeItem('needs_pin_setup'); // Remove flag so it doesn't prompt again until next forced event
-                                        }}
-                                        className="w-full text-slate-400 py-2 hover:text-slate-600 text-xs font-bold uppercase tracking-widest transition-colors"
-                                    >
-                                        Remind me later
-                                    </button>
                                 </div>
                             </motion.div>
                         )}

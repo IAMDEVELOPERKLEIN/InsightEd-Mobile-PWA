@@ -164,7 +164,13 @@ const SchoolProfile = ({ embedded }) => {
 
     useEffect(() => {
         fetch('/api/locations/regions')
-            .then(r => r.json()).then(setRegionOptions).catch(() => {});
+            .then(r => r.json())
+            .then(data => {
+                const options = data || [];
+                if (!options.includes('Blank')) options.unshift('Blank');
+                setRegionOptions(options);
+            })
+            .catch(() => {});
     }, []);
 
     // --- NETWORK LISTENER ---
@@ -368,21 +374,44 @@ const SchoolProfile = ({ embedded }) => {
 
         // Populate Province/City/Barangay (API)
         fetch(`/api/locations/provinces?region=${encodeURIComponent(formData.region)}`)
-            .then(r => r.json()).then(setProvinceOptions).catch(() => {});
+            .then(r => r.json())
+            .then(data => {
+                const options = data || [];
+                if (formData.region === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                setProvinceOptions(options);
+            })
+            .catch(() => {});
         if (formData.province) {
             fetch(`/api/locations/municipalities-by-province?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(formData.province)}`)
-                .then(r => r.json()).then(setCityOptions).catch(() => {});
+                .then(r => r.json())
+                .then(data => {
+                    const options = data || [];
+                    if (formData.province === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    setCityOptions(options);
+                })
+                .catch(() => {});
             if (formData.municipality) {
                 fetch(`/api/locations/barangays?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(formData.province)}&municipality=${encodeURIComponent(formData.municipality)}`)
-                    .then(r => r.json()).then(setBarangayOptions).catch(() => {});
+                    .then(r => r.json())
+                    .then(data => {
+                        const options = data || [];
+                        if (formData.municipality === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                        setBarangayOptions(options);
+                    })
+                    .catch(() => {});
             }
         }
 
         // Populate Division/District (CSV)
         if (regionDivMap && regionDivMap[formData.region]) {
-            setDivisionOptions(regionDivMap[formData.region]);
+            const divisions = [...(regionDivMap[formData.region] || [])];
+            if (formData.region === 'Blank' && !divisions.includes('Blank')) divisions.unshift('Blank');
+            setDivisionOptions(divisions);
+
             if (formData.division && divDistMap && divDistMap[formData.division]) {
-                setDistrictOptions(divDistMap[formData.division]);
+                const districts = [...(divDistMap[formData.division] || [])];
+                if (formData.division === 'Blank' && !districts.includes('Blank')) districts.unshift('Blank');
+                setDistrictOptions(districts);
             }
         }
 
@@ -548,12 +577,20 @@ const SchoolProfile = ({ embedded }) => {
     // Cascading Dropdowns
     const handleRegionChange = (e) => {
         const val = e.target.value;
-        setDivisionOptions(regionDivMap[val] || []);
+        const divisions = [...(regionDivMap[val] || [])];
+        if (val === 'Blank' && !divisions.includes('Blank')) divisions.unshift('Blank');
+        setDivisionOptions(divisions);
         setFormData(prev => ({ ...prev, region: val, province: '', municipality: '', barangay: '', division: '', district: '' }));
         setCityOptions([]); setBarangayOptions([]); setDistrictOptions([]);
         if (val) {
             fetch(`/api/locations/provinces?region=${encodeURIComponent(val)}`)
-                .then(r => r.json()).then(setProvinceOptions).catch(() => setProvinceOptions([]));
+                .then(r => r.json())
+                .then(data => {
+                    const options = data || [];
+                    if (val === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    setProvinceOptions(options);
+                })
+                .catch(() => setProvinceOptions([]));
         } else {
             setProvinceOptions([]);
         }
@@ -565,7 +602,13 @@ const SchoolProfile = ({ embedded }) => {
         setBarangayOptions([]);
         if (val && formData.region) {
             fetch(`/api/locations/municipalities-by-province?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(val)}`)
-                .then(r => r.json()).then(setCityOptions).catch(() => setCityOptions([]));
+                .then(r => r.json())
+                .then(data => {
+                    const options = data || [];
+                    if (val === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    setCityOptions(options);
+                })
+                .catch(() => setCityOptions([]));
         } else {
             setCityOptions([]);
         }
@@ -576,7 +619,13 @@ const SchoolProfile = ({ embedded }) => {
         setFormData(prev => ({ ...prev, municipality: val, barangay: '' }));
         if (val && formData.province && formData.region) {
             fetch(`/api/locations/barangays?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(formData.province)}&municipality=${encodeURIComponent(val)}`)
-                .then(r => r.json()).then(setBarangayOptions).catch(() => setBarangayOptions([]));
+                .then(r => r.json())
+                .then(data => {
+                    const options = data || [];
+                    if (val === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    setBarangayOptions(options);
+                })
+                .catch(() => setBarangayOptions([]));
         } else {
             setBarangayOptions([]);
         }
@@ -585,7 +634,9 @@ const SchoolProfile = ({ embedded }) => {
     const handleDivisionChange = (e) => {
         const val = e.target.value;
         setFormData(prev => ({ ...prev, division: val, district: '' }));
-        setDistrictOptions(divDistMap[val] || []);
+        const districts = [...(divDistMap[val] || [])];
+        if (val === 'Blank' && !districts.includes('Blank')) districts.unshift('Blank');
+        setDistrictOptions(districts);
     };
 
     // --- SAVE ---

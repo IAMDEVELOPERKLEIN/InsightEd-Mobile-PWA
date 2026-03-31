@@ -308,7 +308,15 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                         fetch(`/api/locations/leg-districts?region=${encodeURIComponent(region)}`).then(r => r.json()),
                         fetch(`/api/locations/municipalities-by-province?region=${encodeURIComponent(region)}&province=${encodeURIComponent(province || '')}`).then(r => r.json())
                     ]).then(([provinces, legDistricts, municipalities]) => {
-                        setLookupOptions(prev => ({ ...prev, provinces, legDistricts, municipalities }));
+                        const pOpts = provinces || [];
+                        const lOpts = legDistricts || [];
+                        const mOpts = municipalities || [];
+                        if (region === 'Blank') {
+                            if (!pOpts.includes('Blank')) pOpts.unshift('Blank');
+                            if (!lOpts.includes('Blank')) lOpts.unshift('Blank');
+                        }
+                        if (province === 'Blank' && !mOpts.includes('Blank')) mOpts.unshift('Blank');
+                        setLookupOptions(prev => ({ ...prev, provinces: pOpts, legDistricts: lOpts, municipalities: mOpts }));
                     }).catch(err => console.error("Error fetching location options:", err));
                 }
             } else {

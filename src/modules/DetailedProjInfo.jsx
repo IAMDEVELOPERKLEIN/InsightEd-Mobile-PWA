@@ -503,11 +503,7 @@ const DetailedProjInfo = () => {
     const [userRole, setUserRole] = useState(null);
     const [accountCategory, setAccountCategory] = useState(null);
     
-    // Upload Documents Modal State
-    const [isDocUploadModalOpen, setIsDocUploadModalOpen] = useState(false);
-    const [selectedDocType, setSelectedDocType] = useState('POW');
-    const [docUploadFile, setDocUploadFile] = useState(null);
-    const [isDocUploading, setIsDocUploading] = useState(false);
+    const [pendingDocs, setPendingDocs] = useState({ POW: null, DUPA: null, CONTRACT: null });
 
     // Edit Modal State (single modal with 3 tabs)
     const [editModalOpen, setEditModalOpen] = useState(false);
@@ -557,7 +553,11 @@ const DetailedProjInfo = () => {
             return data;
         }
         if (data.startsWith('/uploads/')) {
-            return `${API_BASE}${data}`;
+            const baseUrl = import.meta.env.BASE_URL || "/";
+            // Ensure baseUrl ends with / and data doesn't start with / for joining
+            const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+            const normalizedData = data.startsWith('/') ? data.substring(1) : data;
+            return `${normalizedBase}${normalizedData}`;
         }
 
         // 5. Otherwise assume it's raw base64 and wrap it
@@ -924,18 +924,36 @@ const DetailedProjInfo = () => {
                     }
                 }
             }
+            // Step 3: Handle Document Uploads if any
+            const docEntries = Object.entries(pendingDocs).filter(([_, file]) => file !== null);
+            if (docEntries.length > 0) {
+                for (const [type, file] of docEntries) {
+                    try {
+                        const docFormData = new FormData();
+                        docFormData.append('document_pdf', file);
+                        docFormData.append('project_id', resData.id || project.id);
+                        docFormData.append('type', type);
+                        docFormData.append('ipc', project.ipc || '');
+                        docFormData.append('uid', uid);
+                        
+                        await fetch('/api/upload-project-document', {
+                            method: 'POST',
+                            headers: localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {},
+                            body: docFormData,
+                        });
+                    } catch (err) {
+                        console.error(`${type} upload failed`, err);
+                    }
+                }
+            }
 
-            alert("✅ SUCCESS\n\nNew project version has been appended to history.");
-            await clearProjectsCache(); // Force refresh on navigation
+            alert("✅ SUCCESS\n\nProject details and documents have been saved.");
+            await clearProjectsCache(); 
             setIsEditMode(false);
             setInternalFiles([]);
             setExternalFiles([]);
-            // For now simplest is to reload page or re-fetch images? 
-            // Let's just append locally for immediate feedback if we had the image data, but we sent base64.
-            // Re-fetching images is safer.
-            const res = await fetch(`/api/project-images/${id}`);
-            const data = await res.json();
-            if (Array.isArray(data)) setProjectImages(data);
+            setPendingDocs({ POW: null, DUPA: null, CONTRACT: null });
+            window.location.reload(); 
 
         } catch (err) {
             console.error("Save Error:", err);
@@ -946,36 +964,6 @@ const DetailedProjInfo = () => {
     };
 
 
-    const handleDocumentUpload = async () => {
-        if (!docUploadFile || !project?.id) return;
-        setIsDocUploading(true);
-        try {
-            const formData = new FormData();
-            formData.append('document_pdf', docUploadFile);
-            formData.append('project_id', project.id);
-            formData.append('type', selectedDocType);
-            formData.append('ipc', project.ipc || '');
-            formData.append('uid', user?.uid || '');
-
-            const token = localStorage.getItem('token');
-            const res = await fetch('/api/upload-project-document', {
-                method: 'POST',
-                headers: token ? { Authorization: `Bearer ${token}` } : {},
-                body: formData,
-            });
-            const result = await res.json();
-            if (!res.ok) throw new Error(result.error || 'Upload failed');
-            alert(`${selectedDocType} uploaded. It will be available after background compression completes.`);
-            await clearProjectsCache(); // Refresh metadata (hasPow etc)
-            setIsDocUploadModalOpen(false);
-            setDocUploadFile(null);
-        } catch (err) {
-            console.error('Document upload error:', err);
-            alert('Upload failed: ' + err.message);
-        } finally {
-            setIsDocUploading(false);
-        }
-    };
 
     if (isLoading) return <div className="min-h-screen flex items-center justify-center text-slate-500">Loading details...</div>;
     if (!project) return null;
@@ -984,20 +972,6 @@ const DetailedProjInfo = () => {
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-1 mt-2">
                 <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-0">Construction Status</h2>
-                <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setIsDocUploadModalOpen(true)}
-                      className="px-3 py-1 bg-slate-50 text-slate-600 rounded-full text-[9px] font-black uppercase tracking-widest border border-slate-200 active:scale-95 transition-all"
-                    >
-                      Upload Docs
-                    </button>
-                    <button
-                      onClick={() => setEditModalOpen(true)}
-                      className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[9px] font-black uppercase tracking-widest border border-blue-100 active:scale-95 transition-all"
-                    >
-                      Edit Details
-                    </button>
-                </div>
             </div>
             <div className="bg-[#004A99] p-6 rounded-3xl shadow-xl mb-6 text-white overflow-hidden relative">
                 <div className="absolute top-[-20%] right-[-10%] w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
@@ -1019,8 +993,8 @@ const DetailedProjInfo = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-                <Field label="Current Status" name="status" value={project.status} type="select" options={['Not Yet Started', 'Ongoing', 'For Final Inspection', 'Completed']} />
-                <Field label="Status As Of" name="statusAsOf" value={project.statusAsOf} type="date" />
+                <Field label="Current Status" name="status" value={project.status} type="select" options={['Not Yet Started', 'Ongoing', 'For Final Inspection', 'Completed', 'Suspended', 'Terminated']} />
+                <Field label="Status As Of" name="statusAsOf" value={project.statusAsOfDate || project.statusAsOf} type="date" />
             </div>
 
             <SectionHeader title="Project Identity" />
@@ -1093,13 +1067,13 @@ const DetailedProjInfo = () => {
     const renderFinance = () => (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <SectionHeader title="Financial Records" />
-            <Field label="Approved Budget (ABC)" name="projectAllocation" value={project.projectAllocation} type="money" />
-            <Field label="Contract Amount" name="contractAmount" value={project.contractAmount} type="money" />
+            <Field label="Approved Budget (ABC)" name="approved_budget_for_contract" value={project.approved_budget_for_contract || project.projectAllocation} type="money" />
+            <Field label="Contract Amount" name="contract_amount" value={project.contract_amount || project.contractAmount} type="money" />
             <Field label="Funds Utilized" name="fundsUtilized" value={project.fundsUtilized} type="money" />
             
             <SectionHeader title="Entity Details" />
             <Field label="Contractor Name" name="contractorName" value={project.contractorName} />
-            <Field label="Implementing Agency" name="implementing_agency" value={project.implementing_agency} />
+            <Field label="Implementing Agency" name="implementing_agency" value={project.implementing_agency} type="select" options={['DepEd Central', 'DepEd RO', 'DepEd DO', 'DPWH', 'LGU', 'Others']} />
         </div>
     );
 
@@ -1192,29 +1166,58 @@ const DetailedProjInfo = () => {
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
             <SectionHeader title="Essential Documents" />
             <div className="bg-white rounded-3xl border border-slate-100 shadow-xl overflow-hidden divide-y divide-slate-50">
-                {['pow_pdf', 'dupa_pdf', 'contract_pdf'].map(docKey => (
-                    <div key={docKey} className="flex justify-between items-center p-5 group">
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-blue-50 text-blue-500 rounded-xl flex items-center justify-center">
-                                <LuFileText size={20} />
+                {['POW', 'DUPA', 'CONTRACT'].map(key => {
+                    const docKey = `${key.toLowerCase()}_pdf`;
+                    const hasExisting = !!project[docKey];
+                    const pendingFile = pendingDocs[key];
+                    
+                    return (
+                        <div key={key} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 gap-4 group">
+                            <div className="flex items-center gap-4">
+                                <div className={`w-10 h-10 ${hasExisting ? 'bg-blue-50 text-blue-500' : 'bg-slate-50 text-slate-300'} rounded-xl flex items-center justify-center`}>
+                                    <LuFileText size={20} />
+                                </div>
+                                <div>
+                                    <p className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{key}</p>
+                                    {pendingFile && <p className="text-[8px] font-bold text-emerald-500 mt-0.5 truncate max-w-[150px]">Selected: {pendingFile.name}</p>}
+                                </div>
                             </div>
-                            <div>
-                                <p className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{docKey.replace('_pdf', '').toUpperCase()}</p>
+
+                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                {hasExisting && (
+                                    <a 
+                                        href={project[docKey].startsWith('data:') ? project[docKey] : (project[docKey].startsWith('/uploads/') ? `${API_BASE}${project[docKey]}` : `data:application/pdf;base64,${project[docKey]}`)} 
+                                        download={`${project.schoolName}_${key}.pdf`} 
+                                        className="flex-1 sm:flex-none text-center bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-[9px] font-black uppercase hover:bg-slate-200 transition-all active:scale-95"
+                                    >
+                                        Download
+                                    </a>
+                                )}
+                                
+                                {isEditMode && (
+                                    <label className="flex-1 sm:flex-none cursor-pointer">
+                                        <div className={`text-center px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all active:scale-95 border ${pendingFile ? 'bg-emerald-50 text-emerald-600 border-emerald-200 shadow-sm' : 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100'}`}>
+                                            {pendingFile ? 'Change File' : (hasExisting ? 'Update' : 'Upload')}
+                                        </div>
+                                        <input 
+                                            type="file" 
+                                            accept="application/pdf" 
+                                            className="hidden" 
+                                            onChange={(e) => {
+                                                const file = e.target.files[0];
+                                                if (file) setPendingDocs(prev => ({ ...prev, [key]: file }));
+                                            }}
+                                        />
+                                    </label>
+                                )}
+                                
+                                {!hasExisting && !isEditMode && (
+                                    <span className="text-[10px] font-black text-slate-300 uppercase italic px-4">Missing</span>
+                                )}
                             </div>
                         </div>
-                        {project[docKey] ? (
-                            <a 
-                                href={project[docKey].startsWith('data:') ? project[docKey] : (project[docKey].startsWith('/uploads/') ? `${API_BASE}${project[docKey]}` : `data:application/pdf;base64,${project[docKey]}`)} 
-                                download={`${project.schoolName}_${docKey}.pdf`} 
-                                className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95"
-                            >
-                                Download
-                            </a>
-                        ) : (
-                            <span className="text-[10px] font-black text-slate-300 uppercase italic px-4">Missing</span>
-                        )}
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );
@@ -1233,13 +1236,39 @@ const DetailedProjInfo = () => {
                         </button>
                         
                         <div className="flex gap-2">
-                             {isEditMode && (
-                                <button 
-                                    onClick={() => setIsEditMode(false)}
-                                    className="px-4 py-2 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-red-900/40 active:scale-95 transition-all"
-                                >
-                                    Cancel
-                                </button>
+                             {isEditMode ? (
+                                <>
+                                    <button 
+                                        onClick={() => setIsEditMode(false)}
+                                        className="px-4 py-2 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-red-900/40 active:scale-95 transition-all"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        onClick={handleSaveProject}
+                                        disabled={isUploading}
+                                        className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-emerald-900/40 active:scale-95 transition-all flex items-center gap-2"
+                                    >
+                                        {isUploading && <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>}
+                                        Save
+                                    </button>
+                                </>
+                             ) : (
+                                <>
+                                    <button 
+                                        onClick={() => navigate(`/project-gallery/${id}`)}
+                                        className="p-2 bg-white/10 rounded-xl text-white hover:bg-white/20 transition-all flex items-center gap-2"
+                                    >
+                                        <LuImages size={16} />
+                                        <span className="text-[10px] font-black uppercase hidden sm:inline">Gallery</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => setIsEditMode(true)}
+                                        className="px-4 py-2 bg-white text-[#004A99] rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all"
+                                    >
+                                        Edit
+                                    </button>
+                                </>
                              )}
                         </div>
                     </div>
@@ -1394,52 +1423,6 @@ const DetailedProjInfo = () => {
             </div>
         </PageTransition>
 
-        {/* --- UPLOAD DOCUMENTS MODAL --- */}
-        {isDocUploadModalOpen && createPortal(
-            <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-5">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">Upload Document</h3>
-                        <button onClick={() => { setIsDocUploadModalOpen(false); setDocUploadFile(null); }} className="p-1.5 rounded-xl bg-slate-50 text-slate-400 hover:bg-slate-100 transition-all">
-                            <LuX size={16} />
-                        </button>
-                    </div>
-
-                    <div className="space-y-3">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Document Type</label>
-                        <div className="grid grid-cols-3 gap-2">
-                            {['POW', 'DUPA', 'CONTRACT'].map(t => (
-                                <button
-                                    key={t}
-                                    onClick={() => setSelectedDocType(t)}
-                                    className={`py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${selectedDocType === t ? 'bg-[#004A99] text-white border-[#004A99] shadow-lg shadow-blue-200' : 'bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100'}`}
-                                >
-                                    {t}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">PDF File</label>
-                        <label className="flex flex-col items-center justify-center gap-2 w-full py-6 border-2 border-dashed border-slate-200 rounded-2xl cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-all">
-                            <LuFileText size={22} className="text-slate-300" />
-                            <span className="text-[10px] font-bold text-slate-400">{docUploadFile ? docUploadFile.name : 'Tap to select PDF'}</span>
-                            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => setDocUploadFile(e.target.files[0] || null)} />
-                        </label>
-                    </div>
-
-                    <button
-                        onClick={handleDocumentUpload}
-                        disabled={!docUploadFile || isDocUploading}
-                        className="w-full py-3 bg-[#004A99] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                        {isDocUploading ? 'Uploading…' : `Upload ${selectedDocType}`}
-                    </button>
-                </div>
-            </div>,
-            document.body
-        )}
 
         <ProjectEditModal
             project={project}
@@ -1483,7 +1466,6 @@ const DetailedProjInfo = () => {
                     }
                 }
 
-                alert('✅ SUCCESS\n\nProject details have been saved.');
                 setEditModalOpen(false);
                 window.location.reload();
             }}

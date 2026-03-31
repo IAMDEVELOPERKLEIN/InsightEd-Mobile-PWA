@@ -331,19 +331,37 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     useEffect(() => {
         if (!formData.region) { setProvinceOptions([]); return; }
         fetch(`/api/locations/provinces?region=${encodeURIComponent(formData.region)}`)
-            .then(r => r.json()).then(setProvinceOptions).catch(() => {});
+            .then(r => r.json())
+            .then(data => {
+                const options = data || [];
+                if (formData.region === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                setProvinceOptions(options);
+            })
+            .catch(() => {});
     }, [formData.region]);
 
     useEffect(() => {
         if (!formData.region || !formData.province) { setCityOptions([]); return; }
         fetch(`/api/locations/municipalities-by-province?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(formData.province)}`)
-            .then(r => r.json()).then(setCityOptions).catch(() => {});
+            .then(r => r.json())
+            .then(data => {
+                const options = data || [];
+                if (formData.province === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                setCityOptions(options);
+            })
+            .catch(() => {});
     }, [formData.region, formData.province]);
 
     useEffect(() => {
         if (!formData.region || !formData.province || !formData.municipality) { setBarangayOptions([]); return; }
         fetch(`/api/locations/barangays?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(formData.province)}&municipality=${encodeURIComponent(formData.municipality)}`)
-            .then(r => r.json()).then(setBarangayOptions).catch(() => {});
+            .then(r => r.json())
+            .then(data => {
+                const options = data || [];
+                if (formData.municipality === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                setBarangayOptions(options);
+            })
+            .catch(() => {});
     }, [formData.region, formData.province, formData.municipality]);
 
     useEffect(() => {
@@ -351,18 +369,39 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         Promise.all([
             fetch(`/api/locations/divisions?region=${encodeURIComponent(formData.region)}`).then(r => r.json()).catch(() => []),
             fetch(`/api/locations/leg-districts?region=${encodeURIComponent(formData.region)}`).then(r => r.json()).catch(() => []),
-        ]).then(([divs, legs]) => { setDivisionOptions(divs); setLegDistrictOptions(legs); });
+        ]).then(([divs, legs]) => { 
+            const dOptions = divs || [];
+            const lOptions = legs || [];
+            if (formData.region === 'Blank') {
+                if (!dOptions.includes('Blank')) dOptions.unshift('Blank');
+                if (!lOptions.includes('Blank')) lOptions.unshift('Blank');
+            }
+            setDivisionOptions(dOptions); 
+            setLegDistrictOptions(lOptions); 
+        });
     }, [formData.region]);
 
     useEffect(() => {
         if (!formData.region || !formData.division) { setDistrictOptions([]); return; }
         fetch(`/api/locations/districts?region=${encodeURIComponent(formData.region)}&division=${encodeURIComponent(formData.division)}`)
-            .then(r => r.json()).then(setDistrictOptions).catch(() => {});
+            .then(r => r.json())
+            .then(data => {
+                const options = data || [];
+                if (formData.division === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                setDistrictOptions(options);
+            })
+            .catch(() => {});
     }, [formData.region, formData.division]);
 
     useEffect(() => {
         fetch('/api/locations/regions')
-            .then(r => r.json()).then(setRegionOptions).catch(() => {});
+            .then(r => r.json())
+            .then(data => {
+                const options = data || [];
+                if (!options.includes('Blank')) options.unshift('Blank');
+                setRegionOptions(options);
+            })
+            .catch(() => {});
     }, []);
 
     // ── Date Sync Logic ──────────────────────────────────────────────────────

@@ -35,7 +35,11 @@ const SuperUserSelector = () => {
     useEffect(() => {
         fetch('/api/locations/regions')
             .then(res => res.json())
-            .then(data => setRegions(data || []))
+            .then(data => {
+                const options = data || [];
+                if (!options.includes('Blank')) options.unshift('Blank');
+                setRegions(options);
+            })
             .catch(err => console.error("Failed to load regions:", err));
     }, []);
 
@@ -46,7 +50,11 @@ const SuperUserSelector = () => {
         if (selectedRegion) {
             fetch(`/api/locations/divisions?region=${encodeURIComponent(selectedRegion)}`)
                 .then(res => res.json())
-                .then(data => setSdoDivisions(data || []))
+                .then(data => {
+                    const options = data || [];
+                    if (selectedRegion === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    setSdoDivisions(options);
+                })
                 .catch(console.error);
         }
     }, [selectedRegion]);
@@ -58,7 +66,11 @@ const SuperUserSelector = () => {
         if (engRegion) {
             fetch(`/api/locations/divisions?region=${encodeURIComponent(engRegion)}`)
                 .then(res => res.json())
-                .then(data => setEngDivisions(data || []))
+                .then(data => {
+                    const options = data || [];
+                    if (engRegion === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    setEngDivisions(options);
+                })
                 .catch(console.error);
         }
     }, [engRegion]);
@@ -71,7 +83,11 @@ const SuperUserSelector = () => {
         if (lguRegion) {
             fetch(`/api/locations/provinces?region=${encodeURIComponent(lguRegion)}`)
                 .then(res => res.json())
-                .then(data => setLguProvinces(data || []))
+                .then(data => {
+                    const options = data || [];
+                    if (lguRegion === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    setLguProvinces(options);
+                })
                 .catch(console.error);
         }
     }, [lguRegion]);
@@ -83,7 +99,11 @@ const SuperUserSelector = () => {
         if (lguRegion && lguProvince) {
             fetch(`/api/locations/municipalities-by-province?region=${encodeURIComponent(lguRegion)}&province=${encodeURIComponent(lguProvince)}`)
                 .then(res => res.json())
-                .then(data => setLguMunicipalities(data || []))
+                .then(data => {
+                    const options = data || [];
+                    if (lguProvince === 'Blank' && !options.includes('Blank')) options.unshift('Blank');
+                    setLguMunicipalities(options);
+                })
                 .catch(console.error);
         }
     }, [lguRegion, lguProvince]);

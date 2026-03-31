@@ -1321,7 +1321,16 @@ const EditProjectModal = ({
                                             <div className="flex flex-col mt-0.5">
                                                 <p className="text-[9px] text-blue-500 font-bold mb-1">Existing File Available</p>
                                                 <a
-                                                    href={(() => { const v = project[`${key.toLowerCase()}_pdf`]; return (v?.startsWith('data:') || v?.startsWith('/uploads/')) ? v : `data:application/pdf;base64,${v}`; })()}
+                                                    href={(() => { 
+                                                        const v = project[`${key.toLowerCase()}_pdf`]; 
+                                                        if (v?.startsWith('/uploads/')) {
+                                                            const baseUrl = import.meta.env.BASE_URL || "/";
+                                                            const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+                                                            const normalizedPath = v.startsWith('/') ? v.substring(1) : v;
+                                                            return `${normalizedBase}${normalizedPath}`;
+                                                        }
+                                                        return (v?.startsWith('data:')) ? v : `data:application/pdf;base64,${v}`; 
+                                                    })()}
                                                     download={`${formData.schoolName}_${label}.pdf`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"

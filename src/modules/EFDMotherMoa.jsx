@@ -120,7 +120,12 @@ const EFDMotherMoa = () => {
         if (!raw) return null;
 
         // File-path based storage — serve directly via static URL
-        if (raw.startsWith('/uploads/')) return raw;
+        if (raw.startsWith('/uploads/')) {
+            const baseUrl = import.meta.env.BASE_URL || "/";
+            const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+            const normalizedPath = raw.startsWith('/') ? raw.substring(1) : raw;
+            return `${normalizedBase}${normalizedPath}`;
+        }
 
         // If it's already a data URI, we should still try to convert it to a Blob URL
         // because window.open() has severe character limits for data URIs in many browsers.
