@@ -11465,11 +11465,28 @@ app.post('/api/save-physical-facilities', async (req, res) => {
     
     if (data.iern) {
         await client.query(`UPDATE ph_schools SET unit8_completed = $1, unit8 = $2, unit8_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit8_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE iern = $3`, [isUnit8Completed, isUnit8Completed ? 1 : 0, data.iern]);
+        
+        // --- SYNC COMPLETION (UI Unit 7 Audit -> unit7_completion) ---
+        if (isUnit8Completed) {
+            await client.query(`
+                INSERT INTO ph_school_completion (iern, school_id, unit7_completion)
+                VALUES ($1, $2, true)
+                ON CONFLICT (iern) DO UPDATE SET unit7_completion = true, updated_at = CURRENT_TIMESTAMP
+            `, [data.iern, sId]);
+            // This runs inside the transaction, but updateSchoolTotalCompletion is async-safe
+            // We'll call it AFTER commit for reliability
+        }
     } else {
         await client.query(`UPDATE ph_schools SET unit8_completed = $1, unit8 = $2, unit8_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit8_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $3`, [isUnit8Completed, isUnit8Completed ? 1 : 0, sId]);
     }
 
     await client.query('COMMIT');
+    
+    // Trigger total recalculation if completed
+    if (isUnit8Completed) {
+        const finalIern = data.iern || (await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [sId])).rows[0]?.iern;
+        if (finalIern) updateSchoolTotalCompletion(finalIern);
+    }
     res.json({ success: true, message: "Facilities and details saved!" });
 
     // SNAPSHOT UPDATE
@@ -16575,9 +16592,9 @@ app.post('/api/ph_schools/unit7/:schoolId', async (req, res) => {
     if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
       const iern = iernRes.rows[0].iern;
       await pool.query(`
-          INSERT INTO ph_school_completion (iern, school_id, unit7_completion)
+          INSERT INTO ph_school_completion (iern, school_id, unit6_completion)
           VALUES ($1, $2, true)
-          ON CONFLICT (iern) DO UPDATE SET unit7_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+          ON CONFLICT (iern) DO UPDATE SET unit6_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
       `, [iern, schoolId]);
       await updateSchoolTotalCompletion(iern);
     }
