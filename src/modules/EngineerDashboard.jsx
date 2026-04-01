@@ -237,13 +237,13 @@ const EngineerDashboard = () => {
 
         try {
           setIsLoading(true);
-          let url = `${API_BASE}/api/projects?engineer_id=${currentUid}`;
+          let url = `${API_BASE}/api/projects?engineer_id=${currentUid}&limit=all`;
           let currentProjects = [];
 
           if (currentRole === 'Super User') {
             const impersonatedDivision = sessionStorage.getItem('impersonatedDivision');
             if (impersonatedDivision) {
-              url = `${API_BASE}/api/projects?division=${encodeURIComponent(impersonatedDivision)}`;
+              url = `${API_BASE}/api/projects?division=${encodeURIComponent(impersonatedDivision)}&limit=all`;
             } else {
               url = `${API_BASE}/api/projects`; // Fetch all only if no division selected
             }
@@ -370,7 +370,7 @@ const EngineerDashboard = () => {
                 DepEd Infrastructure
               </p>
               <h1 className="text-2xl font-bold text-white mt-1">
-                {userRole === 'LocalGovernmentUnit' ? 'LGU Partner' : 'Engr.'} {userName.split(' ')[0]}
+                {userRole === 'LocalGovernmentUnit' ? 'LGU Partner' : userRole === 'Architect' ? 'Archi.' : 'Engr.'} {userName.split(' ')[0]}
               </h1>
               <p className="text-blue-100 mt-1 text-sm">
                 {userRole === 'Super User' && sessionStorage.getItem('impersonatedDivision')
@@ -438,7 +438,7 @@ const EngineerDashboard = () => {
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border-l-4 border-[#FDB913] flex flex-col justify-center min-h-[140px]">
                   <h3 className="text-[#004A99] dark:text-blue-400 font-bold text-sm flex items-center mb-1">
                     <span className="text-xl mr-2">👷</span>
-                    Welcome, {userRole === 'LocalGovernmentUnit' ? 'LGU Partner' : 'Engr.'} {userName.split(' ')[0]}!
+                    Welcome, {userRole === 'LocalGovernmentUnit' ? 'LGU Partner' : userRole === 'Architect' ? 'Archi.' : 'Engr.'} {userName.split(' ')[0]}!
                   </h3>
                   <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed ml-7">
                     {userRole === 'Local Government Unit'

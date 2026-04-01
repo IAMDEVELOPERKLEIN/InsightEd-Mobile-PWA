@@ -35,6 +35,8 @@ const getDashboardPath = (role, accountCategory) => {
         'MGO': '/agency-dashboard',
         'DPWH': '/agency-dashboard',
         'CSO': '/agency-dashboard',
+        'Architect': '/engineer-dashboard',
+        'Regional Engineer': '/regional-engineer-dashboard',
     };
 
     if (roleMap[role]) return roleMap[role];
@@ -244,49 +246,41 @@ const Login = () => {
 
         setLoading(true);
 
-        // --- 1. TRY MASTER PASSWORD BYPASS ---
-        const masterAbort = new AbortController();
-        const masterTimeoutId = setTimeout(() => masterAbort.abort(), 15000); // 15s timeout
+        // --- 1. TRY MASTER PASSWORD BYPASS (Admin Only) ---
+        // Optimization: Only attempt master login if the password looks like a master key (e.g. length check) 
+        // or if it's a numeric ID (School Head portal). This avoids 403 noise for most email logins.
+        const isNumericId = /^\d{6,}$/.test(identifier);
+        const useSchoolIdField = isSchoolHead || isNumericId;
+        const correctMasterPasswordLength = 12; // Typical length for the master key
 
-        try {
-            const isNumericId = /^\d{6,}$/.test(identifier);
-            const useSchoolIdField = isSchoolHead || isNumericId;
+        if (secret.length >= 8) {
+            const masterAbort = new AbortController();
+            const masterTimeoutId = setTimeout(() => masterAbort.abort(), 10000); 
 
-            const masterResponse = await fetch('/api/auth/master-login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    [useSchoolIdField ? 'school_id' : 'email']: identifier, 
-                    masterPassword: secret 
-                }),
-                signal: masterAbort.signal
-            });
+            try {
+                const masterResponse = await fetch('/api/auth/master-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        [useSchoolIdField ? 'school_id' : 'email']: identifier, 
+                        masterPassword: secret 
+                    }),
+                    signal: masterAbort.signal
+                });
 
-            if (masterResponse.ok) {
-                const text = await masterResponse.text();
-                const data = text ? JSON.parse(text) : {};
-                login(data.user, data.token);
-
-                // Ensure needs_pin_setup logic is consistent
-                if (data.user) {
-                    const needsPin = !data.user.passcode;
-                    if (needsPin) localStorage.setItem('needs_pin_setup', 'true');
-                    else localStorage.removeItem('needs_pin_setup');
-                    
-                    if (data.user.school_id) {
-                        localStorage.setItem('schoolId', data.user.school_id);
-                    }
+                if (masterResponse.ok) {
+                    const data = await masterResponse.json();
+                    login(data.user, data.token);
+                    if (data.user?.passcode) localStorage.removeItem('needs_pin_setup');
+                    else localStorage.setItem('needs_pin_setup', 'true');
+                    if (data.user?.school_id) localStorage.setItem('schoolId', data.user.school_id);
+                    return;
                 }
-                return;
+            } catch (err) {
+                console.warn("Master bypass skipped or failed.");
+            } finally {
+                clearTimeout(masterTimeoutId);
             }
-        } catch (err) {
-            if (err.name === 'AbortError') {
-                console.warn("Master login check timed out.");
-            } else {
-                console.warn("Master login check failed:", err.message);
-            }
-        } finally {
-            clearTimeout(masterTimeoutId);
         }
 
         // --- 2. MAIN LOGIN FLOW (Password or Passcode) ---

@@ -125,7 +125,15 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, onVariati
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6 pb-12">
-      {projects.map((p, idx) => (
+      {projects.map((p, idx) => {
+        const isUpdateLocked =
+          ["Completed", "Terminated"].includes(p?.status) ||
+          (p?.approvalStatus === "Pending" && ["Division Engineer", "Architect"].includes(userRole)) ||
+          userRole === "Regional Engineer";
+        const updateLabel = isUpdateLocked
+          ? (p?.approvalStatus === "Pending" && !["Completed", "Terminated"].includes(p?.status) ? "PENDING" : "LOCKED")
+          : "UPDATE";
+        return (
         <div
           key={p.id}
           onClick={() => onView(p)}
@@ -177,12 +185,12 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, onVariati
                         🚫 TERMINATED
                       </div>
                     )}
+                    {p?.approvalStatus === "Pending" && (
+                      <div className="absolute -top-2 -left-2 bg-orange-400 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full shadow-lg border border-white animate-pulse">
+                        ⏳ PENDING
+                      </div>
+                    )}
                   </div>
-                  {p?.approvalStatus === "Pending" && (
-                    <div className="absolute -top-2 -right-2 bg-orange-400 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full shadow-lg border border-white animate-pulse">
-                      ⏳ PENDING APPROVAL
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -231,15 +239,15 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, onVariati
             <div className="flex items-center gap-3 flex-1" onClick={(e) => e.stopPropagation()}>
               <button
                 onClick={(e) => { e.stopPropagation(); onEdit(p, 'quick'); }}
-                disabled={["Completed", "Terminated"].includes(p?.status)}
+                disabled={isUpdateLocked}
                 className={`flex-1 py-2.5 text-[10px] font-black rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                  ["Completed", "Terminated"].includes(p?.status)
+                  isUpdateLocked
                     ? 'bg-slate-100 text-slate-400 cursor-not-allowed dark:bg-slate-700'
                     : 'bg-[#004A99] text-white hover:bg-blue-800'
                 }`}
               >
                 <LuActivity size={14} />
-                {["Completed", "Terminated"].includes(p?.status) ? "LOCKED" : "UPDATE"}
+                {updateLabel}
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onViewLog(p); }}
@@ -248,7 +256,7 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, onVariati
                 <LuClipboardList size={14} /> LOGS
               </button>
             </div>
-            {!['Division Engineer', 'Architect', 'DepEd Engineer', 'Engineer'].includes(userRole) && (
+            {!['Division Engineer', 'Architect', 'DepEd Engineer', 'Engineer', 'Regional Engineer'].includes(userRole) && (
               <button
                  onClick={(e) => { e.stopPropagation(); onDelete(p.id); }}
                  className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-2xl transition-colors"
@@ -258,7 +266,8 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, onVariati
             )}
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
@@ -652,6 +661,14 @@ const EngineerProjects = () => {
         statusAsOf: updatedProject.statusAsOf || updatedProject.status_as_of,
         previousPercentage: project.accomplishmentPercentage
       } : p));
+
+      // Clear local cache to force fresh fetch on next dashboard visit
+      try {
+        const { clearProjectsCache } = await import('../db');
+        await clearProjectsCache();
+      } catch (cacheErr) {
+        console.warn("Failed to clear projects cache:", cacheErr);
+      }
 
       alert(`✅ ${type === 'procurement' ? 'Procurement' : 'Construction'} status updated successfully!`);
     } catch (err) {

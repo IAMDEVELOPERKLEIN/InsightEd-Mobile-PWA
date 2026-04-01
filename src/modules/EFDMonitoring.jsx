@@ -211,6 +211,24 @@ const EFDMonitoring = () => {
         }
     };
 
+    const handleApproveProject = async (e, id) => {
+        e.stopPropagation();
+        if (window.confirm("Approve this project?")) {
+            try {
+                const res = await fetch(`/api/approve-project/${id}`, { method: 'PUT' });
+                if (res.ok) {
+                    setProjects(prev => prev.map(p => p.id === id ? { ...p, approvalStatus: 'Approved' } : p));
+                    setMessage({ text: 'Project approved successfully', type: 'success' });
+                } else {
+                    setMessage({ text: 'Failed to approve project', type: 'error' });
+                }
+            } catch (err) {
+                setMessage({ text: 'Error approving project', type: 'error' });
+            }
+            setTimeout(() => setMessage({ text: '', type: '' }), 3000);
+        }
+    };
+
     const handleEditProject = (project) => {
         setSelectedProjectForEdit(project);
         setEditModalOpen(true);
@@ -499,21 +517,41 @@ const EFDMonitoring = () => {
                                                 </div>
                                             </div>
 
-                                            <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-center gap-3 mt-auto">
-                                                <button 
-                                                    onClick={(e) => { e.stopPropagation(); navigate(`/project-gallery/${p.id}`); }}
-                                                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-purple-50 text-purple-600 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-purple-600 hover:text-white transition-all shadow-sm active:scale-[0.98] border border-purple-100/50"
-                                                >
-                                                    <FiImage size={14} />
-                                                    Gallery
-                                                </button>
-                                                <button 
-                                                    onClick={(e) => { e.stopPropagation(); setLogProject(p); setIsLogOpen(true); }}
-                                                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-amber-50 text-amber-600 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-amber-500 hover:text-white transition-all shadow-sm active:scale-[0.98] border border-amber-100/50"
-                                                >
-                                                    <FiActivity size={14} />
-                                                    Project Log
-                                                </button>
+                                            <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-100 flex flex-col gap-2 mt-auto">
+                                                <div className="flex items-center gap-3">
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); navigate(`/project-gallery/${p.id}`); }}
+                                                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-purple-50 text-purple-600 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-purple-600 hover:text-white transition-all shadow-sm active:scale-[0.98] border border-purple-100/50"
+                                                    >
+                                                        <FiImage size={14} />
+                                                        Gallery
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setLogProject(p); setIsLogOpen(true); }}
+                                                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-amber-50 text-amber-600 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-amber-500 hover:text-white transition-all shadow-sm active:scale-[0.98] border border-amber-100/50"
+                                                    >
+                                                        <FiActivity size={14} />
+                                                        Project Log
+                                                    </button>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    {p.approvalStatus === 'Pending' && (
+                                                        <button
+                                                            onClick={(e) => handleApproveProject(e, p.id)}
+                                                            className="flex-1 flex items-center justify-center gap-2 py-3 bg-emerald-50 text-emerald-600 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-emerald-600 hover:text-white transition-all shadow-sm active:scale-[0.98] border border-emerald-100/50"
+                                                        >
+                                                            <FiCheck size={14} />
+                                                            Approve
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={(e) => handleDeleteProject(e, p.id)}
+                                                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-50 text-red-500 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-red-500 hover:text-white transition-all shadow-sm active:scale-[0.98] border border-red-100/50"
+                                                    >
+                                                        <FiTrash2 size={14} />
+                                                        Delete
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     );
