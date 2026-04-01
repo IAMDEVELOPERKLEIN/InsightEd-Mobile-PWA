@@ -629,8 +629,9 @@ const Register = () => {
                         return false;
                     }
                 } else if (isEng) {
-                    if (!d.region || !d.division || !d.position) {
-                        alert("Please complete your assignment details (Region, Division, and Position).");
+                    const isRegional = d.role === 'Regional Engineer';
+                    if (!d.region || (!isRegional && !d.division) || !d.position) {
+                        alert(`Please complete your assignment details (Region${!isRegional ? ', Division,' : ''} and Position).`);
                         return false;
                     }
                 } else {
@@ -1310,10 +1311,12 @@ const Register = () => {
                                                                 <option value="">Select Region</option>
                                                                 {regions.map(r => <option key={r} value={r}>{r}</option>)}
                                                             </select>
-                                                            <select name="division" onChange={handleChange} value={formData.division} className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-500" required>
-                                                                <option value="">Select Division</option>
-                                                                {divisions.map(d => <option key={d} value={d}>{d}</option>)}
-                                                            </select>
+                                                            {formData.role !== 'Regional Engineer' && (
+                                                                <select name="division" onChange={handleChange} value={formData.division} className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-500" required>
+                                                                    <option value="">Select Division</option>
+                                                                    {divisions.map(d => <option key={d} value={d}>{d}</option>)}
+                                                                </select>
+                                                            )}
                                                             <select name="position" value={formData.position} onChange={handleChange} className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-500" required>
                                                                 <option value="">Select Position</option>
                                                                 <option value="Engineer II">Engineer II</option>

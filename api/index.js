@@ -3072,24 +3072,8 @@ app.get('/api/offline/schools', async (req, res) => {
   }
 });
 
-// 2. Fetch Single School Profile (Online Validation)
-app.get('/api/school-profile/:schoolId', async (req, res) => {
-  const { schoolId } = req.params;
-  try {
-    // CHANGED: Use 'schools' table instead of 'ph_schools'
-    const query = `SELECT "SchoolID" as school_id, "School_Name" as school_name, "Region" as region, "Division" as division, "District" as district, "Province" as province, "Municipality" as municipality, "Legislative_District" as leg_district, "Barangay" as barangay, "Street_Address" as address, "Curricular_Offering" as curricular_offering_classification FROM "schools_IERN" WHERE "SchoolID" = $1`;
-    const result = await pool.query(query, [schoolId]);
-
-    if (result.rows.length > 0) {
-      res.json(result.rows[0]);
-    } else {
-      res.status(404).json({ error: "School not found" });
-    }
-  } catch (err) {
-    console.error("❌ Failed to fetch school profile:", err);
-    res.status(500).json({ error: "Database error" });
-  }
-});
+// 2. Fetch Single School Profile (Online Validation) - DEPRECATED (See line 6090 for active implementation using 'schools' table)
+// app.get('/api/school-profile/:schoolId', async (req, res) => { ... });
 
 // --- DEBUG: SCANNER ENDPOINT (REMOVED) ---
 app.get('/api/debug/scan/:uid', async (req, res) => {
@@ -8179,6 +8163,17 @@ app.put('/api/update-project/:id', upload.fields([
     }
     const oldData = oldRes.rows[0];
 
+    // Block updates if the project is Pending Central Office approval and the submitter is not an EFD/Admin
+    if (oldData.approval_status === 'Pending' && data.uid) {
+      const submitterRes = await pool.query('SELECT role FROM users WHERE uid = $1', [data.uid]);
+      const submitterRole = (submitterRes.rows[0]?.role || '').toLowerCase();
+      const canUpdatePending = ['efd', 'efd engineer', 'hrodi', 'hrodi engineer', 'super user', 'super admin', 'admin', 'central office'].includes(submitterRole);
+      if (!canUpdatePending) {
+        await client.query('ROLLBACK');
+        if (clientNew) await clientNew.query('ROLLBACK').catch(() => {});
+        return res.status(403).json({ message: "This project is pending Central Office approval and cannot be updated." });
+      }
+    }
 
     // Fetch existing documents for carry-over
     const oldDocsRes = await client.query('SELECT * FROM engineer_documents WHERE project_id = $1', [id]);
@@ -8522,11 +8517,14 @@ app.put('/api/update-project/:id', upload.fields([
     await client.query('COMMIT');
 
     // 3. Track Changes (History)
+    // Treat null and "Not Yet Started" as the same baseline to prevent false log entries
+    // when procurement-only updates carry over the unchanged construction status.
+    const normalizeConstrStatus = (s) => (!s || s.trim().toLowerCase() === 'not yet started') ? null : s;
     const changes = [];
-    if (oldData.status_of_construction_phase !== newData.status_of_construction_phase) changes.push(`Construction Status: '${oldData.status_of_construction_phase || 'None'}' -> '${newData.status_of_construction_phase}'`);
+    if (normalizeConstrStatus(oldData.status_of_construction_phase) !== normalizeConstrStatus(newData.status_of_construction_phase)) changes.push(`Construction Status: '${oldData.status_of_construction_phase || 'None'}' -> '${newData.status_of_construction_phase}'`);
     if (oldData.procurement_status !== newProcurementStatus) changes.push(`Procurement Status: '${oldData.procurement_status || 'None'}' -> '${newProcurementStatus}'`);
     if (oldData.accomplishment_percentage !== newData.accomplishment_percentage) changes.push(`Accomplishment: ${oldData.accomplishment_percentage}% -> ${newData.accomplishment_percentage}%`);
-    if (oldData.other_remarks !== newData.other_remarks) changes.push(`Remarks updated`);
+    if (oldData.other_remarks !== newData.other_remarks) changes.push(`Remarks: "${newData.other_remarks || 'Cleared'}"`);
 
     // Create a detailed log object
     const historyLog = {
@@ -8537,6 +8535,7 @@ app.put('/api/update-project/:id', upload.fields([
         status_of_construction_phase: newData.status_of_construction_phase,
         procurement_status: newProcurementStatus,
         accomplishment: newData.accomplishment_percentage,
+        remarks: newData.other_remarks,
         date: new Date().toISOString()
       }
     };
@@ -9049,8 +9048,9 @@ app.get('/api/dashboard/efd-summary', async (req, res) => {
             whereClauses.push(`TRIM(e.region) ILIKE TRIM($${queryParams.length})`);
           }
           if (userProfile.division) {
-            queryParams.push(userProfile.division.trim());
-            whereClauses.push(`TRIM(e.division) ILIKE TRIM($${queryParams.length})`);
+            const normalizedDivision = userProfile.division.trim().replace(/^(SDO|Division of)\s+/i, '').trim();
+            queryParams.push(normalizedDivision);
+            whereClauses.push(`regexp_replace(TRIM(e.division), '^(SDO|Division of)\\s+', '', 'i') ILIKE $${queryParams.length}`);
           }
         } else {
           queryParams.push(engineer_id);
@@ -9255,17 +9255,18 @@ app.get('/api/projects', async (req, res) => {
       if (userProfile) {
         const role = userProfile.role?.trim().toLowerCase();
         const isAdmin = ['central office', 'hrodi', 'super user', 'super admin', 'admin', 'efd', 'efd engineer', 'hrodi engineer', 'central office finance'].includes(role);
-        const isDivEng = ['division engineer', 'sdo', 'ro', 'regional office', 'school division office', 'deped engineer', 'engineer'].includes(role);
+        const isJurisdictionRestricted = ['division engineer', 'regional engineer', 'architect', 'sdo', 'ro', 'regional office', 'school division office', 'deped engineer', 'engineer'].includes(role);
 
         if (isAdmin) {
           // admin/HRODI can see all projects; don't add engineer_id or region/division filters
           console.log(`[AUTH] admin bypass for role: ${role}`);
-        } else if (isDivEng) {
+        } else if (isJurisdictionRestricted) {
           if (userProfile.region) {
             queryParams.push(userProfile.region.trim());
             whereClauses.push(`TRIM(p.region) ILIKE TRIM($${queryParams.length})`);
           }
-          if (userProfile.division) {
+          // Regional Engineer oversees all divisions in their region — skip division filter
+          if (userProfile.division && role !== 'regional engineer') {
             // Normalize both sides: strip "SDO " / "Division of " prefixes so
             // "SDO Benguet" in users matches "Benguet" in engineer_form (and vice-versa).
             const normalizedDivision = userProfile.division.trim().replace(/^(SDO|Division of)\s+/i, '').trim();
@@ -9342,8 +9343,12 @@ app.get('/api/projects', async (req, res) => {
     const countResult = await pool.query(countSql, queryParams);
     const totalCount = parseInt(countResult.rows[0].count);
 
-    sql += ` ORDER BY p.project_id DESC LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
-    queryParams.push(limit, offset);
+    if (limit === 'all') {
+      sql += ` ORDER BY p.project_id DESC`;
+    } else {
+      sql += ` ORDER BY p.project_id DESC LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+      queryParams.push(limit, offset);
+    }
 
     const result = await pool.query(sql, queryParams);
     res.json({
@@ -9351,8 +9356,8 @@ app.get('/api/projects', async (req, res) => {
       pagination: {
         total: totalCount,
         page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(totalCount / limit)
+        limit: limit === 'all' ? totalCount : parseInt(limit),
+        totalPages: limit === 'all' ? 1 : Math.ceil(totalCount / limit)
       }
     });
   } catch (err) {

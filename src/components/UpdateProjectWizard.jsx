@@ -392,8 +392,8 @@ const UpdateProjectWizard = ({ project, onSave, onClose, isOpen }) => {
             ? `[Justification: ${selectedReasons.join(', ')}] ${remarks}`.trim()
             : remarks;
 
-        const finalStatus = isProcurementComplete ? constructionStatus : ConstructionStatus.NotYetStarted;
-        const finalPercentage = isProcurementComplete ? percentage : 0;
+        const finalStatus = isProcurementComplete ? constructionStatus : project.status;
+        const finalPercentage = isProcurementComplete ? percentage : (project.accomplishmentPercentage || project.accomplishment_percentage || 0);
 
         onSave({
             ...project,
@@ -402,11 +402,11 @@ const UpdateProjectWizard = ({ project, onSave, onClose, isOpen }) => {
             status: finalStatus,
             percentage: finalPercentage,
             accomplishmentPercentage: finalPercentage,
-            actualCompletionDate,
+            actualCompletionDate: isProcurementComplete ? actualCompletionDate : (project.actualCompletionDate || ""),
             statusAsOfDate,
             remarks: finalRemarks,
             statusDesignPhase: isProcurementComplete ? "Completed" : (project?.statusDesignPhase || "Ongoing"),
-            triangulatedPercentage: isProcurementComplete ? triangulatedPercentage : 0,
+            triangulatedPercentage: isProcurementComplete ? triangulatedPercentage : (project.triangulatedPercentage || 0),
             ...biddingDates,
             ...contractAward,
             ...details
@@ -438,7 +438,7 @@ const UpdateProjectWizard = ({ project, onSave, onClose, isOpen }) => {
     };
 
     const procCols = getStatusColor(procurementStatus);
-    const displayedConstructionStatus = isProcurementComplete ? constructionStatus : ConstructionStatus.NotYetStarted;
+    const displayedConstructionStatus = isProcurementComplete ? constructionStatus : (project?.status || ConstructionStatus.NotYetStarted);
     const constCols = getStatusColor(displayedConstructionStatus);
 
     const categoryColor = activePhotoCategory === 'Internal'
@@ -773,7 +773,7 @@ const UpdateProjectWizard = ({ project, onSave, onClose, isOpen }) => {
                                                 {displayedConstructionStatus}
                                             </span>
                                             {(constChanged || !isProcurementComplete) && <span className={`ml-auto text-[8px] font-black px-2 py-0.5 rounded-full border bg-white border-current uppercase ${constCols.text}`}>
-                                                {isProcurementComplete ? 'Changed' : 'Reset'}
+                                                {isProcurementComplete ? 'Changed' : 'Preserved'}
                                             </span>}
                                         </div>
                                     </div>

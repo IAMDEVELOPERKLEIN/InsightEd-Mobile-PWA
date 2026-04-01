@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiFilter, FiSearch, FiLayers, FiList, FiTrendingUp, FiMapPin, FiChevronRight, FiAlertCircle, FiChevronDown, FiCheckSquare, FiTrash2, FiGrid, FiEdit2, FiUserPlus, FiImage, FiPlus, FiX } from 'react-icons/fi';
+import { FiFilter, FiSearch, FiLayers, FiList, FiTrendingUp, FiMapPin, FiChevronRight, FiAlertCircle, FiChevronDown, FiCheckSquare, FiTrash2, FiGrid, FiEdit2, FiUserPlus, FiImage, FiPlus, FiX, FiCheck } from 'react-icons/fi';
 import { LuClipboardList, LuCalendar, LuDollarSign, LuActivity } from "react-icons/lu";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, LabelList, Legend } from 'recharts';
 import { useAuth } from '../context/AuthContext';
@@ -168,7 +168,14 @@ const EFDHome = () => {
  
     useEffect(() => {
         const syncUser = () => {
-            const currentRole = user?.account_category || user?.role || localStorage.getItem('userRole');
+            // EFD/HRODI roles: prioritize user.role over account_category because the
+            // login API may have set account_category = 'DepEd Engineer' for these users,
+            // which would incorrectly resolve to 'Division Engineer' nav items.
+            const roleField = user?.role || '';
+            const efdRoles = ['EFD', 'HRODI', 'EFD Engineer', 'hrodi_engineer', 'HRODI Engineer'];
+            const currentRole = efdRoles.includes(roleField)
+                ? roleField
+                : (user?.account_category || user?.role || localStorage.getItem('userRole'));
             if (currentRole) {
                 let normalized = currentRole;
                 if (normalized === 'hrodi_engineer' || normalized === 'HRODI Engineer' || normalized === 'EFD' || normalized === 'HRODI') normalized = 'EFD Engineer';
@@ -547,6 +554,27 @@ const EFDHome = () => {
                 console.error("Delete error:", err);
                 alert("An error occurred while deleting.");
             }
+        }
+    };
+
+    const handleApproveProject = async (e, id) => {
+        e.stopPropagation();
+        if (!window.confirm("Approve this project? The engineer will be able to update it.")) return;
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`/api/approve-project/${id}`, {
+                method: 'PUT',
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
+            if (res.ok) {
+                setProjects(prev => prev.map(p => p.id === id ? { ...p, approvalStatus: 'Approved' } : p));
+            } else {
+                const data = await res.json();
+                alert(data.message || "Failed to approve project.");
+            }
+        } catch (err) {
+            console.error("Approve error:", err);
+            alert("An error occurred while approving.");
         }
     };
 
@@ -1205,6 +1233,11 @@ const EFDHome = () => {
                                                             <div>
                                                                 <h4 className="text-sm font-bold text-slate-800 group-hover:text-blue-700 transition-colors">{p.projectName}</h4>
                                                                 <p className="text-[10px] text-slate-500 font-medium">{p.schoolName} • {p.schoolId}</p>
+                                                                {p.approvalStatus === 'Pending' && (
+                                                                    <span className="mt-1 inline-block text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-500 border border-orange-200 tracking-widest animate-pulse">
+                                                                        ⏳ Pending Approval
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-tight">
@@ -1242,8 +1275,17 @@ const EFDHome = () => {
                                                                         <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 border border-orange-100">MOA Only</span>
                                                                     )}
                                                                 </div>
+                                                                {p.approvalStatus === 'Pending' && userRole === 'EFD Engineer' && (
+                                                                    <button
+                                                                        onClick={(e) => handleApproveProject(e, p.id)}
+                                                                        className="p-1 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-md transition-colors"
+                                                                        title="Approve Project"
+                                                                    >
+                                                                        <FiCheck size={16} />
+                                                                    </button>
+                                                                )}
                                                                 {userRole === 'EFD Engineer' && (
-                                                                    <button 
+                                                                    <button
                                                                         onClick={(e) => handleDeleteProject(e, p.id)}
                                                                         className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
                                                                         title="Delete Project"
@@ -1317,13 +1359,18 @@ const EFDHome = () => {
                                                 {/* Card Header (Category & Status) */}
                                                 <div className="p-6 pb-0">
                                                     <div className="flex items-center justify-between gap-4 mb-3">
-                                                        <div className="flex items-center gap-2">
+                                                        <div className="flex items-center gap-2 flex-wrap">
                                                             <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100 tracking-widest whitespace-nowrap">
                                                                 {p.projectCategory || 'General'}
                                                             </span>
                                                             <span className="text-[9px] font-black text-slate-300 uppercase tracking-tighter truncate">
                                                                 IPC: {p.ipc || 'TBD'}
                                                             </span>
+                                                            {p.approvalStatus === 'Pending' && (
+                                                                <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-orange-50 text-orange-500 border border-orange-200 tracking-widest animate-pulse whitespace-nowrap">
+                                                                    ⏳ Pending Approval
+                                                                </span>
+                                                            )}
                                                         </div>
                                                         <div className="bg-blue-600 text-white rounded-xl px-2.5 py-1.5 flex items-center justify-center text-[10px] font-black shadow-lg shadow-blue-100 flex-shrink-0 min-w-[35px]">
                                                             {showsProgression && (
@@ -1389,7 +1436,7 @@ const EFDHome = () => {
                                                 </div>
 
                                                 {/* Card Footer (Assignment Action) */}
-                                                <div className="p-4 px-6 bg-slate-50/30 border-t border-slate-50 flex items-center justify-between mt-auto">
+                                                <div className="p-4 px-6 bg-slate-50/30 border-t border-slate-50 flex flex-col gap-3 mt-auto">
                                                     {isUnassigned ? (
                                                         <button 
                                                             onClick={(e) => { 
@@ -1421,7 +1468,7 @@ const EFDHome = () => {
                                                         </div>
                                                     )}
                                                     {/* Action Buttons Row */}
-                                                    <div className="border-t border-slate-50 pt-3 flex items-center justify-between">
+                                                    <div className="flex items-center justify-between border-t border-slate-100 pt-3">
                                                         <div className="flex items-center gap-2">
                                                             {userRole !== 'EFD Engineer' && (
                                                                 <button
@@ -1439,8 +1486,17 @@ const EFDHome = () => {
                                                             >
                                                                 <FiActivity size={11} /> Log
                                                             </button>
+                                                            {userRole === 'EFD Engineer' && p.approvalStatus === 'Pending' && (
+                                                                <button
+                                                                    onClick={(e) => handleApproveProject(e, p.id)}
+                                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all border border-emerald-100"
+                                                                    title="Approve Project"
+                                                                >
+                                                                    <FiCheck size={11} /> Approve
+                                                                </button>
+                                                            )}
                                                         </div>
-                                                        {userRole !== 'EFD Engineer' && (
+                                                        {userRole === 'EFD Engineer' && (
                                                             <button
                                                                 onClick={(e) => handleDeleteProject(e, p.id)}
                                                                 className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all border border-red-100"

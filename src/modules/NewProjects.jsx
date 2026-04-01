@@ -413,19 +413,23 @@ const NewProjects = () => {
 
         // Helper to update form with found data
         const updateForm = (found) => {
+            // Robust coordinate mapping (handles various DB/API key naming conventions)
+            const detectedLat = found.latitude ?? found.Latitude ?? found.lat ?? found.Lat ?? '';
+            const detectedLong = found.longitude ?? found.Longitude ?? found.long ?? found.Long ?? found.lng ?? found.Lng ?? '';
+
              setFormData(prev => ({
                 ...prev,
-                schoolName: found.school_name,
-                region: found.region,
-                division: found.division,
+                schoolName: found.school_name || found.School_Name || found.SchoolName || '',
+                region: found.region || found.Region || '',
+                division: found.division || found.Division || '',
                 // --- AUTO POPULATE COORDINATES ---
-                latitude: found.latitude || prev.latitude,
-                longitude: found.longitude || prev.longitude
+                latitude: detectedLat || prev.latitude,
+                longitude: detectedLong || prev.longitude
             }));
 
-            let idMsg = `✅ School Found: ${found.school_name}`;
-            if (found.latitude && found.longitude) {
-                idMsg += `\n📍 Coordinates Auto-Detected!`;
+            let idMsg = `✅ School Found: ${found.school_name || found.SchoolName}`;
+            if (detectedLat && detectedLong) {
+                idMsg += `\n📍 Coordinates Auto-Detected! (${detectedLat}, ${detectedLong})`;
             }
             alert(idMsg);
         };
@@ -780,6 +784,14 @@ const NewProjects = () => {
 
             alert(`✅ Project ${ipc} created and all documents saved successfully!`);
             
+            // Clear local cache to force fresh fetch on dashboard
+            try {
+                const { clearProjectsCache } = await import('../db');
+                await clearProjectsCache();
+            } catch (cacheErr) {
+                console.warn("Failed to clear projects cache:", cacheErr);
+            }
+
             if (user.role === 'EFD' || user.role === 'HRODI Engineer' || user.role === 'EFD Engineer') {
                 navigate('/efd-monitoring');
             } else {

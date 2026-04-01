@@ -31,6 +31,7 @@ const BottomNav = ({ userRole: propRole }) => {
     if (effectiveRole === 'engineer' || effectiveRole === 'Engineer') effectiveRole = 'Division Engineer';
     if (effectiveRole === 'school_head') effectiveRole = 'School Head';
     if (effectiveRole === 'lgu') effectiveRole = 'Local Government Unit';
+    if (effectiveRole === 'Architect') effectiveRole = 'Division Engineer'; // Architect follows same flow as Division Engineer
 
     // Normalize Implementing Agency sub-roles
     if (['PGO', 'CGO', 'MGO', 'DPWH', 'CSO'].includes(effectiveRole)) {
@@ -87,6 +88,10 @@ const BottomNav = ({ userRole: propRole }) => {
             { label: 'Home', path: '/monitoring-dashboard', icon: TbHomeEdit },
             { label: 'Schools', path: '/school-management', icon: TbSchool },
             { label: 'Insights', path: '/monitoring-dashboard', state: { activeTab: 'insights' }, icon: TbChartBar },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
+        ],
+        'Regional Engineer': [
+            { label: 'Home', path: '/regional-engineer-dashboard', icon: TbHomeEdit },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Division Office': [

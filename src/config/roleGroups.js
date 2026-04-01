@@ -47,7 +47,11 @@ export const ROLE_GROUP_MAP = {
     'CGO': ROLE_GROUPS.INFRA_OPERATIONAL,
     'MGO': ROLE_GROUPS.INFRA_OPERATIONAL,
     'DPWH': ROLE_GROUPS.INFRA_OPERATIONAL,
-    'CSO': ROLE_GROUPS.INFRA_OPERATIONAL
+    'CSO': ROLE_GROUPS.INFRA_OPERATIONAL,
+    
+    // New roles
+    'Architect': ROLE_GROUPS.INFRA_OPERATIONAL,
+    'Regional Engineer': ROLE_GROUPS.MANAGEMENT
 };
 
 export const getRoleGroup = (role) => {
