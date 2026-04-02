@@ -12,6 +12,17 @@ import DocumentUpload from "./DocumentUpload";
 
 const TOTAL_STEPS = 7;
 
+/** Resolves /api/asset/ and /uploads/ paths to absolute URLs. */
+const resolveAssetUrl = (rawPath, opts = {}) => {
+    if (!rawPath) return rawPath;
+    if (rawPath.startsWith('http')) return rawPath;
+    if (rawPath.startsWith('/api/') || rawPath.startsWith('/uploads/')) {
+        const url = `${window.location.origin}${rawPath}${opts.download ? '?download=1' : ''}`;
+        return url;
+    }
+    return rawPath;
+};
+
 const chunkyInput = "w-full p-4 mt-2 bg-white border-2 border-gray-100 rounded-3xl text-lg font-semibold text-gray-800 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all shadow-sm placeholder:text-gray-300";
 const chunkySelect = "w-full p-4 mt-2 bg-white border-2 border-gray-100 rounded-3xl text-lg font-semibold text-gray-800 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all shadow-sm appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M5%207L10%2012L15%207%22%20stroke%3D%22%236B7280%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E')] bg-[length:24px] bg-[right_1rem_center] bg-no-repeat disabled:opacity-50 disabled:bg-gray-50";
 
@@ -914,7 +925,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center text-xl shadow-inner">📄</div>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="font-bold text-slate-700 text-sm truncate">{formData.local_file_path.split('/').pop()}</p>
-                                                    <a href={formData.local_file_path} target="_blank" rel="noopener noreferrer" className="text-indigo-600 text-[10px] font-black uppercase tracking-tighter mt-0.5 hover:underline">View Document &rarr;</a>
+                                                    <a href={resolveAssetUrl(formData.local_file_path)} target="_blank" rel="noopener noreferrer" className="text-indigo-600 text-[10px] font-black uppercase tracking-tighter mt-0.5 hover:underline">View Document &rarr;</a>
                                                 </div>
                                             </div>
                                         </div>
@@ -1419,7 +1430,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     
                                                     <div className="p-3 bg-blue-50 border border-blue-200 rounded-2xl flex items-center gap-3 mt-4">
                                                         <p className="text-[11px] text-blue-700 font-bold flex-1">
-                                                            💡 Tip: Your PDF will be optimized to 96 DPI in the background once uploaded to ensure fast loading for everyone.
+                                                            💡 Tip: Your PDF is secured in our Postgres Binary Registry with bit-level deduplication to ensure perfect persistence across all environments.
                                                         </p>
                                                     </div>
                                                 </div>

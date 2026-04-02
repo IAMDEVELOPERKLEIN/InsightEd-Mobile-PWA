@@ -198,10 +198,10 @@ const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null, in
                             </div>
                             <div>
                                 <p className="text-sm font-black text-emerald-900">
-                                    {status === "optimizing" ? "Optimizing PDF..." : "Document Secured"}
+                                    {status === "optimizing" ? "Securing PDF..." : "Document Secured"}
                                 </p>
                                 <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest leading-none mt-1">
-                                    {status === "optimizing" ? "Applying 96 DPI compression" : "Local server storage active"}
+                                    {status === "optimizing" ? "Deduplicating & Indexing" : "Postgres Binary Registry Active"}
                                 </p>
                             </div>
                             {status === "success" && (

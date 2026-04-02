@@ -1331,6 +1331,39 @@ const runMigrations = async (client, dbLabel) => {
         console.error(`❌ [${dbLabel}] IPC Migration Failed:`, ipcErr.message);
     }
 
+    // --- UNIFIED BINARY STORAGE ---
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS unified_binaries (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                hash TEXT NOT NULL,
+                content BYTEA NOT NULL,
+                mime_type TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // TOAST hint: store BYTEA chunks externally to keep main table indices snappy
+        await client.query(`
+            ALTER TABLE unified_binaries ALTER COLUMN content SET STORAGE EXTERNAL;
+        `);
+
+        // O(log n) deduplication lookups
+        await client.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_unified_binaries_hash ON unified_binaries(hash);
+        `);
+
+        // Add binary_id reference column to engineer_image (nullable for backward compat)
+        await client.query(`
+            ALTER TABLE engineer_image ADD COLUMN IF NOT EXISTS binary_id UUID REFERENCES unified_binaries(id) ON DELETE SET NULL;
+        `);
+
+        console.log(`✅ [${dbLabel}] Unified Binaries Table & Indices Initialized`);
+    } catch (binErr) {
+        console.error(`❌ [${dbLabel}] Unified Binaries Migration Failed:`, binErr.message);
+    }
+
 };
 
 export { initOtpTable, runMigrations };

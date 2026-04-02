@@ -11,6 +11,41 @@ import ProjectEditModal from '../components/ProjectEditModal';
 import { LuHistory, LuUser, LuCalendar, LuX, LuInfo, LuMapPin, LuShoppingBag, LuDollarSign, LuFileText, LuImages } from "react-icons/lu";
 import { FiSettings, FiImage, FiFileText } from 'react-icons/fi';
 
+// --- MODULE-LEVEL ASSET URL RESOLVER ---
+const DEBUG_ASSETS = true;
+
+/** Resolves /api/asset/ and /uploads/ paths to absolute URLs using window.location.origin. */
+const resolveAssetUrl = (rawPath, opts = {}) => {
+    if (!rawPath) return rawPath;
+    if (rawPath.startsWith('http')) return rawPath;
+    if (rawPath.startsWith('/api/') || rawPath.startsWith('/uploads/')) {
+        const origin = window.location.origin;
+        const url = `${origin}${rawPath}${opts.download ? '?download=1' : ''}`;
+        if (DEBUG_ASSETS) {
+            const isProd = !['localhost', '127.0.0.1'].includes(window.location.hostname);
+            if (isProd && !url.startsWith('http')) {
+                console.warn('[AssetResolver] ⚠️ Relative URL in production:', url);
+            } else {
+                console.log(`[AssetResolver] ${isProd ? 'PROD' : 'DEV'} → ${url}`);
+            }
+        }
+        return url;
+    }
+    return rawPath;
+};
+
+/**
+ * Resolves a PDF field value (which may be a path, data URI, or raw base64)
+ * to a usable href.
+ */
+const resolveDocUrl = (value, opts = {}) => {
+    if (!value) return '#';
+    if (value.startsWith('data:') || value.startsWith('http')) return value;
+    if (value.startsWith('/')) return resolveAssetUrl(value, opts);
+    // Legacy: raw base64 string
+    return `data:application/pdf;base64,${value}`;
+};
+
 // --- SUB-COMPONENT: REMARKS HISTORY ---
 const RemarksHistory = ({ history, loading, currentRemarks }) => {
     if (loading) return (
@@ -274,17 +309,17 @@ const VOHistoryList = ({ voHistory, loading }) => {
                                     <div className="h-[1px] flex-1 bg-slate-50"></div>
                                 </span>
                                 {vo.revised_pow_pdf && (
-                                    <a href={vo.revised_pow_pdf.startsWith('data:') || vo.revised_pow_pdf.startsWith('/uploads/') ? vo.revised_pow_pdf : `data:application/pdf;base64,${vo.revised_pow_pdf}`} download={`Revised_POW_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
+                                    <a href={resolveDocUrl(vo.revised_pow_pdf, { download: true })} download={`Revised_POW_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
                                         📄 POW
                                     </a>
                                 )}
                                 {vo.revised_dupa_pdf && (
-                                    <a href={vo.revised_dupa_pdf.startsWith('data:') || vo.revised_dupa_pdf.startsWith('/uploads/') ? vo.revised_dupa_pdf : `data:application/pdf;base64,${vo.revised_dupa_pdf}`} download={`Revised_DUPA_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
+                                    <a href={resolveDocUrl(vo.revised_dupa_pdf, { download: true })} download={`Revised_DUPA_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
                                         📄 DUPA
                                     </a>
                                 )}
                                 {vo.revised_contract_pdf && (
-                                    <a href={vo.revised_contract_pdf.startsWith('data:') || vo.revised_contract_pdf.startsWith('/uploads/') ? vo.revised_contract_pdf : `data:application/pdf;base64,${vo.revised_contract_pdf}`} download={`Revised_Contract_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
+                                    <a href={resolveDocUrl(vo.revised_contract_pdf, { download: true })} download={`Revised_Contract_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
                                         📄 CONTRACT
                                     </a>
                                 )}
@@ -555,8 +590,8 @@ const DetailedProjInfo = () => {
         if (data.startsWith('data:') || data.startsWith('http')) {
             return data;
         }
-        if (data.startsWith('/uploads/')) {
-            return `${window.location.origin}${data}`;
+        if (data.startsWith('/uploads/') || data.startsWith('/api/asset/')) {
+            return resolveAssetUrl(data);
         }
 
         // 5. Otherwise assume it's raw base64 and wrap it
@@ -1287,7 +1322,7 @@ const DetailedProjInfo = () => {
                             <div className="flex items-center gap-2 w-full sm:w-auto">
                                 {hasExisting && status !== 'uploading' && (
                                     <a
-                                        href={project[docKey].startsWith('/uploads/') ? `${API_BASE}${project[docKey]}` : project[docKey]}
+                                        href={resolveAssetUrl(project[docKey], { download: true })}
                                         download={`${project.schoolName}_${key}.pdf`}
                                         className="flex-1 sm:flex-none text-center bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-[9px] font-black uppercase hover:bg-slate-200 transition-all active:scale-95"
                                     >

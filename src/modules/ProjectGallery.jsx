@@ -13,7 +13,9 @@ const LazyImage = ({ imageId, meta, onClick }) => {
     const [error, setError] = useState(false);
 
     useEffect(() => {
+        const DEBUG_GALLERY = true; // Temporary diagnostic toggle
         if (meta.image_data) {
+            if (DEBUG_GALLERY) console.log(`[Gallery] Resolving asset: ${imageId}`, meta);
             let base64 = meta.image_data;
             // Handle JSON string if present (legacy)
             if (typeof base64 === 'string' && base64.trim().startsWith('{')) {
@@ -25,9 +27,17 @@ const LazyImage = ({ imageId, meta, onClick }) => {
                 }
             }
 
-            // File-path based storage (local dev) — use absolute origin so path is never BASE_URL-relative
-            if (typeof base64 === 'string' && base64.startsWith('/uploads/')) {
-                setSrc(`${window.location.origin}${base64}`);
+            // File-path or unified binary asset — resolve against correct backend origin
+            if (typeof base64 === 'string' && (base64.startsWith('/uploads/') || base64.startsWith('/api/asset/'))) {
+                const host = window.location.hostname;
+                const isDev = host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+                const apiBase = isDev ? 'http://localhost:3000' : (import.meta.env.BASE_URL || '/');
+                // Ensure no double slashes and correct prefixing
+                const finalSrc = (apiBase.endsWith('/') ? apiBase : apiBase + '/') + base64.substring(1);
+                const cleanedSrc = finalSrc.replace(/([^:]\/)\/+/g, "$1");
+
+                if (DEBUG_GALLERY) console.log(`[Gallery-v2] Origin: ${isDev ? 'DEV-3000' : 'PROD'} | Host: ${host} -> ${cleanedSrc}`);
+                setSrc(cleanedSrc);
                 setLoading(false);
                 return;
             }
@@ -40,10 +50,11 @@ const LazyImage = ({ imageId, meta, onClick }) => {
             setSrc(base64);
             setLoading(false);
         } else {
+            if (DEBUG_GALLERY) console.warn(`[Gallery] MISSING image_data for asset: ${imageId}`, meta);
             setError(true);
             setLoading(false);
         }
-    }, [meta]);
+    }, [meta, imageId]);
 
     if (loading) {
         return (
@@ -71,7 +82,10 @@ const LazyImage = ({ imageId, meta, onClick }) => {
                 alt="Site progress"
                 className="w-full h-40 object-cover cursor-pointer bg-slate-100"
                 loading="lazy"
-                onError={() => setError(true)}
+                onError={() => {
+                    console.error(`[Gallery] FAILED TO LOAD: ${src}`, meta);
+                    setError(true);
+                }}
             />
             <div className="p-2 bg-white">
                 {!meta.projectId && meta.school_name && (
