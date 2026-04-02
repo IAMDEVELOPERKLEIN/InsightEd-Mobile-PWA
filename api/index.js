@@ -75,6 +75,25 @@ const RegisterUserSchema = z.object({
   passcode: PasscodeSchema.optional()
 });
 
+// --- UPLOAD PATH CONFIGURATION (Hawkeye Protocol v1.1) ---
+const UPLOAD_BASE_PATH = process.env.UPLOAD_DIR 
+  ? path.resolve(process.env.UPLOAD_DIR) 
+  : path.resolve(__dirname, '..', 'uploads');
+
+console.log(`📂 [Storage] Active Upload Root: ${UPLOAD_BASE_PATH}`);
+
+const getUploadPath = (subDir) => {
+  const dir = path.join(UPLOAD_BASE_PATH, subDir);
+  if (!fs.existsSync(dir)) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+    } catch (e) {
+      console.error(`❌ Critical: Failed to create directory ${dir}:`, e.message);
+    }
+  }
+  return dir;
+};
+
 const RegisterSchoolSchema = z.object({
   email: z.string().email().transform(e => e.trim().toLowerCase()),
   password: z.string().min(6),
@@ -192,22 +211,16 @@ app.use(express.urlencoded({ limit: '500mb', extended: true }));
 const execAsync = util.promisify(exec);
 
 // --- SCHOOL DOCS STORAGE ---
+// --- SCHOOL DOCS STORAGE (Staged in Temp) ---
 const schoolDocsStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // Use absolute path for production consistency
-    const dir = path.join(__dirname, '..', 'uploads/school_docs/');
-    if (!fs.existsSync(dir)) {
-      try {
-        fs.mkdirSync(dir, { recursive: true });
-      } catch (e) {
-        console.error("Critical: Failed to create upload directory:", e.message);
-      }
-    }
+    // Stage in a temp subdirectory within uploads to ensure move across partitions is safe if needed
+    const dir = getUploadPath('temp');
     cb(null, dir);
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
-    const uniqueName = `iern_${req.params.iern}_${Date.now()}${ext}`;
+    const uniqueName = `temp_iern_${req.params.iern}_${Date.now()}${ext}`;
     cb(null, uniqueName);
   }
 });
@@ -221,21 +234,21 @@ const schoolDocsUpload = multer({
   }
 });
 
-// Serve static files from uploads directory
-app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+// Serve static files from configured uploads directory
+app.use('/uploads', express.static(UPLOAD_BASE_PATH));
 
 const upload = multer({ dest: 'uploads/' });
 
 // --- Multer: Project Photos (file-path storage) ---
+// --- Multer: Project Photos (Staged in Temp) ---
 const projectPhotosStorage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const dir = path.join(__dirname, '..', 'uploads/project_photos/');
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        const dir = getUploadPath('temp');
         cb(null, dir);
     },
     filename: (req, file, cb) => {
         const ext = path.extname(file.originalname) || '.jpg';
-        cb(null, `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`);
+        cb(null, `temp_photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`);
     }
 });
 const projectPhotosUpload = multer({
@@ -252,51 +265,39 @@ app.post('/api/schools/:iern/ownership-docs', schoolDocsUpload.single('file'), a
     return res.status(400).json({ error: 'No PDF file uploaded' });
   }
 
-  const relativePath = `/uploads/school_docs/${req.file.filename}`;
-  
   try {
-    // 1. Save to database
+    // 1. Synchronous Compression (96 DPI) - Gated Execution
+    const tempPath = req.file.path;
+    const finalDir = getUploadPath('school_docs');
+    const finalFilename = req.file.filename.replace('temp_', '');
+    const finalPath = path.join(finalDir, finalFilename);
+    const scriptPath = path.resolve(__dirname, '..', 'compress_pdf.py');
+    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    const cmd = `"${pythonCmd}" "${scriptPath}" "${tempPath}" "${finalPath}" 96`;
+
+    console.log(`📄 [Sync] Optimizing School Doc for ${iern}...`);
+    
+    try {
+        await execAsync(cmd);
+        console.log(`✅ [Sync] Compression Success: ${finalFilename}`);
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    } catch (err) {
+        console.error(`⚠️ [Sync] Compression Failed, falling back to original:`, err.message);
+        fs.renameSync(tempPath, finalPath);
+    }
+
+    // 2. Save to database with final path
+    const relativePath = `/uploads/school_docs/${finalFilename}`;
     const dbRes = await pool.query(
-      `INSERT INTO school_ownership_docs (iern, file_path, file_name, doc_type) 
-       VALUES ($1, $2, $3, $4) RETURNING id`,
-      [iern, relativePath, req.file.originalname, doc_type]
+      `INSERT INTO school_ownership_docs (iern, file_path, file_name, doc_type, status) 
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [iern, relativePath, req.file.originalname, doc_type, 'optimized']
     );
 
-    // 2. Respond immediately (Background task starts later)
     res.status(200).json({ 
       success: true, 
-      message: 'Upload successful. Optimization starting in background.',
+      message: 'Upload and optimization complete.',
       data: { id: dbRes.rows[0].id, filePath: relativePath }
-    });
-
-    // 3. Background Compression (96 DPI)
-    const inputPath = path.resolve(req.file.path);
-    const outputPath = path.resolve(req.file.path.replace('.pdf', '_opt.pdf'));
-    const scriptPath = path.resolve(__dirname, '..', 'compress_pdf.py');
-    
-    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-    const cmd = `"${pythonCmd}" "${scriptPath}" "${inputPath}" "${outputPath}" 96`;
-
-    exec(cmd, async (err, stdout, stderr) => {
-        if (err) {
-            console.error(`❌ Background Compression Failed for ${iern}:`);
-            console.error(`Command: ${cmd}`);
-            console.error(`Error: ${err.message}`);
-            console.error(`Stderr: ${stderr}`);
-            console.error(`Stdout: ${stdout}`);
-            return;
-        }
-        
-        try {
-            // Replace original with optimized one
-            if (fs.existsSync(outputPath)) {
-                fs.renameSync(outputPath, inputPath);
-                console.log(`✅ Background Compression Success for ${iern} (96 DPI)`);
-                await pool.query('UPDATE school_ownership_docs SET status = $1 WHERE id = $2', ['optimized', dbRes.rows[0].id]);
-            }
-        } catch (renameErr) {
-            console.error(`❌ Failed to replace compressed file for ${iern}:`, renameErr.message);
-        }
     });
 
   } catch (err) {
@@ -351,8 +352,8 @@ const processPdfFile = async (file, outputFilename = null) => {
     fs.renameSync(file.path, renamedInput);
 
     // Permanent output path in uploads/project_docs/
-    const docsDir = path.resolve(__dirname, '..', 'uploads/project_docs');
-    if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir, { recursive: true });
+    const docsDir = getUploadPath('project_docs');
+    
     // Use caller-supplied name (e.g. IPC-named) or fall back to a random one
     const finalFilename = outputFilename || `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.pdf`;
     const outputPath = path.join(docsDir, finalFilename);
@@ -9898,6 +9899,7 @@ app.get('/api/project-history/:ipc', async (req, res) => {
 });
 
 // --- 20. POST: Upload Project Image (Base64) ---
+// --- 20. POST: Upload Project Image (Synchronous Optimization) ---
 app.post('/api/upload-image', (req, res, next) => {
     // Accept multipart/form-data (file upload) OR application/json (legacy Base64 / offline outbox)
     const ct = req.headers['content-type'] || '';
@@ -9907,26 +9909,48 @@ app.post('/api/upload-image', (req, res, next) => {
         next();
     }
 }, async (req, res) => {
-  // Determine the image value to store: file path (new) or Base64 (legacy)
-  let imageValue;
-  if (req.file) {
-      imageValue = `/uploads/project_photos/${req.file.filename}`;
-  } else {
-      imageValue = req.body.imageData;
+  const { projectId, uploadedBy, category, imageData } = req.body;
+  
+  if (!projectId || (!req.file && !imageData)) {
+      return res.status(400).json({ error: "Missing required data (projectId or image content)" });
   }
 
-  const projectId = req.body.projectId;
-  const uploadedBy = req.body.uploadedBy;
-  const category = req.body.category;
-
-  if (!projectId || !imageValue) return res.status(400).json({ error: "Missing required data" });
+  let finalFilePath = null;
+  let finalImageValue = imageData; // Default to incoming base64 if not a file
 
   try {
-    // 1. Fetch IPC first
+    // 1. Synchronous Optimization for File Uploads
+    if (req.file) {
+        const tempPath = req.file.path;
+        const finalDir = getUploadPath('project_photos');
+        const finalFilename = req.file.filename.replace('temp_', '');
+        const absoluteFinalPath = path.join(finalDir, finalFilename);
+        const scriptPath = path.resolve(__dirname, '..', 'compress_image.py');
+        const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+        
+        console.log(`🖼️ [Sync] Optimizing Project Photo: ${req.file.originalname}`);
+
+        try {
+            // Resize to 1280px max-width, 96 DPI, JPEG 80% quality via the existing Python script
+            await execAsync(`"${pythonCmd}" "${scriptPath}" "${tempPath}" "${absoluteFinalPath}"`);
+            console.log(`✅ [Sync] Image Optimized: ${finalFilename}`);
+            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+        } catch (err) {
+            console.error(`⚠️ [Sync] Optimization failed, using original:`, err.message);
+            // Fallback: Just move it as-is to ensure no data loss
+            fs.renameSync(tempPath, absoluteFinalPath);
+        }
+
+        finalFilePath = `/uploads/project_photos/${finalFilename}`;
+        finalImageValue = finalFilePath; // For database compatibility
+    }
+
+    // 2. Database Persistence
+    // Fetch IPC first for deterministic mapping
     const ipcRes = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [projectId]);
     const ipc = ipcRes.rows.length > 0 ? ipcRes.rows[0].ipc : null;
 
-    // 2. Resolve Latest Project ID (Fix for Updates)
+    // Resolve Latest Project ID (Fix for Updates)
     let finalProjectId = projectId;
     if (ipc) {
       const latestRes = await pool.query(
@@ -9938,61 +9962,34 @@ app.post('/api/upload-image', (req, res, next) => {
       }
     }
 
-    // 3. Insert with Latest Project ID
-    // file_path stores disk-relative path for file uploads; image_data holds the same for compatibility
-    const filePath = req.file ? imageValue : null;
     const query = `INSERT INTO engineer_image (project_id, image_data, file_path, uploaded_by, category, ipc) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;`;
-    const result = await pool.query(query, [finalProjectId, imageValue, filePath, uploadedBy, category || 'Internal', ipc]);
+    const result = await pool.query(query, [finalProjectId, finalImageValue, finalFilePath, uploadedBy, category || 'Internal', ipc]);
 
-    await logActivity(uploadedBy, 'Engineer', 'Engineer', 'UPLOAD', `Project ID: ${projectId}`, `Uploaded a new site image (${category || 'Internal'})`);
-    res.status(201).json({ success: true, imageId: result.rows[0].id });
+    await logActivity(uploadedBy, 'Engineer', 'Engineer', 'UPLOAD', `Project ID: ${projectId}`, `Uploaded optimized site image (${category || 'Internal'})`);
 
-    // --- Background: optimize image file if saved to disk ---
-    if (req.file) {
-        const filePath = path.join(__dirname, '..', 'uploads/project_photos', req.file.filename);
-        const tmpOut = filePath + '.tmp.jpg';
-        const scriptPath = path.resolve(__dirname, '..', 'compress_image.py');
-        const cmd = (py) => `${py} "${scriptPath}" "${filePath}" "${tmpOut}"`;
-        const tryCompress = async () => {
-            console.log(`🖼️ [BG] Attempting image optimization: ${req.file.filename}`);
-            for (const py of ['python', 'py', 'python3']) {
-                try {
-                    await execAsync(cmd(py));
-                    if (fs.existsSync(tmpOut)) {
-                        fs.renameSync(tmpOut, filePath);
-                        console.log(`✅ [BG] Image optimized: ${req.file.filename}`);
-                        return;
-                    }
-                } catch (e) {
-                    // console.warn(`   - [BG] ${py} optimizer failed:`, e.message);
-                }
-            }
-            console.warn(`⚠️ [BG] Image compression skipped or failed (Python/Pillow unavailable or error encountered)`);
-            if (fs.existsSync(tmpOut)) fs.unlinkSync(tmpOut);
-        };
-        tryCompress().catch(err => console.error("❌ [BG] Fatal optimization error:", err.message));
+    // 3. Dual Write (Async/Non-blocking)
+    if (poolNew && ipc) {
+      const dwQuery = `
+            INSERT INTO engineer_image (project_id, image_data, file_path, uploaded_by, category, ipc)
+            VALUES ((SELECT project_id FROM engineer_form WHERE ipc = $1 ORDER BY project_id DESC LIMIT 1), $2, $3, $4, $5, $1);
+        `;
+      poolNew.query(dwQuery, [ipc, finalImageValue, finalFilePath, uploadedBy, category || 'Internal']).catch(e => console.error("❌ Dual-Write Error (Upload Image):", e.message));
     }
 
-    // --- DUAL WRITE: UPLOAD IMAGE ---
-    if (poolNew) {
-      try {
-        if (ipc) {
-          const dwQuery = `
-                INSERT INTO engineer_image (project_id, image_data, file_path, uploaded_by, category, ipc)
-                VALUES ((SELECT project_id FROM engineer_form WHERE ipc = $1 ORDER BY project_id DESC LIMIT 1), $2, $3, $4, $5, $1);
-            `;
-          await poolNew.query(dwQuery, [ipc, imageValue, filePath, uploadedBy, category || 'Internal']);
-        }
-      } catch (dwErr) {
-        console.error("❌ Dual-Write Error (Upload Image):", dwErr.message);
-      }
-    }
+    res.status(201).json({ 
+        success: true, 
+        imageId: result.rows[0].id, 
+        filePath: finalFilePath,
+        message: "Image uploaded and optimized successfully." 
+    });
+
   } catch (err) {
     console.error("❌ Image Upload Error:", err.message);
-    res.status(500).json({ error: "Failed to save image to database" });
+    res.status(500).json({ error: "Failed to process and save image" });
   }
 });
 
+// --- 20b. POST: Upload Project Document (Append Version) ---
 // --- 20b. POST: Upload Project Document (Append Version) ---
 app.post('/api/upload-project-document', (req, res, next) => {
   // Support both multipart/form-data AND application/json (legacy/offline)
@@ -10003,23 +10000,13 @@ app.post('/api/upload-project-document', (req, res, next) => {
     next();
   }
 }, async (req, res) => {
-  // Accept both camelCase (frontend) and snake_case (legacy callers)
   const { projectId, project_id, type, uid, ipc: bodyIpc } = req.body;
   const finalProjectId = projectId || project_id;
   let base64 = req.body.base64;
   let filename = req.body.filename || (req.file ? req.file.originalname : null);
 
-  // --- MAD DEBUGGER LOGGING ---
-  console.group(`📂 Incoming Doc Upload: [${type}]`);
-  console.log(`🔍 DEBUG: Received ID [${projectId}] or [${project_id}] -> Selected: ${finalProjectId}`);
-  console.log(`- Multipart File: ${req.file ? req.file.originalname : 'NONE'}`);
-  console.log(`- Base64 Length: ${base64 ? base64.length : 0}`);
-  console.log(`- IPC from body: ${bodyIpc || 'none (will resolve from DB)'}`);
-
   if (!finalProjectId || !type || (!base64 && !req.file)) {
-    console.error("❌ FAILURE: Missing required data (projectId/project_id, type, or file content)");
-    console.groupEnd();
-    return res.status(400).json({ error: "Missing required data" });
+    return res.status(400).json({ error: "Missing required data (projectId, type, or file content)" });
   }
 
   let column = '';
@@ -10030,8 +10017,6 @@ app.post('/api/upload-project-document', (req, res, next) => {
   else if (type === 'RTA') { column = 'rta_pdf'; }
   else if (type === 'MOA') { column = 'moa_pdf'; }
   else {
-    console.error(`❌ FAILURE: Invalid document type [${type}]`);
-    console.groupEnd();
     return res.status(400).json({ error: "Invalid document type" });
   }
 
@@ -10039,33 +10024,25 @@ app.post('/api/upload-project-document', (req, res, next) => {
   try {
     client = await pool.connect();
 
-    // 1. Get the IPC — prefer the one from the request body (already resolved by frontend) to save a DB round-trip
+    // 1. Resolve identifier
     let ipc = bodyIpc || null;
     if (!ipc) {
       const projectRes = await client.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [parseInt(finalProjectId)]);
       if (projectRes.rows.length === 0) {
-        console.error(`❌ FAILURE: Project ID ${finalProjectId} not found in engineer_form`);
-        console.groupEnd();
         return res.status(404).json({ error: "Project not found" });
       }
       ipc = projectRes.rows[0].ipc;
     }
-    console.log(`- Resolved IPC: ${ipc}`);
 
-    // 2. Process File — use IPC-named output for deterministic overwritable storage
+    // 2. Process File (Deterministic IPC naming + 96 DPI)
     let finalDocValue = base64;
     if (req.file) {
       const ipcFilename = ipc ? `${ipc}_${type}.pdf` : null;
-      try {
-        finalDocValue = await processPdfFile(req.file, ipcFilename);
-        console.log(`✅ SUCCESS: PDF processed to: ${finalDocValue}`);
-      } catch (err) {
-        console.warn(`⚠️ WARNING: PDF processing failed, falling back to temp path: ${err.message}`);
-        finalDocValue = `/uploads/${req.file.filename}`;
-      }
+      // processPdfFile is already refactored to use getUploadPath('project_docs') and 96 DPI
+      finalDocValue = await processPdfFile(req.file, ipcFilename);
     }
 
-    // 3. UPSERT keyed on IPC — one canonical document row per project lineage
+    // 3. UPSERT keyed on IPC
     const upsertQuery = `
       INSERT INTO engineer_documents (project_id, ipc, ${column}, uploader_id, ${filenameColumn ? filenameColumn + ',' : ''} created_at)
       VALUES ($1, $2, $3, $4, ${filenameColumn ? '$5,' : ''} CURRENT_TIMESTAMP)
@@ -10082,44 +10059,26 @@ app.post('/api/upload-project-document', (req, res, next) => {
     if (filenameColumn) queryParams.push(filename);
 
     await client.query(upsertQuery, queryParams);
-    console.log(`✅ SUCCESS: Updated ${column} for project_id ${finalProjectId}`);
-    console.groupEnd();
+    
+    // 4. Dual Write (non-blocking)
+    if (poolNew && ipc) {
+        poolNew.query(upsertQuery, queryParams).catch(e => console.error(`❌ Dual-Write Error (Doc ${type}):`, e.message));
+    }
 
     res.json({ success: true, projectId: finalProjectId, filePath: finalDocValue });
   } catch (err) {
-    console.error(`❌ FAILURE: ${err.message}`);
-    console.error(err.stack);
-    console.groupEnd();
-    res.status(500).json({ error: "Failed to save document" });
+    console.error(`❌ Doc Upload Failure: ${err.message}`);
+    res.status(500).json({ error: "Failed to process and save document" });
   } finally {
     if (client) client.release();
   }
 });
 
 // --- UNIT 1: Nexus Ownership Document Upload ---
-app.post('/api/schools/:iern/ownership-docs', upload.single('file'), async (req, res) => {
-  try {
-    const { iern } = req.params;
-    
-    if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded" });
-    }
-
-    const filePath = `/uploads/${req.file.filename}`;
-    const docId = `doc_${Date.now()}_${iern}`;
-    
-    res.json({
-      success: true,
-      data: {
-        id: docId,
-        filePath: filePath
-      }
-    });
-  } catch (error) {
-    console.error("Ownership Doc Upload Error:", error);
-    res.status(500).json({ error: "Failed to upload document" });
-  }
-});
+// --- 20c. Consolidated Ownership Docs (Redirects to Unit 1 Module) ---
+// This route was redundant. All ownership-docs traffic is now handled by the primary
+// /api/schools/:iern/ownership-docs route at line 260.
+// app.post('/api/schools/:iern/ownership-docs', upload.single('file'), ...) removed.
 
 app.delete('/api/schools/:iern/ownership-docs/:id', async (req, res) => {
   try {

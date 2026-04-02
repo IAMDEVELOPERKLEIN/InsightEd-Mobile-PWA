@@ -945,6 +945,8 @@ const EngineerProjects = () => {
         ...currentExternal.map(f => ({ file: f, category: 'External' }))
       ];
 
+      let failedUploads = 0;
+
       if (allFiles.length > 0) {
         // Small delay to ensure the new project record is fully visible in DB for image linking
         await new Promise(resolve => setTimeout(resolve, 800));
@@ -956,9 +958,15 @@ const EngineerProjects = () => {
             formData.append('projectId', resData.project.project_id);
             formData.append('uploadedBy', uid);
             formData.append('category', item.category);
-            await fetch(`${API_BASE}/api/upload-image`, { method: "POST", body: formData });
+            const resp = await fetch(`${API_BASE}/api/upload-image`, { method: "POST", body: formData });
+            
+            if (!resp.ok) {
+              failedUploads++;
+              console.error(`Upload failed for file: ${item.file.name} with status: ${resp.status}`);
+            }
           } catch (err) {
             console.error("Upload failed for file:", item.file.name, err);
+            failedUploads++;
           }
         }
       }
@@ -967,13 +975,18 @@ const EngineerProjects = () => {
       setProjects(updatedList);
       await cacheProjects(updatedList); // PERSIST TO CACHE
 
-      alert("✅ SUCCESS\n\nProject updates and site photos have been synced.");
+      if (failedUploads > 0) {
+        alert(`⚠️ PARTIAL SUCCESS\n\nProject details updated, but ${failedUploads} photo(s) failed to upload. Please check your connection and try re-uploading them.`);
+      } else {
+        alert("✅ SUCCESS\n\nProject updates and site photos have been synced.");
+      }
+      
       setInternalFiles([]);
       setExternalFiles([]);
       setIsUpdateModalOpen(false);
     } catch (err) {
       console.error("Save Error:", err);
-      alert("Error: Failed to save updates. Please check your connection.");
+      alert("❌ ERROR\n\nFailed to save updates entirely. Please check your connection or try again later.");
     } finally {
       setIsUploading(false);
     }

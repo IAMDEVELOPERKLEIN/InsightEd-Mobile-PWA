@@ -9,7 +9,7 @@ const SERVER_DIR = "/var/www/html/InsightEd-Staging";
 const USER = "Administrator1";
 const PASS = "7v52E69TYgTE"; // Hardcoded as requested
 const TAR_FILE = "staging-deploy.tmp.tar.gz";
-const INCLUDE = ['api', 'dist', 'public', 'uploads', 'package.json', 'package-lock.json'];
+const INCLUDE = ['api', 'dist', 'public', 'package.json', 'package-lock.json'];
 
 console.log("------------------------------------------------");
 console.log("🚀 Automated Local-to-Staging Deployment");
