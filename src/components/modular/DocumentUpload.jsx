@@ -9,6 +9,7 @@ const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null, in
     const [progress, setProgress] = useState(0);
     const [errorMessage, setErrorMessage] = useState("");
     const [uploadedPath, setUploadedPath] = useState(initialFile);
+    const [uploadedFileName, setUploadedFileName] = useState(null);
     const [documentId, setDocumentId] = useState(initialDocId);
 
     // Sync initial props if they change (e.g. on mount/load)
@@ -70,9 +71,10 @@ const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null, in
             }
 
             setUploadedPath(result.data.filePath);
+            setUploadedFileName(result.data.fileName);
             setDocumentId(result.data.id);
             setStatus("optimizing");
-            onUploadSuccess(result.data.filePath, result.data.id);
+            onUploadSuccess(result.data.filePath, result.data.id, result.data.fileName);
 
             setTimeout(() => {
                 setStatus("success");
@@ -218,7 +220,9 @@ const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null, in
                         </div>
 
                         <div className="flex items-center justify-between p-3 bg-white/50 rounded-xl border border-emerald-100">
-                            <span className="text-[11px] font-bold text-gray-500 truncate max-w-[200px]">{uploadedPath}</span>
+                            <span className="text-[11px] font-bold text-gray-500 truncate max-w-[200px]">
+                                {uploadedFileName || uploadedPath?.split('/').pop() || "View Document"}
+                            </span>
                             <a href={uploadedPath} target="_blank" rel="noopener noreferrer" className="text-[10px] font-black text-emerald-600 uppercase hover:underline">
                                 View File &rarr;
                             </a>

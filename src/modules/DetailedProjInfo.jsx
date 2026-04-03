@@ -10,41 +10,7 @@ import EditProjectModal from '../components/EditProjectModal';
 import ProjectEditModal from '../components/ProjectEditModal';
 import { LuHistory, LuUser, LuCalendar, LuX, LuInfo, LuMapPin, LuShoppingBag, LuDollarSign, LuFileText, LuImages } from "react-icons/lu";
 import { FiSettings, FiImage, FiFileText } from 'react-icons/fi';
-
-// --- MODULE-LEVEL ASSET URL RESOLVER ---
-const DEBUG_ASSETS = true;
-
-/** Resolves /api/asset/ and /uploads/ paths to absolute URLs using window.location.origin. */
-const resolveAssetUrl = (rawPath, opts = {}) => {
-    if (!rawPath) return rawPath;
-    if (rawPath.startsWith('http')) return rawPath;
-    if (rawPath.startsWith('/api/') || rawPath.startsWith('/uploads/')) {
-        const origin = window.location.origin;
-        const url = `${origin}${rawPath}${opts.download ? '?download=1' : ''}`;
-        if (DEBUG_ASSETS) {
-            const isProd = !['localhost', '127.0.0.1'].includes(window.location.hostname);
-            if (isProd && !url.startsWith('http')) {
-                console.warn('[AssetResolver] ⚠️ Relative URL in production:', url);
-            } else {
-                console.log(`[AssetResolver] ${isProd ? 'PROD' : 'DEV'} → ${url}`);
-            }
-        }
-        return url;
-    }
-    return rawPath;
-};
-
-/**
- * Resolves a PDF field value (which may be a path, data URI, or raw base64)
- * to a usable href.
- */
-const resolveDocUrl = (value, opts = {}) => {
-    if (!value) return '#';
-    if (value.startsWith('data:') || value.startsWith('http')) return value;
-    if (value.startsWith('/')) return resolveAssetUrl(value, opts);
-    // Legacy: raw base64 string
-    return `data:application/pdf;base64,${value}`;
-};
+import { resolveAssetUrl, resolveDocUrl } from '../utils/assetHelper';
 
 // --- SUB-COMPONENT: REMARKS HISTORY ---
 const RemarksHistory = ({ history, loading, currentRemarks }) => {

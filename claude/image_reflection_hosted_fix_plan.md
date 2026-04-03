@@ -1,60 +1,76 @@
 # SYSTEM ROLE
-You are a Senior Full-Stack Engineer and DevOps Specialist. Your mission is to resolve a critical production regression where site images fail to persist and render in a hosted Vercel environment. You must implement a "bulletproof" storage bridge between local development and Azure Blob Storage while standardizing image resolution logic.
+You are a Senior Full-Stack Engineer specializing in VM-based deployments (Nginx, PM2, Node.js). Your goal is to restore reliable image persistence and rendering on a standalone VM environment, bypassing the previous Azure Blob Storage plan and prioritizing local `/uploads` directory integrity.
 
 # 🌌 THE VIBE & AESTHETIC
-The solution must feel **seamless** and **invisible** to the user. Whether an image is served from a local `uploads` folder during development or a global Azure CDN in production, the transition must be 100% transparent. The gallery should feel "fast and persistent"—no broken image icons, no stale data.
+"Reliable & Consistent". The application must treat the VM's filesystem as the absolute source of truth. Images uploaded by engineers must be immediately persisted to the VM's disk and rendered via robust path resolution that survives subfolder-based hosting (e.g., `/insighted-staging/`).
 
 # 🛠️ TECH STACK & ARCHITECTURE
-- **Frontend:** React (Vite-PWA), TailwindCSS, React Router.
-- **Backend:** Express.js (Node.js) running on Vercel (Root API Entry).
-- **Storage Strategy:** 
-    - **Local:** Persistent disk storage in `uploads/project_photos/`.
-    - **Production:** Azure Blob Storage with permanent HTTPS URLs.
-- **Database:** PostgreSQL (`pg` pool) storing path-agnostic image strings.
+- **Frontend:** React (Vite), hosted at `/insighted-staging/` subdirectory.
+- **Backend:** Node.js (Express) running via PM2 on Port 5001.
+- **Storage:** Local `/uploads` directory on the VM's filesystem.
+- **Proxy:** Nginx handling the bridge between Port 80 and Port 5001.
 
 # 📝 CORE REQUIREMENTS
-1. **Persistent Cloud Storage:** Abandon ephemeral local disk storage for production uploads.
-2. **Path Normalization:** Standardize how components (`ProjectGallery`, `DetailedProjInfo`) resolve `/uploads/` paths vs `https://` URLs.
-3. **Environment-Aware Base URL:** Dynamically switch image fetching logic based on the environment without hardcoding domain names.
-4. **Dual-Write Integrity:** Ensure images are correctly indexed in the database with IPC awareness.
+1. **Revert Azure Transition:** Remove Azure-specific logic to simplify the code for the VM environment.
+2. **Subfolder-Aware Pathing:** Fix the frontend logic to correctly resolve `/uploads/` paths when the app is hosted in a subfolder (e.g. `/insighted-staging/`).
+3. **Storage Persistence:** Ensure the `uploads` directory is correctly mapped and served by the Express backend.
 
 # 🚀 STEP-BY-STEP EXECUTION PLAN
 
-**Step 1: Backend Storage Bridge (Azure Integration)**
-- **1a:** Modify `POST /api/upload-image` in `api/index.js` (Root).
-- **1b:** Add conditional logic: if `blobServiceClient` is initialized (Azure env present), stream the `req.file` buffer directly to Azure Blob Storage.
-- **1c:** Update the `image_data` database column to store the full Azure HTTPS URL instead of a relative local path.
+**Step 1: Revert/Simplify Backend Storage**
+- **1a:** Modify Root `api/index.js`. Revert the `upload-image` logic to save files directly to the local disk.
+- **1b:** Remove `projectPhotosMemoryUpload` and references to `blobServiceClient` in the upload route to prevent potential overhead or errors.
+- **1c:** Ensure `image_data` stores the local path (e.g., `/uploads/project_photos/photo-123.jpg`).
 
-**Step 2: Backend Retrieval Logic Cleanup**
-- **2a:** Audit `GET /api/project-images/:projectId` to ensure it returns raw `image_data` without prepending any paths (the DB should contain the "truth").
-- **2b:** Optimize the IPC-based query to ensure all images in a project's version history are retrieved correctly.
+**Step 2: Universal Path Resolution (Frontend)**
+- **2a:** Update `src/modules/ProjectGallery.jsx` -> `LazyImage`. 
+- **2b:** Instead of `window.location.origin`, use a relative path resolution that respects `import.meta.env.BASE_URL`.
+    - Logic: `const finalSrc = src.startsWith('/uploads/') ? (import.meta.env.BASE_URL + src.substring(1)).replace('//', '/') : src;`
+- **2c:** This ensures that in production (`BASE_URL = /insighted-staging/`), the path becomes `/insighted-staging/uploads/...`, which maps to the VM's hierarchy.
 
-**Step 3: Frontend Image Resolution Standard (The "Truth" Utility)**
-- **3a:** Refactor `src/modules/ProjectGallery.jsx` -> `LazyImage`. Remove `import.meta.env.BASE_URL` prepending.
-- **3b:** Implement a robust detection check:
-    - If `data.startsWith('http')`: Return as-is.
-    - If `data.startsWith('/uploads/')`: Prepend the actual `window.location.origin` or a defined `API_BASE`.
-    - Else: Treat as raw Base64.
+**Step 3: Nginx Configuration (VM Server)**
+- **3a:** Create/Update `/etc/nginx/sites-available/default` (or `insighted`) with the following block to bridge the frontend and backend:
+```nginx
+server {
+    listen 80;
+    server_name 20.24.58.49;
 
-**Step 4: Cross-Component Synchronization**
-- **4a:** Update `src/modules/DetailedProjInfo.jsx` -> `getImageSrc` to mirror the refined resolution logic in Step 3.
-- **4b:** Test the "Division Engineer Gallery" which aggregates images across multiple project IDs.
+    # Frontend (React PWA)
+    location /insighted-staging/ {
+        alias /var/www/html/InsightEd-Staging/dist/;
+        try_files $uri $uri/ /insighted-staging/index.html;
+    }
+
+    # Backend API Proxy
+    location /api/ {
+        proxy_pass http://localhost:5001/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # Uploaded Images Proxy
+    location /uploads/ {
+        proxy_pass http://localhost:5001/uploads/;
+        proxy_set_header Host $host;
+    }
+}
+```
+
+**Step 4: Synchronization & Verification**
+- **3a:** Apply the same `finalSrc` logic to `DetailedProjInfo.jsx` -> `getImageSrc`.
+- **3b:** Verify that site photos uploaded in the "Wizard" appear in the "Profile" AND "Gallery" on the VM.
 
 # 🐛 DIAGNOSTIC & DEBUGGING SCRIPT
-Create a lightweight `GalleryDiagnostics` component or utility to monitor image health:
+Add a manual path inspector to each component to dump the resolved URL to the console when `localStorage.getItem('debug_images')` is set:
 ```javascript
-const DEBUG_IMAGE_LOAD = true;
-
-const diagnosticLogger = (src, status) => {
-    if (!DEBUG_IMAGE_LOAD) return;
-    const type = src.startsWith('http') ? '☁️ AZURE/EXTERNAL' : 
-                 src.startsWith('/uploads/') ? '📂 LOCAL_STORAGE' : '🖼️ BASE64';
-    console.log(`[Image Diagnostic] ${status}: ${type} | Path: ${src}`);
-};
+useEffect(() => {
+    if (localStorage.getItem('debug_images')) {
+        console.log(`[IMAGE_PATH_DEBUG] Input: ${rawPath} | Resolved: ${src}`);
+    }
+}, [src]);
 ```
-- Integrate `onError` listeners in `img` tags to log specifically when a `/uploads/` path returns a 404 in production.
 
 # 🛑 CONSTRAINTS & GUARDRAILS
-- **DO NOT** hardcode production IPs or Vercel URLs. Use `window.location.origin`.
-- **DO NOT** use `fs.renameSync` in production; Vercel will throw a read-only filesystem error or simply lose the file. Use streaming buffers for Cloud uploads.
-- **AVOID** breaking legacy Base64 images stored in older project snapshots.
+- **DO NOT** assume `/uploads` is at the domain root. Always prefix with `BASE_URL` or use relative paths.
+- **DO NOT** use Azure SDKs if the VM doesn't have outbound internet or if the user explicitly prefers local storage.
+- **ENSURE** the `deploy-staging.sh` script does not accidentally wipe the `uploads` directory during deployment (use `rm -rf dist api` but keep `uploads`).

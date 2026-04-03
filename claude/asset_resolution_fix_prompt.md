@@ -1,50 +1,43 @@
 # SYSTEM ROLE
-You are an expert full-stack developer operating in a Node.js (Express), React (Vite), and PostgreSQL environment. Your goal is to resolve critical asset retrieval issues (PDF downloads and viewing) by hardening the backend streamer and ensuring the frontend correctly resolves API paths in a hosted environment.
+You are an expert full-stack developer operating in a Node.js (Express), React (Vite), and PostgreSQL environment. Your goal is to resolve critical asset retrieval issues (broken images and PDF download extensions) and a UI discrepancy where PDF filenames are not being displayed correctly in the school identity module.
 
 # 🌌 THE VIBE & AESTHETIC
-The system must feel **Enterprise-Grade** and **Bulletproof**. Users (School Heads and Engineers) expect their PDF documents to load instantly and download with correct filenames. The implementation should be environmentally agnostic, handling origin discrepancies between frontend and backend gracefully.
+The system must feel **Reliable** and **Polished**. Assets should resolve correctly regardless of subpath nesting, and users should see descriptive filenames (e.g., `proof.pdf`) rather than internal UUIDs. The implementation must be **Environment-Agnostic**, supporting both root and subpath deployments.
 
 # 🛠️ TECH STACK & ARCHITECTURE
-- **Frontend:** React 18 (Vite), TailwindCSS, Framer Motion.
-- **Backend:** Node.js (ESM), Express, PostgreSQL (`pg` pool).
-- **Storage:** `unified_binaries` table storing `bytea` blobs (Postgres-native).
-- **Key Patterns:** Database-first asset serving via `/api/asset/:id`, automated MIME type detection, and standard `Content-Disposition` usage.
+- **Frontend:** React 18, Vite, HashRouter.
+- **Backend:** Express, PostgreSQL (`pg`).
+- **Binary Storage:** Postgres Binary Registry with `/api/asset/:id`.
+- **Key Patterns:** Centralized asset resolution, original filename persistence, and standard `Content-Disposition`.
 
 # 📝 CORE REQUIREMENTS
-1. **Backend Hardening:** Update `/api/asset/:id` to support a `download=1` query parameter and always set appropriate `Content-Disposition` (inline vs attachment).
-2. **Path Normalization:** Implement a frontend utility or pattern to ensure `/api/asset/` URLs are prepended with the correct API origin in production.
-3. **Component Refactoring:** Update `Unit1SchoolIdentity.jsx` and `DetailedProjInfo.jsx` to use absolute, resolved URLs for PDF viewing and downloading.
-4. **Resilience:** Ensure the system handles legacy `/uploads/` paths and new `/api/asset/` UUIDs interchangeably where necessary.
+1. **Universal Asset Resolution:** Update `assetHelper.js` to correctly handle subpaths using `BASE_URL` or relative paths (mimicking the working logic in `ProjectGallery.jsx`).
+2. **PDF Filename Persistence:** Ensure original filenames are captured during upload and returned by the school profile API.
+3. **Unit 1 UI Enhancement:** Display the original filename in the `DocumentUpload` and `Unit1SchoolIdentity` review modes instead of the technical asset path/ID.
+4. **Consistency:** Synchronize `ProjectGallery.jsx` with the centralized `assetHelper.js`.
+5. **PDF Download extension fix:** Ensure the backend sets the correct filename with `.pdf` extension and the frontend triggers it correctly.
 
 # 🚀 STEP-BY-STEP EXECUTION PLAN
 
-**Step 1: Backend Asset Streamer Hardening**
-- **1a:** Modify the `/api/asset/:id` route in `api/index.js`.
-- **1b:** Implement logic to detect `req.query.download`.
-- **1c:** Set `Content-Disposition: attachment; filename="document.pdf"` if `download` is present; otherwise set `Content-Disposition: inline`.
-- **1d:** Ensure `Content-Type` is strictly mapped from the database `mime_type`.
+**Step 1: Backend API Hardening**
+- **1a:** Modify `POST /api/schools/:iern/ownership-docs` in `api/index.js` to return `fileName` in the JSON response.
+- **1b:** Update `GET /api/ph_schools/:schoolId` in `api/index.js` to include the `file_name` of the latest ownership document.
+- **1c:** Verify `/api/asset/:id` correctly sets the filename with appropriate extension in `Content-Disposition`.
 
-**Step 2: Frontend API Resolution Utility**
-- **2a:** Identify or create a `resolveAssetUrl` helper (or update existing `getImageSrc` logic).
-- **2b:** Ensure it prepends the correct backend origin if the path starts with `/api/`.
+**Step 2: Universal Path Resolver & Subpath Support**
+- **2a:** Refactor `src/utils/assetHelper.js` to use relative paths (`./`) in production when `VITE_API_BASE_URL` is missing, ensuring subpath compatibility.
+- **2b:** Update `src/modules/ProjectGallery.jsx` to use `resolveAssetUrl` from the helper.
 
-**Step 3: School Head Document Fix**
-- **3a:** Update `src/components/modular/Unit1SchoolIdentity.jsx`.
-- **3b:** Wrap the `local_file_path` link with the resolution helper.
-- **3c:** Ensure it uses `target="_blank"` and `rel="noopener noreferrer"`.
-
-**Step 4: Division Engineer Document Fix**
-- **4a:** Update `src/modules/DetailedProjInfo.jsx`.
-- **4b:** Refactor the `renderDocuments` function (around line 1292) to use resolved URLs.
-- **4c:** Append `?download=1` to the `href` for the "Download" buttons.
+**Step 3: Frontend Filename Display Logic**
+- **3a:** Update `src/components/modular/DocumentUpload.jsx` to track the `fileName` and display it in the success state.
+- **3b:** Update `src/components/modular/Unit1SchoolIdentity.jsx` to store `local_file_name` in `formData` and render it in review mode.
+- **3c:** Ensure `onUploadSuccess` in both components correctly propagates the filename.
 
 # 🐛 DIAGNOSTIC & DEBUGGING SCRIPT
-Provide a lightweight diagnostic script or console telemetry in `DetailedProjInfo.jsx` that:
-- Logs the exact URL being generated for a PDF before navigation.
-- Checks if the URL starts with `http` (absolute) or `/` (relative) and warns if it's the latter in production.
-- Include a `const DEBUG_ASSETS = true;` flag to toggle this telemetry.
+Provide a lightweight diagnostic tool in `assetHelper.js` (or a separate hook) that:
+- Logs the resolved URL and the source (origin vs BASE_URL).
+- Includes a `DEBUG_RESOLVER = true` flag.
 
 # 🛑 CONSTRAINTS & GUARDRAILS
-- **NO HARDCODED ORIGINS:** Do not hardcode `localhost` or specific Vercel domains. Use `window.location.origin` or environment variables.
-- **SECURITY:** Maintain the UUID validation `if (!/^[0-9a-f-]{36}$/i.test(id))` on the backend.
-- **PERFORMANCE:** Keep `Cache-Control` headers intact for non-download requests.
+- **RELATIVE PATHS:** Favor relative paths (`./`) for assets in `HashRouter` production builds to ensure maximum portability.
+- **NO DATA LOSS:** Ensure existing documents are still accessible even if they lack filename metadata (fall back to the path).

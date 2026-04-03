@@ -194,13 +194,15 @@ const app = express();
 
 
 // --- AUTH MIDDLEWARE ---
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'https://insight-ed-mobile-pwa.vercel.app',
+  'https://insight-ed-frontend.vercel.app',
+  ...(process.env.CORS_ORIGIN_VM ? [process.env.CORS_ORIGIN_VM] : []),
+];
 app.use(cors({
-  origin: [
-    'http://localhost:5173',           // Vite Local Default
-    'http://localhost:5174',           // Vite Local Alternate
-    'https://insight-ed-mobile-pwa.vercel.app', // Your Vercel Frontend
-    'https://insight-ed-frontend.vercel.app'
-  ],
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
@@ -355,7 +357,12 @@ app.post('/api/schools/:iern/ownership-docs', memoryUpload.single('file'), async
     res.status(200).json({ 
       success: true, 
       message: 'Upload and database storage complete.',
-      data: { id: dbRes.rows[0].id, filePath: finalDocValue, binaryId: finalBinaryId }
+      data: { 
+        id: dbRes.rows[0].id, 
+        filePath: finalDocValue, 
+        fileName: req.file.originalname,
+        binaryId: finalBinaryId 
+      }
     });
 
   } catch (err) {
@@ -15578,12 +15585,13 @@ app.get('/api/ph_schools/:schoolId', async (req, res) => {
 
       // --- OWNERSHIP DOCUMENT DETAILS ---
       const docRes = await pool.query(
-        'SELECT id, file_path FROM school_ownership_docs WHERE iern = $1 ORDER BY created_at DESC LIMIT 1',
+        'SELECT id, file_path, file_name FROM school_ownership_docs WHERE iern = $1 ORDER BY created_at DESC LIMIT 1',
         [row.iern || schoolId]
       );
       if (docRes.rows.length > 0) {
         row.ownership_doc_id = docRes.rows[0].id;
         row.local_file_path = docRes.rows[0].file_path;
+        row.local_file_name = docRes.rows[0].file_name;
       }
 
       console.log(`[GET /api/ph_schools/${schoolId}] RETURNING unit5_completed: `, row.unit5_completed);

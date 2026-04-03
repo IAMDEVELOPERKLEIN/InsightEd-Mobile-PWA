@@ -5,6 +5,7 @@ import PageTransition from '../components/PageTransition';
 import BottomNav from './BottomNav';
 import { useAuth } from '../context/AuthContext';
 import { cacheGallery, getCachedGallery } from '../db';
+import { resolveAssetUrl } from '../utils/assetHelper';
 
 // --- LAZY IMAGE COMPONENT ---
 const LazyImage = ({ imageId, meta, onClick }) => {
@@ -29,15 +30,9 @@ const LazyImage = ({ imageId, meta, onClick }) => {
 
             // File-path or unified binary asset — resolve against correct backend origin
             if (typeof base64 === 'string' && (base64.startsWith('/uploads/') || base64.startsWith('/api/asset/'))) {
-                const host = window.location.hostname;
-                const isDev = host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
-                const apiBase = isDev ? 'http://localhost:3000' : (import.meta.env.BASE_URL || '/');
-                // Ensure no double slashes and correct prefixing
-                const finalSrc = (apiBase.endsWith('/') ? apiBase : apiBase + '/') + base64.substring(1);
-                const cleanedSrc = finalSrc.replace(/([^:]\/)\/+/g, "$1");
-
-                if (DEBUG_GALLERY) console.log(`[Gallery-v2] Origin: ${isDev ? 'DEV-3000' : 'PROD'} | Host: ${host} -> ${cleanedSrc}`);
-                setSrc(cleanedSrc);
+                const finalSrc = resolveAssetUrl(base64);
+                if (DEBUG_GALLERY) console.log(`[Gallery-v2] Resolved: ${finalSrc}`);
+                setSrc(finalSrc);
                 setLoading(false);
                 return;
             }
