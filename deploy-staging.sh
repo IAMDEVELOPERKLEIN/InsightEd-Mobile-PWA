@@ -29,13 +29,34 @@ echo "🧹 2.5 Cleaning remote destination to free up space..."
 ssh -o StrictHostKeyChecking=no -o BatchMode=yes $USER@$SERVER_IP "rm -rf $SERVER_DIR/dist $SERVER_DIR/api" || { echo "❌ [SSH Error] Password-less login failed. Please run: 'bash ./setup-ssh-key.sh' to automate your deployment."; exit 1; }
 
 echo "📦 3. Packing artifacts into archive ($TAR_FILE)..."
-tar -czf $TAR_FILE dist api public package.json package-lock.json
+tar -czf $TAR_FILE dist api public package.json package-lock.json compress_pdf.py tmp_stride.conf forensic_heal.sh ecosystem.config.cjs
 
 echo "📤 4. Syncing to VM Staging via SCP..."
 scp -o StrictHostKeyChecking=no -o BatchMode=yes $TAR_FILE $USER@$SERVER_IP:$SERVER_DIR/
 
 echo "🚀 5. Remote Production Setup, Maintenance & Restart..."
-ssh -o StrictHostKeyChecking=no -o BatchMode=yes $USER@$SERVER_IP "mkdir -p $SERVER_DIR && cd $SERVER_DIR && tar -xzf $TAR_FILE && rm $TAR_FILE && pm2 flush && npm cache clean --force 2>/dev/null && npm install --omit=dev --legacy-peer-deps && npm prune --omit=dev --legacy-peer-deps && pm2 set pm2-logrotate:max_size 50M && pm2 set pm2-logrotate:retain 5 && (pm2 restart insighted-staging || PORT=5001 pm2 start api/index.js --name insighted-staging)"
+ssh -o StrictHostKeyChecking=no -o BatchMode=yes $USER@$SERVER_IP "
+  set -e
+  mkdir -p $SERVER_DIR
+  cd $SERVER_DIR
+  tar -xzf $TAR_FILE && rm $TAR_FILE
+
+  # --- Temp dir for PDF compression pipeline (replaces /mnt/uploads) ---
+  # All PDFs/images are stored in Postgres binary. This dir is scratch-only.
+  mkdir -p /tmp/insighted-pdf-tmp
+  chmod 775 /tmp/insighted-pdf-tmp
+
+  npm cache clean --force 2>/dev/null
+  npm install --omit=dev --legacy-peer-deps
+  npm prune --omit=dev --legacy-peer-deps
+  pm2 set pm2-logrotate:max_size 50M
+  pm2 set pm2-logrotate:retain 5
+  pm2 flush
+
+  # Restart with UPLOAD_DIR pointed at the writable temp dir
+  (pm2 restart insighted-staging --update-env) || \
+  (PORT=5001 UPLOAD_DIR=/tmp/insighted-pdf-tmp pm2 start api/index.js --name insighted-staging)
+"
 
 
 echo "🧹 Cleaning up local archive..."

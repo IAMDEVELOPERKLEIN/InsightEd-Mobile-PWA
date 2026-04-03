@@ -7,16 +7,14 @@ const path = require('path');
 const SERVER_IP = "20.24.58.49";
 const SERVER_DIR = "/var/www/html/InsightEd-Staging";
 const USER = "Administrator1";
-const PASS = "7v52E69TYgTE"; // Hardcoded as requested
+const PASS = "7v52E69TYgTE"; 
 const TAR_FILE = "staging-deploy.tmp.tar.gz";
-const INCLUDE = ['api', 'dist', 'public', 'package.json', 'package-lock.json', 'compress_pdf.py', 'tmp_stride.conf'];
+const INCLUDE = ['api', 'dist', 'public', 'package.json', 'package-lock.json', 'compress_pdf.py', 'tmp_stride.conf', 'forensic_heal.sh', 'ecosystem.config.cjs'];
 
-console.log("------------------------------------------------");
-console.log("🚀 Automated Local-to-Staging Deployment");
-console.log(`Host: ${SERVER_IP}`);
-console.log(`User: ${USER}`);
-console.log(`Password: ${PASS}`);
-console.log("------------------------------------------------");
+console.log("================================================");
+console.log("🚀 UNIFIED STAGING DEPLOY & HEAL");
+console.log(`Target: ${SERVER_IP} (${SERVER_DIR})`);
+console.log("================================================");
 
 function runLocal(command, env = process.env) {
     try {
@@ -28,30 +26,41 @@ function runLocal(command, env = process.env) {
     }
 }
 
-async function deploy() {
+async function deployAndHeal() {
     const conn = new Client();
 
     // 1. Build locally
-    console.log("🏗️  1. Building locally...");
+    console.log("\n🏗️  1. Building locally...");
     runLocal('npm run build -- --base=/insighted-staging/', { ...process.env, MSYS_NO_PATHCONV: '1' });
 
     // 2. Prepare tarball
-    console.log(`📦 2. Creating local archive (${TAR_FILE})...`);
+    console.log(`\n📦 2. Creating local archive (${TAR_FILE})...`);
+    // Ensure all included files exist
+    const missing = INCLUDE.filter(f => !fs.existsSync(f));
+    if (missing.length > 0) {
+        console.error(`❌ Missing critical files: ${missing.join(', ')}`);
+        process.exit(1);
+    }
     const tarFiles = INCLUDE.join(' ');
     runLocal(`tar -czf ${TAR_FILE} ${tarFiles}`);
 
     // 3. Connect and execute
-    console.log(`🔌 3. Connecting to ${SERVER_IP}...`);
+    console.log(`\n🔌 3. Connecting to ${SERVER_IP}...`);
     
     conn.on('ready', () => {
         console.log('✅ SSH Connection Established.');
 
-        // 3.1 Remote Cleanup
-        console.log("🧹 3.1 Cleaning remote destination to free up space...");
-        conn.exec(`rm -rf ${SERVER_DIR}/dist ${SERVER_DIR}/api`, (err, stream) => {
+        // 3.1 Remote Cleanup & Setup
+        console.log("🧹 3.1 Preparing remote directory...");
+        conn.exec(`mkdir -p ${SERVER_DIR} && rm -rf ${SERVER_DIR}/dist ${SERVER_DIR}/api`, (err, stream) => {
             if (err) throw err;
+            stream.on('data', (data) => {
+                process.stdout.write(data);
+            }).stderr.on('data', (data) => {
+                process.stderr.write(data);
+            });
+            
             stream.on('close', () => {
-                
                 // 3.2 Upload via SFTP
                 console.log("📤 3.2 Uploading archive via SFTP...");
                 conn.sftp((err, sftp) => {
@@ -62,31 +71,27 @@ async function deploy() {
                     writeStream.on('close', () => {
                         console.log("✅ Upload Complete.");
 
-                        // 3.3 Final Remote Setup
-                        console.log("🚀 3.3 Extracting and Starting Production...");
+                        // 3.3 Final Remote Setup & Healing
+                        console.log("\n🩺 4. Remote Extraction & Forensic Healing...");
                         const remoteCmd = `
-                            mkdir -p ${SERVER_DIR} && 
                             cd ${SERVER_DIR} && 
                             tar -xzf ${TAR_FILE} && 
                             rm ${TAR_FILE} && 
+                            chmod +x forensic_heal.sh &&
                             npm cache clean --force 2>/dev/null && 
                             npm install --omit=dev --legacy-peer-deps && 
                             npm prune --omit=dev --legacy-peer-deps && 
-                            pm2 flush && 
-                            pm2 set pm2-logrotate:max_size 50M && 
-                            pm2 set pm2-logrotate:retain 5 && 
-                            (pm2 restart insighted-staging || PORT=5001 pm2 start api/index.js --name insighted-staging)
+                            ./forensic_heal.sh
                         `.replace(/\n/g, '').trim();
+
+                        const stream_logger = (data) => process.stdout.write(data);
 
                         conn.exec(remoteCmd, (err, stream) => {
                             if (err) throw err;
+                            stream.on('data', stream_logger).stderr.on('data', stream_logger);
                             stream.on('close', (code) => {
-                                console.log(`✅ Remote execution finished (exit code: ${code})`);
+                                console.log(`\n✅ Remote healing finished (exit code: ${code})`);
                                 conn.end();
-                            }).on('data', (data) => {
-                                process.stdout.write(data);
-                            }).stderr.on('data', (data) => {
-                                process.stderr.write(data);
                             });
                         });
                     });
@@ -94,10 +99,6 @@ async function deploy() {
                     readStream.pipe(writeStream);
                 });
             });
-        }).on('data', (data) => {
-            process.stdout.write(data);
-        }).stderr.on('data', (data) => {
-            process.stderr.write(data);
         });
 
     }).connect({
@@ -109,10 +110,11 @@ async function deploy() {
     });
 
     conn.on('end', () => {
-        console.log("🧹 4. Cleaning up local archive...");
+        console.log("\n🧹 5. Cleaning up local archive...");
         try { fs.unlinkSync(TAR_FILE); } catch (e) {}
-        console.log("✅ Staging Deployment Complete!");
-        console.log("------------------------------------------------");
+        console.log("================================================");
+        console.log("🎉 Staging Recovery Complete!");
+        console.log("================================================");
     });
 
     conn.on('error', (err) => {
@@ -121,7 +123,7 @@ async function deploy() {
     });
 }
 
-deploy().catch(err => {
-    console.error('❌ Deployment script error:', err);
+deployAndHeal().catch(err => {
+    console.error('❌ Script error:', err);
     process.exit(1);
 });

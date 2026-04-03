@@ -1440,11 +1440,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                         }))}
                                                     />
                                                     
-                                                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-2xl flex items-center gap-3 mt-4">
-                                                        <p className="text-[11px] text-blue-700 font-bold flex-1">
-                                                            💡 Tip: Your PDF is secured in our Postgres Binary Registry with bit-level deduplication to ensure perfect persistence across all environments.
-                                                        </p>
-                                                    </div>
+
                                                 </div>
                                             </motion.div>
                                         )}

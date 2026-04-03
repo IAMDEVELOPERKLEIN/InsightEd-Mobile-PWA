@@ -39,7 +39,7 @@ export async function compressPDF(inputBuffer) {
         fs.writeFileSync(tempIn, inputBuffer);
         
         // Strategy: Try 'python', 'py', 'python3' for cross-platform robustness
-        const cmdPattern = (py) => `${py} "${SCRIPT_PATH}" "${tempIn}" "${tempOut}" 96`;
+        const cmdPattern = (py) => `${py} "${SCRIPT_PATH.replace(/\\/g, '/')}" "${tempIn.replace(/\\/g, '/')}" "${tempOut.replace(/\\/g, '/')}" 96`;
         
         let success = false;
         const pyCommands = ['python', 'py', 'python3'];

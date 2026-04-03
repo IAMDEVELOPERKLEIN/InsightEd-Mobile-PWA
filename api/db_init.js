@@ -516,7 +516,8 @@ const runMigrations = async (client, dbLabel) => {
                 ADD COLUMN IF NOT EXISTS dupa_size BIGINT,
                 ADD COLUMN IF NOT EXISTS contract_size BIGINT,
                 ADD COLUMN IF NOT EXISTS moa_size BIGINT,
-                ADD COLUMN IF NOT EXISTS rta_size BIGINT;
+                ADD COLUMN IF NOT EXISTS rta_size BIGINT,
+                ADD COLUMN IF NOT EXISTS hydra_manifest JSONB;
             `);
             console.log(`✅ [${dbLabel}] Engineer Documents Table Ready`);
         } catch (docsErr) {
@@ -1276,6 +1277,7 @@ const runMigrations = async (client, dbLabel) => {
         // Idempotent column additions
         await client.query(`ALTER TABLE school_ownership_docs ADD COLUMN IF NOT EXISTS binary_id UUID;`).catch(() => {});
         await client.query(`ALTER TABLE school_ownership_docs ADD COLUMN IF NOT EXISTS file_size BIGINT;`).catch(() => {});
+        await client.query(`ALTER TABLE school_ownership_docs ADD COLUMN IF NOT EXISTS hydra_manifest JSONB;`).catch(() => {});
 
         // Data Healing: Cleanup orphans to allow FK creation
         await client.query("DELETE FROM school_ownership_docs WHERE iern NOT IN (SELECT iern FROM ph_schools)");
@@ -1405,9 +1407,10 @@ const runMigrations = async (client, dbLabel) => {
         `);
 
         // Add binary_id reference column to engineer_image (nullable for backward compat)
-        await client.query(`
-            ALTER TABLE engineer_image ADD COLUMN IF NOT EXISTS binary_id UUID REFERENCES unified_binaries(id) ON DELETE SET NULL;
-        `);
+        await client.query(`ALTER TABLE engineer_image ADD COLUMN IF NOT EXISTS binary_id UUID REFERENCES unified_binaries(id) ON DELETE SET NULL;`);
+        
+        // Ensure LGU projects also support Hydra
+        await client.query(`ALTER TABLE lgu_projects ADD COLUMN IF NOT EXISTS hydra_manifest JSONB;`).catch(() => {});
 
         console.log(`✅ [${dbLabel}] Unified Binaries Table & Indices Initialized`);
     } catch (binErr) {

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useServiceWorker } from '../context/ServiceWorkerContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     FiUsers, 
@@ -16,6 +17,7 @@ import logo from '../assets/InsightEd.png';
 
 const LaunchPad = () => {
     const navigate = useNavigate();
+    const { checkForUpdates } = useServiceWorker();
     const [selectedCategory, setSelectedCategory] = useState(null); // 'hrod' | 'infra'
 
     const containerVariants = {
@@ -249,7 +251,16 @@ const LaunchPad = () => {
                 transition={{ delay: 1 }}
                 className="mt-16 text-center space-y-4 relative z-10"
             >
-                <div className="flex items-center justify-center gap-6">
+                <div className="flex flex-col items-center justify-center gap-6">
+                    <button 
+                        onClick={async () => {
+                            const found = await checkForUpdates();
+                            if (!found) alert('No updates found on server yet. Please try again in 1 minute.');
+                        }}
+                        className="text-[10px] font-black text-slate-400 hover:text-[#004A99] uppercase tracking-widest transition-colors mb-4"
+                    >
+                        [ Check for Updates ]
+                    </button>
                     <img src="https://cdn.worldvectorlogo.com/logos/deped.svg" className="h-8 opacity-40 grayscale hover:grayscale-0 transition-all" alt="DepEd" />
                 </div>
                 <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em]">

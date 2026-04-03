@@ -4626,6 +4626,11 @@ if (isMainModule || process.env.START_SERVER === 'true') {
     console.log(`================================================\n`);
   });
 
+  // Hardened timeouts for large PDF uploads (10 minutes)
+  server.timeout = 600000;
+  server.keepAliveTimeout = 610000;
+  server.headersTimeout = 620000;
+
   server.on('error', (e) => {
     if (e.code === 'EADDRINUSE') {
       console.error(`❌ Port ${PORT} is already in use! Please close the other process or use a different port.`);

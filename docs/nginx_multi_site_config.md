@@ -15,6 +15,7 @@ This document preserves the bulletproof Nginx configuration used to manage the f
 1.  **Single-Source-of-Truth**: All four sites are managed within a single `stride.conf` server block to prevent "conflicting server name" warnings for `stride.deped.gov.ph`.
 2.  **Database-First Assets**: The traditional `location /uploads/` static alias blocks have been **removed**. This ensures that all asset requests fall through to the Express handlers, which serve binary data directly from the PostgreSQL `unified_binaries` table.
 3.  **Graceful Health Checks**: The root path (`= /`) includes a specific check for Azure/LoadBalancer User-Agents to return a `200 healthy` status for infrastructure monitoring.
+4.  **Timeout Hardening (ADR-003)**: Increased staging API timeouts to 600s and disabled request buffering to support 20MB+ PDF uploads for the Hydra pipeline.
 
 ## 📄 Final Nginx Configuration (`stride.conf`)
 
@@ -84,6 +85,11 @@ server {
     location /insighted-staging/api/ {
         proxy_pass http://localhost:5001/api/;
         client_max_body_size 100M;
+        proxy_request_buffering off;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+        proxy_connect_timeout 600s;
+        client_body_timeout 600s;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';

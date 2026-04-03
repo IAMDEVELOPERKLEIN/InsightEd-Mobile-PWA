@@ -8,9 +8,10 @@ import { TbPhoto } from "react-icons/tb";
 import { useAuth } from '../context/AuthContext';
 import EditProjectModal from '../components/EditProjectModal';
 import ProjectEditModal from '../components/ProjectEditModal';
-import { LuHistory, LuUser, LuCalendar, LuX, LuInfo, LuMapPin, LuShoppingBag, LuDollarSign, LuFileText, LuImages } from "react-icons/lu";
+import { LuHistory, LuUser, LuCalendar, LuX, LuInfo, LuMapPin, LuShoppingBag, LuDollarSign, LuFileText, LuImages, LuEye } from "react-icons/lu";
 import { FiSettings, FiImage, FiFileText } from 'react-icons/fi';
 import { resolveAssetUrl, resolveDocUrl } from '../utils/assetHelper';
+import HydraDocViewer from '../components/HydraDocViewer';
 
 // --- SUB-COMPONENT: REMARKS HISTORY ---
 const RemarksHistory = ({ history, loading, currentRemarks }) => {
@@ -482,6 +483,7 @@ const DetailedProjInfo = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState(0);
     const [isEditMode, setIsEditMode] = useState(false);
+    const [selectedHydraDoc, setSelectedHydraDoc] = useState(null); // { type: 'POW', manifest: {...} }
 
     // History State
     const [history, setHistory] = useState([]);
@@ -1031,16 +1033,27 @@ const DetailedProjInfo = () => {
                 body: fd,
             });
 
-            if (!res.ok) {
-                const errBody = await res.json().catch(() => ({}));
-                throw new Error(errBody.error || `HTTP ${res.status}`);
+            const resText = await res.text();
+            let resData;
+            try {
+                resData = JSON.parse(resText);
+            } catch (e) {
+                throw new Error(`Server returned invalid response (${res.status})`);
             }
 
-            // File will appear at the predictable IPC-named path once background compression finishes
-            const expectedPath = `/uploads/project_docs/${project.ipc}_${key}.pdf`;
-            console.log(`✅ [DOC UPLOAD] Queued. Expected path: ${expectedPath}`);
+            if (!res.ok) {
+                throw new Error(resData.error || `HTTP ${res.status}`);
+            }
 
-            setProject(prev => ({ ...prev, [`${key.toLowerCase()}_pdf`]: expectedPath }));
+            // Use the actual path returned by the API (binary storage: /api/asset/{id})
+            const actualPath = resData.filePath || resData.data?.filePath || `/uploads/project_docs/${project.ipc}_${key}.pdf`;
+            console.log(`✅ [DOC UPLOAD] Stored. Path: ${actualPath}`);
+
+            setProject(prev => ({
+                ...prev,
+                [`${key.toLowerCase()}_pdf`]: actualPath,
+                ...(resData.data?.file_size ? { [`${key.toLowerCase()}_size`]: resData.data.file_size } : {}),
+            }));
             setDocStatus(prev => ({ ...prev, [key]: 'success' }));
             // Reset to idle after 3 s so the user can re-upload
             setTimeout(() => setDocStatus(prev => ({ ...prev, [key]: 'idle' })), 3000);
@@ -1259,7 +1272,6 @@ const DetailedProjInfo = () => {
         const mb = kb / 1024;
         return mb.toFixed(2) + " MB";
     };
-
     const renderDocuments = () => (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
             <SectionHeader title="Essential Documents" />
@@ -1268,6 +1280,10 @@ const DetailedProjInfo = () => {
                     const docKey = `${key.toLowerCase()}_pdf`;
                     const hasExisting = !!project[docKey];
                     const status = docStatus[key]; // 'idle' | 'uploading' | 'success' | 'error'
+
+                    // Check if Hydra Manifest exists for this document type
+                    const manifestKey = key.toLowerCase();
+                    const hydraManifest = project.hydra_manifest?.[manifestKey];
 
                     return (
                         <div key={key} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 gap-4 group">
@@ -1284,8 +1300,13 @@ const DetailedProjInfo = () => {
                                         : <LuFileText size={20} />
                                     }
                                 </div>
-                                <div>
-                                    <p className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{key}</p>
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{key}</p>
+                                        {hydraManifest && (
+                                            <span className="bg-emerald-100 text-emerald-700 text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter">Hydra Optimized</span>
+                                        )}
+                                    </div>
                                     <p className={`text-[8px] font-bold mt-0.5 ${
                                         status === 'uploading' ? 'text-blue-400' :
                                         status === 'success'   ? 'text-emerald-500' :
@@ -1305,13 +1326,24 @@ const DetailedProjInfo = () => {
                             {/* Right: actions */}
                             <div className="flex items-center gap-2 w-full sm:w-auto">
                                 {hasExisting && status !== 'uploading' && (
-                                    <a
-                                        href={resolveAssetUrl(project[docKey], { download: true })}
-                                        download={`${project.schoolName}_${key}.pdf`}
-                                        className="flex-1 sm:flex-none text-center bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-[9px] font-black uppercase hover:bg-slate-200 transition-all active:scale-95"
-                                    >
-                                        Download
-                                    </a>
+                                    <>
+                                        {hydraManifest && (
+                                            <button
+                                                onClick={() => setSelectedHydraDoc({ type: key, manifest: hydraManifest })}
+                                                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-emerald-600 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase hover:bg-emerald-700 transition-all active:scale-95 shadow-lg shadow-emerald-100"
+                                            >
+                                                <LuEye size={12} />
+                                                View (Fast)
+                                            </button>
+                                        )}
+                                        <a
+                                            href={resolveAssetUrl(project[docKey], { download: true })}
+                                            download={`${project.schoolName}_${key}.pdf`}
+                                            className="flex-1 sm:flex-none text-center bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-[9px] font-black uppercase hover:bg-slate-200 transition-all active:scale-95"
+                                        >
+                                            Download
+                                        </a>
+                                    </>
                                 )}
 
                                 {/* Upload / Replace — always available, not gated by isEditMode */}
@@ -1561,6 +1593,22 @@ const DetailedProjInfo = () => {
                 )}
             </div>
         </PageTransition>
+
+        {selectedHydraDoc && (
+            <HydraDocViewer 
+                manifest={selectedHydraDoc.manifest}
+                title={`${selectedHydraDoc.type}: ${project.schoolName}`}
+                onClose={() => setSelectedHydraDoc(null)}
+                onDownload={() => {
+                    const docKey = `${selectedHydraDoc.type.toLowerCase()}_pdf`;
+                    const url = resolveAssetUrl(project[docKey], { download: true });
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `${project.schoolName}_${selectedHydraDoc.type}.pdf`;
+                    link.click();
+                }}
+            />
+        )}
 
 
         <ProjectEditModal

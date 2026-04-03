@@ -48,7 +48,7 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 15 * 1024 * 1024,
       },
       workbox: {
-        cacheId: 'insighted-v1.0.1'
+        cacheId: 'insighted-v1.2.0'
       }
     })
   ],

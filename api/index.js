@@ -40,35 +40,7 @@ import { exec } from 'child_process';
 import util from 'util';
 const execAsync = util.promisify(exec);
 
-const compressBufferTo96Dpi = async (buffer) => {
-    if (!buffer || buffer.length === 0) return buffer;
-    const tempInput = path.join(UPLOAD_BASE_PATH, `comp_in_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.pdf`);
-    const tempOutput = path.join(UPLOAD_BASE_PATH, `comp_out_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.pdf`);
-    
-    try {
-        fs.writeFileSync(tempInput, buffer);
-        const scriptPath = path.resolve(__dirname, '..', 'compress_pdf.py');
-        const cmd = (py) => `${py} "${scriptPath}" "${tempInput}" "${tempOutput}" 96`;
-
-        try {
-            await execAsync(cmd('python'));
-        } catch {
-            try { await execAsync(cmd('py')); }
-            catch { try { await execAsync(cmd('python3')); } catch (e) { /* ignore fallback fail */ } }
-        }
-
-        if (fs.existsSync(tempOutput)) {
-            const compressed = fs.readFileSync(tempOutput);
-            fs.unlinkSync(tempOutput);
-            return compressed;
-        }
-    } catch (err) {
-        console.warn("⚠️ PDF Compression helper failed, using original:", err.message);
-    } finally {
-        if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
-    }
-    return buffer;
-};
+// --- PDF OPTIMIZATION PIPELINE (Moved after Pool Init below to fix ReferenceError) ---
 
 import { FirebaseScrypt } from 'firebase-scrypt'; // For lazy migration
 import bcrypt from 'bcrypt'; // For new standard hashes
@@ -172,6 +144,30 @@ const RegisterBetaSchema = z.object({
   passcode: PasscodeSchema.optional()
 });
 
+// --- DATABASE CONNECTION ---
+const dbUrl = process.env.DATABASE_URL || 'postgres://postgres:password@localhost:5432/postgres';
+const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
+
+console.log(`🔌 Database Connection: ${isLocal ? 'Local' : 'Remote'} (${dbUrl.replace(/:[^:@]*@/, ':****@')})`);
+
+const { Pool } = pg;
+const pool = new Pool({
+  connectionString: dbUrl,
+  ssl: isLocal ? false : { rejectUnauthorized: false },
+  max: 50, // Resilient v6.0: Support 1000+ concurrent users
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000, 
+  statement_timeout: 30000, // Increased for heavy report generation
+  application_name: 'InsightEd_API_Primary'
+});
+
+pool.on('error', (err) => {
+  console.error('💥 Unexpected error on idle database client:', err.message);
+});
+
+// Inject pool into chatbot module
+setPool(pool);
+
 console.log('✅ [Env] DATABASE_URL loaded:', process.env.DATABASE_URL ? 'YES' : 'NO');
 
 /* --- LEGACY FIREBASE INIT REMOVED --- */
@@ -214,8 +210,108 @@ try {
   console.error("❌ Failed to initialize Google Drive API:", error.message);
 }
 
-// Destructure Pool from pg
-const { Pool } = pg;
+// --- PDF OPTIMIZATION PIPELINE (Hydra Transformation Engine) ---
+const compressBufferTo96Dpi = async (buffer) => {
+    if (!buffer || buffer.length === 0) return { buffer };
+    const tempInput = path.join(UPLOAD_BASE_PATH, `comp_in_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.pdf`);
+    const tempOutput = path.join(UPLOAD_BASE_PATH, `comp_out_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.pdf`);
+    const tempHydraDir = path.join(UPLOAD_BASE_PATH, `hydra_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`);
+    
+    let result = { buffer };
+
+    try {
+        const fd = fs.openSync(tempInput, 'w');
+        fs.writeFileSync(fd, buffer);
+        fs.fsyncSync(fd);
+        fs.closeSync(fd);
+
+        const onDiskSize = fs.statSync(tempInput).size;
+        console.log(`💾 [Storage-Verified] Temp file saved: ${tempInput} | size=${onDiskSize}B`);
+        
+        const scriptPath = path.resolve(__dirname, '..', 'compress_pdf.py');
+
+        // PROJECT HYDRA: If file is > 1.5MB, attempt Hydra Transformation (PDF to Image Sequence)
+        if (buffer.length > 1.5 * 1024 * 1024) {
+            console.log(`🐉 [Hydra] Triggering transformation for ${buffer.length}B document...`);
+            const hydraCmd = (py) => `${py} "${scriptPath.replace(/\\/g, '/')}" "${tempInput.replace(/\\/g, '/')}" "${tempHydraDir.replace(/\\/g, '/')}" 120 --hydra`;
+            
+            let hydraSuccess = false;
+            let hydraError = null;
+            
+            for (const executor of ['python', 'python3', 'py']) {
+                try {
+                    const { stdout, stderr } = await execAsync(hydraCmd(executor));
+                    if (stdout) console.log(`🐉 [Hydra-Stdout]`, stdout.trim());
+                    if (stderr) console.warn(`🐉 [Hydra-Stderr]`, stderr.trim());
+                    hydraSuccess = true;
+                    break;
+                } catch (err) {
+                    const msg = err.stderr || err.stdout || err.message || '';
+                    // Skip silently if the executor binary doesn't exist
+                    if (msg.includes('not recognized') || msg.includes('not found') || msg.includes('No such file')) continue;
+                    // Real Python error — log and stop trying further executors
+                    hydraError = msg;
+                    console.warn(`⚠️ [Hydra-Fail] ${executor} failed:`, msg.split('\n').slice(0, 3).join(' | '));
+                    break;
+                }
+            }
+            if (!hydraSuccess && !hydraError) {
+                console.warn(`⚠️ [Hydra-Fail] No Python executor (python/python3/py) found on PATH.`);
+            }
+
+            if (hydraSuccess && fs.existsSync(path.join(tempHydraDir, 'manifest.json'))) {
+                const manifest = JSON.parse(fs.readFileSync(path.join(tempHydraDir, 'manifest.json'), 'utf8'));
+                
+                // Upload shards to unified_binaries
+                // CRITICAL FIX: Binary pipeline requires 'pool' which is now defined in global scope
+                for (const shard of manifest) {
+                    const shardPath = path.join(tempHydraDir, shard.file);
+                    const shardBuffer = fs.readFileSync(shardPath);
+                    const { binary_id } = await upsertBinary(pool, shardBuffer, 'image/jpeg');
+                    shard.binary_id = binary_id;
+                    delete shard.file; 
+                    fs.unlinkSync(shardPath); 
+                }
+                
+                result.hydraManifest = manifest;
+                console.log(`✅ [Hydra] Generated ${manifest.length} shards for document.`);
+                fs.unlinkSync(path.join(tempHydraDir, 'manifest.json'));
+                fs.rmdirSync(tempHydraDir);
+            }
+        }
+
+        const cmd = (py) => `${py} "${scriptPath.replace(/\\/g, '/')}" "${tempInput.replace(/\\/g, '/')}" "${tempOutput.replace(/\\/g, '/')}" 96`;
+        let compressSuccess = false;
+        for (const executor of ['python', 'python3', 'py']) {
+            try {
+                await execAsync(cmd(executor));
+                compressSuccess = true;
+                break;
+            } catch (e) {
+                const msg = e.stderr || e.message || '';
+                if (msg.includes('not recognized') || msg.includes('not found') || msg.includes('No such file')) continue;
+                console.warn(`⚠️ [PDF-Compress] ${executor} failed:`, msg.split('\n')[0]);
+                break;
+            }
+        }
+        if (!compressSuccess) {
+            console.warn(`⚠️ [PDF-Compress] Compression unavailable — storing original.`);
+        }
+
+        if (fs.existsSync(tempOutput)) {
+            result.buffer = fs.readFileSync(tempOutput);
+            fs.unlinkSync(tempOutput);
+        }
+    } catch (err) {
+        console.warn("⚠️ PDF Optimization pipeline encountered an error:", err.message);
+    } finally {
+        if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
+        if (fs.existsSync(tempHydraDir)) {
+            try { fs.rmSync(tempHydraDir, { recursive: true, force: true }); } catch (e) {}
+        }
+    }
+    return result;
+};
 
 // --- STATE ---
 let isDbConnected = false;
@@ -360,18 +456,20 @@ app.post('/api/schools/:iern/ownership-docs', memoryUpload.single('file'), async
 
     let finalDocValue = null;
     let finalBinaryId = null;
+    let finalHydraManifest = null;
     let storedSize = req.file.size;
 
     try {
-        // Enforce 96 DPI Compression before hashing/storage
-        const compressedBuffer = await compressBufferTo96Dpi(req.file.buffer);
+        // Enforce Optimization (Compression + Hydra)
+        const { buffer: compressedBuffer, hydraManifest } = await compressBufferTo96Dpi(req.file.buffer);
         const { binary_id, deduplicated, stored_size } = await upsertBinary(pool, compressedBuffer, 'application/pdf');
         
         finalBinaryId = binary_id;
         finalDocValue = `/api/asset/${binary_id}`;
         storedSize = stored_size; 
+        finalHydraManifest = hydraManifest;
 
-        console.log(`🗄️ [SchoolDocStore] Stored ownership doc: ${binary_id} | size=${storedSize}B | dedup=${deduplicated} (orig=${req.file.size}B)`);
+        console.log(`🗄️ [SchoolDocStore] Stored ownership doc: ${binary_id} | size=${storedSize}B | hydra=${!!hydraManifest} | (orig=${req.file.size}B)`);
     } catch (binErr) {
         console.error('⚠️ [SchoolDocStore] Binary pipeline failure, falling back to disk:', binErr.message);
         // Fallback: Legacy disk storage logic
@@ -388,8 +486,8 @@ app.post('/api/schools/:iern/ownership-docs', memoryUpload.single('file'), async
 
     // 2. Save to database using Hawkeye "Single Truth" Protocol (UPSERT on IERN)
     const dbRes = await pool.query(
-      `INSERT INTO school_ownership_docs (iern, file_path, file_name, doc_type, status, binary_id, file_size) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO school_ownership_docs (iern, file_path, file_name, doc_type, status, binary_id, file_size, hydra_manifest) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (iern) DO UPDATE SET
           file_path = EXCLUDED.file_path,
           file_name = EXCLUDED.file_name,
@@ -397,9 +495,10 @@ app.post('/api/schools/:iern/ownership-docs', memoryUpload.single('file'), async
           status = EXCLUDED.status,
           binary_id = EXCLUDED.binary_id,
           file_size = EXCLUDED.file_size,
+          hydra_manifest = EXCLUDED.hydra_manifest,
           created_at = CURRENT_TIMESTAMP
        RETURNING id`,
-      [iern, finalDocValue, req.file.originalname, doc_type, 'optimized', finalBinaryId, storedSize]
+      [iern, finalDocValue, req.file.originalname, doc_type, 'optimized', finalBinaryId, storedSize, finalHydraManifest ? JSON.stringify(finalHydraManifest) : null]
     );
 
     res.status(200).json({ 
@@ -571,37 +670,63 @@ const processPdfInBackground = async (file, projectId, type, ipc, uid, isLgu = f
 
         const originalSize = buffer.length;
 
-        // 1. COMPRESS TO 96 DPI BEFORE STORAGE
-        const finalBuffer = await compressBufferTo96Dpi(buffer);
+        // 1. OPTIMIZE (Compression + Hydra)
+        const { buffer: finalBuffer, hydraManifest } = await compressBufferTo96Dpi(buffer);
 
         // 2. Postgres Binary Storage (Primary)
         const { binary_id, deduplicated, stored_size } = await upsertBinary(pool, finalBuffer, 'application/pdf');
         const finalDocValue = `/api/asset/${binary_id}`;
         const finalSize = stored_size;
-        console.log(`🗄️ [BG-BinaryStore] ${type} stored: ${binary_id} | size=${finalSize}B | dedup=${deduplicated} (orig=${originalSize}B)`);
+        console.log(`🗄️ [BG-BinaryStore] ${type} stored: ${binary_id} | size=${finalSize}B | hydra=${!!hydraManifest} | (orig=${originalSize}B)`);
 
         // 3. Database Persistence
         const table = isLgu ? 'lgu_projects' : 'engineer_documents';
         const idCol = isLgu ? 'lgu_project_id' : 'project_id';
 
         if (isLgu) {
-            await pool.query(`UPDATE ${table} SET ${field} = $1, binary_id = $2, ${sizeField} = $3 WHERE ${idCol} = $4`, [finalDocValue, binary_id, finalSize, projectId]);
+            // Use jsonb_set to update only the specific doctype key in the manifest
+            const manifestKey = field.replace('_pdf', '');
+            await pool.query(`
+                UPDATE ${table} SET 
+                    ${field} = $1, 
+                    binary_id = $2, 
+                    ${sizeField} = $3, 
+                    hydra_manifest = COALESCE(hydra_manifest, '{}'::jsonb) || jsonb_build_object($4::text, $5::jsonb)
+                WHERE ${idCol} = $6
+            `, [finalDocValue, binary_id, finalSize, manifestKey, hydraManifest ? JSON.stringify(hydraManifest) : null, projectId]);
         } else {
+            const manifestKey = field.replace('_pdf', '');
             if (filenameField && originalFilename) {
                 await pool.query(`
-                    INSERT INTO engineer_documents (project_id, ipc, ${field}, ${filenameField}, binary_id, uploader_id, ${sizeField})
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    INSERT INTO engineer_documents (project_id, ipc, ${field}, ${filenameField}, binary_id, uploader_id, ${sizeField}, hydra_manifest)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, jsonb_build_object($8::text, $9::jsonb))
                     ON CONFLICT (ipc) WHERE ipc IS NOT NULL
-                    DO UPDATE SET ${field} = EXCLUDED.${field}, ${filenameField} = EXCLUDED.${filenameField}, binary_id = EXCLUDED.binary_id, uploader_id = EXCLUDED.uploader_id, ${sizeField} = EXCLUDED.${sizeField}
-                `, [projectId, ipc, finalDocValue, originalFilename, binary_id, uid, finalSize]);
+                    DO UPDATE SET
+                        ${field} = EXCLUDED.${field},
+                        ${filenameField} = EXCLUDED.${filenameField},
+                        binary_id = EXCLUDED.binary_id,
+                        uploader_id = EXCLUDED.uploader_id,
+                        ${sizeField} = EXCLUDED.${sizeField},
+                        hydra_manifest = COALESCE(engineer_documents.hydra_manifest, '{}'::jsonb) || jsonb_build_object($8::text, $9::jsonb)
+                `, [projectId, ipc, finalDocValue, originalFilename, binary_id, uid, finalSize, manifestKey, hydraManifest ? JSON.stringify(hydraManifest) : null]);
             } else {
                 await pool.query(`
-                    INSERT INTO engineer_documents (project_id, ipc, ${field}, binary_id, uploader_id, ${sizeField})
-                    VALUES ($1, $2, $3, $4, $5, $6)
+                    INSERT INTO engineer_documents (project_id, ipc, ${field}, binary_id, uploader_id, ${sizeField}, hydra_manifest)
+                    VALUES ($1, $2, $3, $4, $5, $6, jsonb_build_object($7::text, $8::jsonb))
                     ON CONFLICT (ipc) WHERE ipc IS NOT NULL
-                    DO UPDATE SET ${field} = EXCLUDED.${field}, binary_id = EXCLUDED.binary_id, uploader_id = EXCLUDED.uploader_id, ${sizeField} = EXCLUDED.${sizeField}
-                `, [projectId, ipc, finalDocValue, binary_id, uid, finalSize]);
+                    DO UPDATE SET
+                        ${field} = EXCLUDED.${field},
+                        binary_id = EXCLUDED.binary_id,
+                        uploader_id = EXCLUDED.uploader_id,
+                        ${sizeField} = EXCLUDED.${sizeField},
+                        hydra_manifest = COALESCE(engineer_documents.hydra_manifest, '{}'::jsonb) || jsonb_build_object($7::text, $8::jsonb)
+                `, [projectId, ipc, finalDocValue, binary_id, uid, finalSize, manifestKey, hydraManifest ? JSON.stringify(hydraManifest) : null]);
             }
+        }
+
+        // 3b. Sync status_as_of in engineer_form (Fixes "Last Update" missing issue for background sync)
+        if (!isLgu && ipc) {
+            await pool.query('UPDATE engineer_form SET status_as_of = CURRENT_TIMESTAMP WHERE ipc = $1', [ipc]).catch(e => console.error("⚠️ [BG] Failed to sync status_as_of:", e.message));
         }
 
         // 3. Dual-Write
@@ -748,28 +873,8 @@ app.get('/api/pool-status', (req, res) => {
 
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
-// --- DATABASE CONNECTION ---
-const dbUrl = process.env.DATABASE_URL || 'postgres://postgres:password@localhost:5432/postgres';
-const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
 
-console.log(`🔌 Database Connection: ${isLocal ? 'Local' : 'Remote'} (${dbUrl.replace(/:[^:@]*@/, ':****@')})`);
-
-const pool = new Pool({
-  connectionString: dbUrl,
-  ssl: isLocal ? false : { rejectUnauthorized: false },
-  max: 50, // Resilient v6.0: Support 1000+ concurrent users
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000, 
-  statement_timeout: 30000, // Increased for heavy report generation
-  application_name: 'InsightEd_API_Primary'
-});
-
-pool.on('error', (err) => {
-  console.error('💥 Unexpected error on idle database client:', err.message);
-});
-
-// Inject pool into chatbot module
-setPool(pool);
+// --- PROJECT PHOTO HELPERS ---
 
 /**
  * Recalculates and updates the total completion percentage for a school.
@@ -1137,9 +1242,12 @@ const initDB = async () => {
             rta_pdf TEXT,
             moa_pdf TEXT,
             uploader_id TEXT,
+            hydra_manifest JSONB,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             CONSTRAINT unique_project_docs_${dbLabel} UNIQUE(project_id)
           );
+
+          ALTER TABLE engineer_documents ADD COLUMN IF NOT EXISTS hydra_manifest JSONB;
 
           ALTER TABLE engineer_documents ADD COLUMN IF NOT EXISTS pow_filename TEXT;
           ALTER TABLE engineer_documents ADD COLUMN IF NOT EXISTS dupa_filename TEXT;
@@ -1491,7 +1599,8 @@ const initFinanceDB = async () => {
         accomplishment_percentage NUMERIC DEFAULT 0,
         status_as_of_date DATE,
         amount_utilized NUMERIC DEFAULT 0,
-        nature_of_delay TEXT
+        nature_of_delay TEXT,
+        hydra_manifest JSONB
       );
     `);
 
@@ -1516,6 +1625,7 @@ const initFinanceDB = async () => {
     await checkAndAddColumn('lgu_projects', 'bid_amount', 'NUMERIC');
     await checkAndAddColumn('lgu_projects', 'latitude', 'TEXT');
     await checkAndAddColumn('lgu_projects', 'longitude', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'hydra_manifest', 'JSONB');
     await checkAndAddColumn('lgu_projects', 'pow_pdf', 'TEXT');
     await checkAndAddColumn('lgu_projects', 'dupa_pdf', 'TEXT');
     await checkAndAddColumn('lgu_projects', 'contract_pdf', 'TEXT');
@@ -9808,7 +9918,8 @@ app.get('/api/projects/:id', async (req, res) => {
           (SELECT rta_pdf FROM engineer_documents WHERE ipc = e.ipc AND rta_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as rta_pdf,
           (SELECT pow_filename FROM engineer_documents WHERE ipc = e.ipc AND pow_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as pow_filename,
           (SELECT dupa_filename FROM engineer_documents WHERE ipc = e.ipc AND dupa_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as dupa_filename,
-          (SELECT contract_filename FROM engineer_documents WHERE ipc = e.ipc AND contract_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as contract_filename
+          (SELECT contract_filename FROM engineer_documents WHERE ipc = e.ipc AND contract_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as contract_filename,
+          (SELECT hydra_manifest FROM engineer_documents WHERE ipc = e.ipc AND hydra_manifest IS NOT NULL ORDER BY created_at DESC LIMIT 1) as hydra_manifest
       ) d ON true
       WHERE e.project_id = $1;
     `;
@@ -9873,7 +9984,8 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
           (SELECT rta_pdf FROM engineer_documents WHERE ipc = e.ipc AND rta_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as rta_pdf,
           (SELECT pow_filename FROM engineer_documents WHERE ipc = e.ipc AND pow_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as pow_filename,
           (SELECT dupa_filename FROM engineer_documents WHERE ipc = e.ipc AND dupa_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as dupa_filename,
-          (SELECT contract_filename FROM engineer_documents WHERE ipc = e.ipc AND contract_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as contract_filename
+          (SELECT contract_filename FROM engineer_documents WHERE ipc = e.ipc AND contract_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as contract_filename,
+          (SELECT hydra_manifest FROM engineer_documents WHERE ipc = e.ipc AND hydra_manifest IS NOT NULL ORDER BY created_at DESC LIMIT 1) as hydra_manifest
       ) d ON true
       WHERE TRIM(e.school_id) = TRIM($1)
       ORDER BY e.project_id DESC;
@@ -10273,17 +10385,19 @@ app.post('/api/upload-project-document', (req, res, next) => {
     let finalDocValue = base64; // Default for legacy/offline
     let finalBinaryId = null;
     let finalSize = 0;
+    let finalHydraManifest = null;
 
     if (req.file && req.file.buffer) {
         try {
             // Enforce 96 DPI Compression before hashing/storage
-            const compressedBuffer = await compressBufferTo96Dpi(req.file.buffer);
+            const { buffer: compressedBuffer, hydraManifest } = await compressBufferTo96Dpi(req.file.buffer);
             const { binary_id, deduplicated, stored_size } = await upsertBinary(client, compressedBuffer, 'application/pdf');
             
             finalBinaryId = binary_id;
             finalDocValue = `/api/asset/${binary_id}`;
             finalSize = stored_size;
-            console.log(`🗄️ [DocStore] ${type} stored: ${binary_id} | size=${finalSize}B | dedup=${deduplicated} (orig=${req.file.size}B)`);
+            finalHydraManifest = hydraManifest;
+            console.log(`🗄️ [DocStore] ${type} stored: ${binary_id} | size=${finalSize}B | hydra=${!!hydraManifest} | (orig=${req.file.size}B)`);
         } catch (binErr) {
             console.error(`⚠️ [DocStore] Binary pipeline failure for ${type}:`, binErr.message);
             // Fallback: Legacy processPdfFile (Disk)
@@ -10297,11 +10411,12 @@ app.post('/api/upload-project-document', (req, res, next) => {
     }
 
     const sizeColumn = column.replace('_pdf', '_size');
+    const manifestKey = column.replace('_pdf', '');
 
     // 3. UPSERT keyed on IPC
     const upsertQuery = `
-      INSERT INTO engineer_documents (project_id, ipc, ${column}, uploader_id, ${filenameColumn ? filenameColumn + ',' : ''} ${sizeColumn}, binary_id, created_at)
-      VALUES ($1, $2, $3, $4, ${filenameColumn ? '$5,' : ''} $${filenameColumn ? '6' : '5'}, $${filenameColumn ? '7' : '6'}, CURRENT_TIMESTAMP)
+      INSERT INTO engineer_documents (project_id, ipc, ${column}, uploader_id, ${filenameColumn ? filenameColumn + ',' : ''} ${sizeColumn}, binary_id, hydra_manifest, created_at)
+      VALUES ($1, $2, $3, $4, ${filenameColumn ? '$5,' : ''} $${filenameColumn ? '6' : '5'}, $${filenameColumn ? '7' : '6'}, jsonb_build_object($${filenameColumn ? '8' : '7'}::text, $${filenameColumn ? '9' : '8'}::jsonb), CURRENT_TIMESTAMP)
       ON CONFLICT (ipc) WHERE ipc IS NOT NULL
       DO UPDATE SET
         ${column} = EXCLUDED.${column},
@@ -10309,25 +10424,50 @@ app.post('/api/upload-project-document', (req, res, next) => {
         ${sizeColumn} = EXCLUDED.${sizeColumn},
         binary_id = EXCLUDED.binary_id,
         uploader_id = EXCLUDED.uploader_id,
+        hydra_manifest = COALESCE(engineer_documents.hydra_manifest, '{}'::jsonb) || EXCLUDED.hydra_manifest,
         created_at = CURRENT_TIMESTAMP
-      RETURNING project_id;
+      RETURNING doc_id;
     `;
 
     const queryParams = [parseInt(finalProjectId), ipc, finalDocValue, uid];
     if (filenameColumn) queryParams.push(filename);
     queryParams.push(finalSize);
     queryParams.push(finalBinaryId);
+    queryParams.push(manifestKey);
+    queryParams.push(finalHydraManifest ? JSON.stringify(finalHydraManifest) : null);
 
-    await client.query(upsertQuery, queryParams);
+    const upsertRes = await client.query(upsertQuery, queryParams);
     
-    // 4. Dual Write (non-blocking)
+    // 4. Sync status_as_of in engineer_form (Fixes "Last Update" missing issue)
+    if (ipc) {
+        await client.query('UPDATE engineer_form SET status_as_of = CURRENT_TIMESTAMP WHERE ipc = $1', [ipc]).catch(e => console.error("⚠️ Failed to sync status_as_of:", e.message));
+    }
+
+    // 5. Dual Write (non-blocking)
     if (poolNew && ipc) {
         poolNew.query(upsertQuery, queryParams).catch(e => console.error(`❌ Dual-Write Error (Doc ${type}):`, e.message));
     }
 
-    res.json({ success: true, projectId: finalProjectId, filePath: finalDocValue });
+    res.json({ 
+      success: true, 
+      projectId: finalProjectId, 
+      filePath: finalDocValue,
+      data: {
+        id: upsertRes.rows[0].doc_id,
+        binaryId: finalBinaryId,
+        file_size: finalSize,
+        fileName: filename
+      }
+    });
   } catch (err) {
-    console.error(`❌ Doc Upload Failure: ${err.message}`);
+    console.error('❌ [EngineerDocStore] Database Error during upload:', {
+        message: err.message,
+        detail: err.detail,
+        table: err.table,
+        constraint: err.constraint,
+        code: err.code,
+        stack: err.stack
+    });
     res.status(500).json({ error: "Failed to process and save document" });
   } finally {
     if (client) client.release();
@@ -14674,14 +14814,34 @@ app.post('/api/lgu/upload-project-document', async (req, res) => {
   else if (type === 'MOA') column = 'moa_pdf';
   else return res.status(400).json({ error: "Invalid document type" });
 
+  const sizeColumn = column.replace('_pdf', '_size');
+  const manifestKey = column.replace('_pdf', '');
+
   try {
-    const query = `UPDATE lgu_forms SET ${column} = $1 WHERE project_id = $2`;
-    await pool.query(query, [base64, projectId]);
+    // 1. Convert base64 to buffer
+    const buffer = Buffer.from(base64, 'base64');
+    
+    // 2. Optimize (Compression + Hydra)
+    const { buffer: finalBuffer, hydraManifest } = await compressBufferTo96Dpi(buffer);
+
+    // 3. Binary Storage
+    const { binary_id, stored_size } = await upsertBinary(pool, finalBuffer, 'application/pdf');
+    const finalDocValue = `/api/asset/${binary_id}`;
+
+    // 4. Database Update (lgu_projects)
+    const query = `
+      UPDATE lgu_projects SET 
+        ${column} = $1, 
+        ${sizeColumn} = $2,
+        hydra_manifest = COALESCE(hydra_manifest, '{}'::jsonb) || jsonb_build_object($3::text, $4::jsonb)
+      WHERE lgu_project_id = $5
+    `;
+    await pool.query(query, [finalDocValue, stored_size, manifestKey, hydraManifest ? JSON.stringify(hydraManifest) : null, projectId]);
 
     // --- DUAL WRITE ---
     if (poolNew) {
       try {
-        const ipcRes = await pool.query('SELECT ipc FROM lgu_forms WHERE project_id = $1', [projectId]);
+        const ipcRes = await pool.query("SELECT root_project_id AS ipc FROM lgu_projects WHERE lgu_project_id = $1", [projectId]);
         if (ipcRes.rows.length > 0) {
           const ipc = ipcRes.rows[0].ipc;
           await poolNew.query(`UPDATE lgu_forms SET ${column} = $1 WHERE ipc = $2`, [base64, ipc]);
@@ -16076,14 +16236,21 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         'users' // Sync auth table too
       ];
       for (const table of childTablesToSync) {
-        // For users table, also update last_name (which stores school_id by convention)
-        const updateQuery = (table === 'users') 
-          ? `UPDATE ${table} SET school_id = $1, last_name = $1 WHERE iern = $2`
-          : `UPDATE ${table} SET school_id = $1 WHERE iern = $2`;
-          
-        await pool.query(updateQuery, [data.school_id, data.iern]).catch(e => {
-          console.warn(`⚠️  Cascading Sync failed for ${table}:`, e.message);
-        });
+        try {
+          // For users table, also update last_name (which stores school_id by convention)
+          const updateQuery = (table === 'users') 
+            ? `UPDATE ${table} SET school_id = $1, last_name = $1 WHERE iern = $2`
+            : `UPDATE ${table} SET school_id = $1 WHERE iern = $2`;
+            
+          await pool.query(updateQuery, [data.school_id, data.iern]);
+        } catch (e) {
+          // If column doesn't exist, just silence or log a minimal warning
+          if (e.message.includes('column "school_id" ... does not exist') || e.message.includes('does not exist')) {
+             // Silence for known schema differences between environments
+          } else {
+             console.warn(`⚠️  Cascading Sync failed for ${table}:`, e.message);
+          }
+        }
       }
     }
 
@@ -17708,7 +17875,7 @@ app.get('/api/lgu/projects', async (req, res) => {
 app.get('/api/lgu/project/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const projectRes = await pool.query('SELECT * FROM lgu_projects WHERE lgu_project_id = $1', [id]);
+    const projectRes = await pool.query('SELECT *, (hydra_manifest IS NOT NULL) AS "hasHydra" FROM lgu_projects WHERE lgu_project_id = $1', [id]);
     if (projectRes.rows.length === 0) return res.status(404).json({ error: "Project not found" });
 
     const imagesRes = await pool.query('SELECT id, image_data, created_at FROM lgu_image WHERE project_id = $1', [id]);
