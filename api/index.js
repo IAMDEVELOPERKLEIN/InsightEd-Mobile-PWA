@@ -38,6 +38,38 @@ import { createRequire } from "module"; // Added for JSON import
 const require = createRequire(import.meta.url);
 import { exec } from 'child_process';
 import util from 'util';
+const execAsync = util.promisify(exec);
+
+const compressBufferTo96Dpi = async (buffer) => {
+    if (!buffer || buffer.length === 0) return buffer;
+    const tempInput = path.join(UPLOAD_BASE_PATH, `comp_in_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.pdf`);
+    const tempOutput = path.join(UPLOAD_BASE_PATH, `comp_out_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.pdf`);
+    
+    try {
+        fs.writeFileSync(tempInput, buffer);
+        const scriptPath = path.resolve(__dirname, '..', 'compress_pdf.py');
+        const cmd = (py) => `${py} "${scriptPath}" "${tempInput}" "${tempOutput}" 96`;
+
+        try {
+            await execAsync(cmd('python'));
+        } catch {
+            try { await execAsync(cmd('py')); }
+            catch { try { await execAsync(cmd('python3')); } catch (e) { /* ignore fallback fail */ } }
+        }
+
+        if (fs.existsSync(tempOutput)) {
+            const compressed = fs.readFileSync(tempOutput);
+            fs.unlinkSync(tempOutput);
+            return compressed;
+        }
+    } catch (err) {
+        console.warn("⚠️ PDF Compression helper failed, using original:", err.message);
+    } finally {
+        if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
+    }
+    return buffer;
+};
+
 import { FirebaseScrypt } from 'firebase-scrypt'; // For lazy migration
 import bcrypt from 'bcrypt'; // For new standard hashes
 import { teachChatbot, chatWithKnowledge, setPool, updateKnowledgeEntry, deleteKnowledgeEntry } from './chatbot.js';
@@ -210,9 +242,6 @@ app.use(cors({
 app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
-// --- PDF COMPRESSION COMPATIBILITY ---
-const execAsync = util.promisify(exec);
-
 // --- SCHOOL DOCS STORAGE ---
 // --- SCHOOL DOCS STORAGE (Staged in Temp) ---
 const schoolDocsStorage = multer.diskStorage({
@@ -334,12 +363,15 @@ app.post('/api/schools/:iern/ownership-docs', memoryUpload.single('file'), async
     let storedSize = req.file.size;
 
     try {
-        const { binary_id, deduplicated, stored_size } = await upsertBinary(pool, req.file.buffer, 'application/pdf');
+        // Enforce 96 DPI Compression before hashing/storage
+        const compressedBuffer = await compressBufferTo96Dpi(req.file.buffer);
+        const { binary_id, deduplicated, stored_size } = await upsertBinary(pool, compressedBuffer, 'application/pdf');
+        
         finalBinaryId = binary_id;
         finalDocValue = `/api/asset/${binary_id}`;
-        storedSize = stored_size || req.file.size; // Ensure we have a size
+        storedSize = stored_size; 
 
-        console.log(`🗄️ [SchoolDocStore] Stored ownership doc: ${binary_id} | size=${storedSize}B | dedup=${deduplicated}`);
+        console.log(`🗄️ [SchoolDocStore] Stored ownership doc: ${binary_id} | size=${storedSize}B | dedup=${deduplicated} (orig=${req.file.size}B)`);
     } catch (binErr) {
         console.error('⚠️ [SchoolDocStore] Binary pipeline failure, falling back to disk:', binErr.message);
         // Fallback: Legacy disk storage logic
@@ -539,13 +571,16 @@ const processPdfInBackground = async (file, projectId, type, ipc, uid, isLgu = f
 
         const originalSize = buffer.length;
 
-        // 1. Postgres Binary Storage (Primary)
-        const { binary_id, deduplicated, stored_size } = await upsertBinary(pool, buffer, 'application/pdf');
+        // 1. COMPRESS TO 96 DPI BEFORE STORAGE
+        const finalBuffer = await compressBufferTo96Dpi(buffer);
+
+        // 2. Postgres Binary Storage (Primary)
+        const { binary_id, deduplicated, stored_size } = await upsertBinary(pool, finalBuffer, 'application/pdf');
         const finalDocValue = `/api/asset/${binary_id}`;
         const finalSize = stored_size;
-        console.log(`🗄️ [BG-BinaryStore] ${type} stored: ${binary_id} | size=${finalSize}B | dedup=${deduplicated}`);
+        console.log(`🗄️ [BG-BinaryStore] ${type} stored: ${binary_id} | size=${finalSize}B | dedup=${deduplicated} (orig=${originalSize}B)`);
 
-        // 2. Database Persistence
+        // 3. Database Persistence
         const table = isLgu ? 'lgu_projects' : 'engineer_documents';
         const idCol = isLgu ? 'lgu_project_id' : 'project_id';
 
@@ -9632,28 +9667,19 @@ app.post('/api/upload/multipart-finalize', async (req, res) => {
     // Attempt compression via compress_pdf.py (96 DPI)
     const isPdf = (contentType || '').includes('pdf') || finalBuffer.slice(0, 4).toString() === '%PDF';
     if (isPdf) {
-      const docsDir = path.resolve(__dirname, '..', 'uploads', 'project_docs');
-      if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir, { recursive: true });
-
-      const outputFilename = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.pdf`;
-      const outputPath = path.join(docsDir, outputFilename);
-      tempInput = path.join(docsDir, `tmp_${fileUUID}.pdf`);
-      fs.writeFileSync(tempInput, finalBuffer);
-
-      const scriptPath = path.resolve(__dirname, '..', 'compress_pdf.py');
-      const cmd = (py) => `${py} "${scriptPath}" "${tempInput}" "${outputPath}" 96`;
+      const outputSizeKB = Math.round(finalBuffer.length / 1024);
+      console.log(`📄 Finalizing Multipart PDF: ${fileUUID} (${outputSizeKB} KB)`);
 
       try {
-        try { await execAsync(cmd('python')); } catch {
-          try { await execAsync(cmd('py')); } catch { await execAsync(cmd('python3')); }
-        }
-        console.log(`✅ Chunked PDF compressed to 96 DPI: ${outputFilename}`);
+        const compressedBuffer = await compressBufferTo96Dpi(finalBuffer);
+        const { binary_id, stored_size } = await upsertBinary(pool, compressedBuffer, 'application/pdf');
+        
+        console.log(`✅ Chunked PDF compressed and stored: ${binary_id} | size=${stored_size}B`);
         fs.rmSync(chunkDir, { recursive: true, force: true });
-        return res.status(200).json({ success: true, url: `/uploads/project_docs/${outputFilename}` });
+        return res.status(200).json({ success: true, url: `/api/asset/${binary_id}`, binaryId: binary_id });
       } catch (compressErr) {
-        console.error('⚠️ Compression failed, falling back to base64:', compressErr.message);
-        if (outputPath && fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-        // Fall through to base64 fallback below
+        console.error('⚠️ Binary storage/compression failed during finalize:', compressErr.message);
+        // Fall through to legacy disk fallback below
       }
     }
 
@@ -10250,11 +10276,14 @@ app.post('/api/upload-project-document', (req, res, next) => {
 
     if (req.file && req.file.buffer) {
         try {
-            const { binary_id, deduplicated, stored_size } = await upsertBinary(client, req.file.buffer, 'application/pdf');
+            // Enforce 96 DPI Compression before hashing/storage
+            const compressedBuffer = await compressBufferTo96Dpi(req.file.buffer);
+            const { binary_id, deduplicated, stored_size } = await upsertBinary(client, compressedBuffer, 'application/pdf');
+            
             finalBinaryId = binary_id;
             finalDocValue = `/api/asset/${binary_id}`;
             finalSize = stored_size;
-            console.log(`🗄️ [DocStore] ${type} stored: ${binary_id} | size=${finalSize}B | dedup=${deduplicated}`);
+            console.log(`🗄️ [DocStore] ${type} stored: ${binary_id} | size=${finalSize}B | dedup=${deduplicated} (orig=${req.file.size}B)`);
         } catch (binErr) {
             console.error(`⚠️ [DocStore] Binary pipeline failure for ${type}:`, binErr.message);
             // Fallback: Legacy processPdfFile (Disk)

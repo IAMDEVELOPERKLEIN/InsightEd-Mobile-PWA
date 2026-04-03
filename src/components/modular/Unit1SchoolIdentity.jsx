@@ -9,7 +9,7 @@ import LocationPickerMap from "../LocationPickerMap";
 import useReadOnly from "../../hooks/useReadOnly";
 import { normalizeOffering } from "../../utils/dataNormalization";
 import DocumentUpload from "./DocumentUpload";
-import { resolveAssetUrl } from "../../utils/assetHelper";
+import { resolveAssetUrl, resolveDocUrl } from "../../utils/assetHelper";
 
 const TOTAL_STEPS = 7;
 
@@ -105,6 +105,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         head_hired_day: "",
         head_hired_year: "",
         ownership_doc_id: null,
+        local_file_size: null,
     });
 
     const [originalSchoolLocation, setOriginalSchoolLocation] = useState(null);
@@ -631,6 +632,8 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 head_position_title: formData.head_position_title,
                 head_date_hired: formData.head_date_hired,
                 local_file_path: formData.local_file_path,
+                local_file_name: formData.local_file_name,
+                local_file_size: formData.local_file_size,
             };
             
             const res = await fetch("/api/ph_schools/unit1", {
@@ -919,7 +922,15 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     <p className="font-bold text-slate-700 text-sm truncate">
                                                         {formData.local_file_name || formData.local_file_path.split('/').pop()}
                                                     </p>
-                                                    <a href={resolveAssetUrl(formData.local_file_path)} target="_blank" rel="noopener noreferrer" className="text-indigo-600 text-[10px] font-black uppercase tracking-tighter mt-0.5 hover:underline">View Document &rarr;</a>
+                                                    <a 
+                                                        href={resolveDocUrl(formData.local_file_path, { download: true })} 
+                                                        target="_blank" 
+                                                        rel="noopener noreferrer" 
+                                                        download={`Ownership_Document_${formData.school_id || 'Unit1'}.pdf`}
+                                                        className="text-indigo-600 text-[10px] font-black uppercase tracking-tighter mt-0.5 hover:underline"
+                                                    >
+                                                        View Document &rarr;
+                                                    </a>
                                                 </div>
                                             </div>
                                         </div>
@@ -1419,7 +1430,14 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                         docType={formData.ownership_document_type}
                                                         initialFile={formData.local_file_path}
                                                         initialDocId={formData.ownership_doc_id}
-                                                        onUploadSuccess={(path, id, name) => setFormData(prev => ({ ...prev, local_file_path: path, ownership_doc_id: id, local_file_name: name }))}
+                                                        initialFileSize={formData.local_file_size}
+                                                        onUploadSuccess={(path, id, name, size) => setFormData(prev => ({ 
+                                                            ...prev, 
+                                                            local_file_path: path, 
+                                                            ownership_doc_id: id, 
+                                                            local_file_name: name,
+                                                            local_file_size: size 
+                                                        }))}
                                                     />
                                                     
                                                     <div className="p-3 bg-blue-50 border border-blue-200 rounded-2xl flex items-center gap-3 mt-4">

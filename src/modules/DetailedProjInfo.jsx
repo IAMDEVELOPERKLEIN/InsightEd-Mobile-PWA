@@ -680,8 +680,15 @@ const DetailedProjInfo = () => {
                             region: data.region,
                             division: data.division,
                             pow_pdf: data.pow_pdf,
+                            pow_size: data.pow_size,
                             dupa_pdf: data.dupa_pdf,
+                            dupa_size: data.dupa_size,
                             contract_pdf: data.contract_pdf,
+                            contract_size: data.contract_size,
+                            moa_pdf: data.moa_pdf,
+                            moa_size: data.moa_size,
+                            rta_pdf: data.rta_pdf,
+                            rta_size: data.rta_size,
                             latitude: data.latitude,
                             longitude: data.longitude,
                             lguData: {
@@ -1189,7 +1196,9 @@ const DetailedProjInfo = () => {
                                     Most Recent Update
                                 </div>
                                 <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-black/80 via-black/20 to-transparent">
-                                    <p className="text-[10px] font-black text-white/70 uppercase tracking-[0.2em] mb-1">Captured Date</p>
+                                    <p className="text-[10px] font-black text-white/70 uppercase tracking-[0.2em] mb-1">
+                                        Captured Date {featured.file_size ? `• ${formatFileSize(featured.file_size)}` : ''}
+                                    </p>
                                     <p className="text-lg font-bold text-white">
                                         {new Date(featured.uploaded_at || featured.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                                     </p>
@@ -1242,6 +1251,15 @@ const DetailedProjInfo = () => {
         );
     };
 
+    const formatFileSize = (bytes) => {
+        if (!bytes) return "";
+        if (bytes < 1024) return bytes + " B";
+        const kb = bytes / 1024;
+        if (kb < 1024) return kb.toFixed(1) + " KB";
+        const mb = kb / 1024;
+        return mb.toFixed(2) + " MB";
+    };
+
     const renderDocuments = () => (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
             <SectionHeader title="Essential Documents" />
@@ -1278,7 +1296,7 @@ const DetailedProjInfo = () => {
                                         {status === 'uploading' ? 'Uploading...' :
                                          status === 'success'   ? '✅ Saved — compressing in background' :
                                          status === 'error'     ? '❌ Upload failed' :
-                                         hasExisting           ? 'On file' :
+                                         hasExisting           ? `On file ${project[`${key.toLowerCase()}_size`] ? `[${formatFileSize(project[`${key.toLowerCase()}_size`])}]` : ''}` :
                                                                  'Not uploaded'}
                                     </p>
                                 </div>

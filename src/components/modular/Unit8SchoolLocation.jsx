@@ -113,14 +113,14 @@ const Unit8SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             progress.completedUnits.push(8);
             progress.xp = (progress.xp || 0) + 500;
             localStorage.setItem('quest_progress', JSON.stringify(progress));
-
-            // Sync to backend
-            fetch('/api/user/progress', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ unitId: 8, schoolId })
-            }).catch(e => console.error(e));
         }
+
+        // Mandatory Sync to backend on every successful save to update timestamp
+        fetch('/api/user/progress', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ unitId: 8, schoolId })
+        }).catch(e => console.error("[Unit 8 Sync Error]:", e));
 
         if (schoolId) await clearUnitDraft(8, schoolId);
         setShowSuccess(true);

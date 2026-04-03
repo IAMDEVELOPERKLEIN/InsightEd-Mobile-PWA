@@ -605,7 +605,22 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const handleIctChange = (e) => {
         const { name, value } = e.target;
         const cleanValue = value.replace(/^0+(?!$)/, '');
-        setIctData(prev => ({ ...prev, [name]: cleanValue }));
+        
+        setIctData(prev => {
+            const newState = { ...prev, [name]: cleanValue };
+
+            // SAFEGUARD: If Total is changed to 0 or cleared, reset sub-fields
+            if (name.endsWith("_total") && (cleanValue === "0" || cleanValue === "")) {
+                const prefix = name.replace("_total", "");
+                // Reset Working/Functional counts
+                if (prev.hasOwnProperty(`${prefix}_working`)) newState[`${prefix}_working`] = cleanValue;
+                if (prev.hasOwnProperty(`${prefix}_func`)) newState[`${prefix}_func`] = cleanValue;
+                // Reset Personnel Usage if applicable
+                if (prev.hasOwnProperty(`${prefix}_teaching`)) newState[`${prefix}_teaching`] = cleanValue;
+            }
+
+            return newState;
+        });
     };
 
     const ictStats = useMemo(() => {
@@ -671,10 +686,23 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const handleWashChange = (e) => {
         const { name, value, type, checked } = e.target;
         const cleanValue = (type === 'number') ? value.replace(/^0+(?!$)/, '') : value;
-        setWashData(prev => ({ 
-            ...prev, 
-            [name]: type === 'checkbox' ? checked : cleanValue 
-        }));
+        
+        setWashData(prev => {
+            const newState = { 
+                ...prev, 
+                [name]: type === 'checkbox' ? checked : cleanValue 
+            };
+
+            // SAFEGUARD: If Total is changed to 0 or cleared, reset functional counterpart
+            if (name.endsWith("_total") && (cleanValue === "0" || cleanValue === "")) {
+                const funcName = name.replace("_total", "_func");
+                if (prev.hasOwnProperty(funcName)) {
+                    newState[funcName] = cleanValue; // Sync (0 or empty)
+                }
+            }
+
+            return newState;
+        });
     };
 
     const washStats = useMemo(() => {
@@ -710,21 +738,8 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         if (washData.water_source === "Natural resources (Deep well, Spring, Rainwater)" || washData.water_source === "No water source") {
             if ((washData.confirm_no_piped_text || "").toLowerCase() !== "confirm") isValid = false;
         }
-
-        // Critical Status Validation for Zero WASH Facilities
-        const hasZeroWash = WASH_CATEGORIES.some(cat => {
-            const total = parseInt(washData[`${cat.key}_total`]);
-            return total === 0;
-        });
-        let zeroWashError = false;
-        if (hasZeroWash) {
-            if ((washData.confirm_zero_wash_text || "").toLowerCase() !== "confirm") {
-                isValid = false;
-                zeroWashError = true;
-            }
-        }
         
-        return { isValid, errors, zeroWashError };
+        return { isValid, errors };
     }, [washData]);
 
     const handlePhase4Proceed = () => { setCurrentPhase(5); window.scrollTo({ top: 0, behavior: "smooth" }); };
@@ -817,6 +832,21 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 body: JSON.stringify(payload)
             });
 
+            const stored = localStorage.getItem('quest_progress');
+            let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+            if (!progress.completedUnits.includes(6)) {
+                progress.completedUnits.push(6);
+                progress.xp = (progress.xp || 0) + 400; // Corrected XP for Unit 6
+                localStorage.setItem('quest_progress', JSON.stringify(progress));
+            }
+
+            // Mandatory Sync to backend on every successful save to update timestamp
+            fetch('/api/user/progress', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ unitId: 6, schoolId: storedId })
+            }).catch(e => console.error("[Unit 6 Sync Error]:", e));
+
             if (res.ok) {
                 // Perform secondary syncs in parallel to speed up UI response
                 const syncPromises = [
@@ -829,7 +859,7 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     fetch('/api/user/progress', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ unitId: 6, schoolId: storedId })
+                        body: JSON.stringify({ unitId: 7, schoolId: storedId })
                     }).catch(e => console.warn("Progress sync failed", e))
                 ];
 

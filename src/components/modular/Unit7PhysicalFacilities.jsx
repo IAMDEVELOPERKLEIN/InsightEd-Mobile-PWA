@@ -816,18 +816,18 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 progress.completedUnits.push(7);
                 progress.xp += 500;
                 localStorage.setItem('quest_progress', JSON.stringify(progress));
-
-                // Also notify backend about progress
-                fetch('/api/user/progress', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        unitId: 8,
-                        schoolId: schoolId,
-                        duration_seconds: 0 // Optional
-                    })
-                }).catch(err => console.error("Failed to sync progress to backend", err));
             }
+
+            // Mandatory Sync to backend on every successful save to update timestamp
+            fetch('/api/user/progress', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    unitId: 7,
+                    schoolId: schoolId,
+                    duration_seconds: 0 // Optional
+                })
+            }).catch(err => console.error("[Unit 7 Sync Error]:", err));
 
             setShowSuccess(true);
             await clearUnitDraft(8, schoolId);
