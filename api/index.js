@@ -323,35 +323,51 @@ app.post('/api/schools/:iern/ownership-docs', memoryUpload.single('file'), async
   const { iern } = req.params;
   const { doc_type } = req.body;
   
-  if (!req.file) {
-    return res.status(400).json({ error: 'No PDF file uploaded' });
-  }
-
   try {
     // 1. Process File — Postgres Binary Storage (Primary)
+    if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+    }
+
     let finalDocValue = null;
     let finalBinaryId = null;
+    let storedSize = req.file.size;
 
     try {
-        const { binary_id, deduplicated, bytes_saved } = await upsertBinary(pool, req.file.buffer, 'application/pdf');
+        const { binary_id, deduplicated, stored_size } = await upsertBinary(pool, req.file.buffer, 'application/pdf');
         finalBinaryId = binary_id;
         finalDocValue = `/api/asset/${binary_id}`;
-        console.log(`🗄️ [SchoolDocStore] Stored ownership doc: ${binary_id} | dedup=${deduplicated} | saved=${bytes_saved}B`);
+        storedSize = stored_size || req.file.size; // Ensure we have a size
+
+        console.log(`🗄️ [SchoolDocStore] Stored ownership doc: ${binary_id} | size=${storedSize}B | dedup=${deduplicated}`);
     } catch (binErr) {
         console.error('⚠️ [SchoolDocStore] Binary pipeline failure, falling back to disk:', binErr.message);
         // Fallback: Legacy disk storage logic
         const finalDir = getUploadPath('school_docs');
-        const finalFilename = `fallback_${Date.now()}_${req.file.originalname}`;
+        const finalFilename = `fallback_${Date.now()}_${req.file.originalname.replace(/\s+/g, '_')}`;
         const finalPath = path.join(finalDir, finalFilename);
+        
         fs.writeFileSync(finalPath, req.file.buffer);
+        
         finalDocValue = `/uploads/school_docs/${finalFilename}`;
+        finalBinaryId = null; // Explicitly null for fallback
+        // storedSize remains req.file.size from outer scope initialization
     }
 
-    // 2. Save to database
+    // 2. Save to database using Hawkeye "Single Truth" Protocol (UPSERT on IERN)
     const dbRes = await pool.query(
-      `INSERT INTO school_ownership_docs (iern, file_path, file_name, doc_type, status, binary_id) 
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-      [iern, finalDocValue, req.file.originalname, doc_type, 'optimized', finalBinaryId]
+      `INSERT INTO school_ownership_docs (iern, file_path, file_name, doc_type, status, binary_id, file_size) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (iern) DO UPDATE SET
+          file_path = EXCLUDED.file_path,
+          file_name = EXCLUDED.file_name,
+          doc_type = EXCLUDED.doc_type,
+          status = EXCLUDED.status,
+          binary_id = EXCLUDED.binary_id,
+          file_size = EXCLUDED.file_size,
+          created_at = CURRENT_TIMESTAMP
+       RETURNING id`,
+      [iern, finalDocValue, req.file.originalname, doc_type, 'optimized', finalBinaryId, storedSize]
     );
 
     res.status(200).json({ 
@@ -361,12 +377,20 @@ app.post('/api/schools/:iern/ownership-docs', memoryUpload.single('file'), async
         id: dbRes.rows[0].id, 
         filePath: finalDocValue, 
         fileName: req.file.originalname,
-        binaryId: finalBinaryId 
+        binaryId: finalBinaryId,
+        file_size: storedSize
       }
     });
 
   } catch (err) {
-    console.error('Database Error during upload:', err);
+    console.error('❌ [SchoolDocStore] Database Error during upload:', {
+        message: err.message,
+        detail: err.detail,
+        table: err.table,
+        constraint: err.constraint,
+        code: err.code,
+        stack: err.stack
+    });
     res.status(500).json({ error: 'Failed to record document metadata' });
   }
 });
@@ -376,14 +400,32 @@ app.delete('/api/schools/:iern/ownership-docs/:id', async (req, res) => {
   const { iern, id } = req.params;
   
   try {
-    // 1. Get file path from DB
+    // 1. Get file path from DB with flexible IERN/SchoolID validation
+    console.log(`🗑️ [SchoolDocStore] Deletion request for ID=${id}, IERN/SID=${iern}`);
+    
     const dbRes = await pool.query(
-      'SELECT file_path FROM school_ownership_docs WHERE id = $1 AND iern = $2',
+      `SELECT file_path, iern FROM school_ownership_docs 
+       WHERE id = $1 AND (
+         iern = $2 OR 
+         iern = (SELECT school_id FROM ph_schools WHERE iern = $2 LIMIT 1) OR 
+         iern = (SELECT iern FROM ph_schools WHERE school_id = $2 LIMIT 1)
+       )`,
       [id, iern]
     );
 
     if (dbRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Document not found' });
+      // PROMPT-ARTIST: Deep Diagnostics for 404 tracing
+      const idExists = await pool.query('SELECT id, iern FROM school_ownership_docs WHERE id = $1', [id]);
+      if (idExists.rows.length === 0) {
+        console.warn(`⚠️ [SchoolDocStore] CRITICAL: ID ${id} DOES NOT EXIST in database. It may have been deleted by a migration or race condition.`);
+      } else {
+        const storedIern = idExists.rows[0].iern;
+        console.warn(`⚠️ [SchoolDocStore] AUTH FAILURE: ID ${id} exists but IERN in DB is "${storedIern}", while request IERN is "${iern}"`);
+        // Check aliases for transparency
+        const aliases = await pool.query('SELECT school_id, iern FROM ph_schools WHERE school_id = $1 OR iern = $1', [iern]);
+        console.warn(`   Aliases found for "${iern}":`, aliases.rows);
+      }
+      return res.status(404).json({ error: 'Document not found or unauthorized' });
     }
 
     const relativePath = dbRes.rows[0].file_path;
@@ -401,6 +443,18 @@ app.delete('/api/schools/:iern/ownership-docs/:id', async (req, res) => {
 
     // 3. Delete from database (only after physical file attempt)
     await pool.query('DELETE FROM school_ownership_docs WHERE id = $1', [id]);
+
+    // 4. Sync with ph_schools (Single Truth Cleanup)
+    // We clear both the legacy ownership_document_path and the new local_file_* columns
+    await pool.query(`
+      UPDATE ph_schools 
+      SET local_file_path = NULL, 
+          local_file_name = NULL, 
+          local_file_size = NULL, 
+          ownership_document_path = NULL,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE iern = $1 OR school_id = $1
+    `, [iern]).catch(err => console.error("⚠️ ph_schools Sync Delete Error:", err.message));
 
     res.json({ success: true, message: 'Document deleted successfully' });
   } catch (err) {
@@ -430,7 +484,7 @@ const processPdfFile = async (file, outputFilename = null) => {
     console.log(`📄 Processing PDF: ${inputPath} (${inputSizeKB} KB)`);
 
     try {
-        const cmd = (pythonCmd) => `${pythonCmd} "${scriptPath}" "${inputPath}" "${outputPath}"`;
+        const cmd = (pythonCmd) => `${pythonCmd} "${scriptPath}" "${inputPath}" "${outputPath}" 96`;
 
         let stdout = '';
         try {
@@ -467,8 +521,10 @@ const processPdfFile = async (file, outputFilename = null) => {
 
 const processPdfInBackground = async (file, projectId, type, ipc, uid, isLgu = false) => {
     const fieldMap = { 'POW': 'pow_pdf', 'DUPA': 'dupa_pdf', 'CONTRACT': 'contract_pdf', 'RTA': 'rta_pdf', 'MOA': 'moa_pdf' };
+    const sizeFieldMap = { 'POW': 'pow_size', 'DUPA': 'dupa_size', 'CONTRACT': 'contract_size', 'MOA': 'moa_size', 'RTA': 'rta_size' };
     const filenameFieldMap = { 'POW': 'pow_filename', 'DUPA': 'dupa_filename', 'CONTRACT': 'contract_filename' };
     const field = fieldMap[type];
+    const sizeField = sizeFieldMap[type];
     if (!field) return;
 
     const originalFilename = file?.originalname || null;
@@ -481,30 +537,35 @@ const processPdfInBackground = async (file, projectId, type, ipc, uid, isLgu = f
         }
         if (!buffer) throw new Error("No file buffer available for background processing");
 
+        const originalSize = buffer.length;
+
         // 1. Postgres Binary Storage (Primary)
-        const { binary_id, deduplicated, bytes_saved } = await upsertBinary(pool, buffer, 'application/pdf');
+        const { binary_id, deduplicated, stored_size } = await upsertBinary(pool, buffer, 'application/pdf');
         const finalDocValue = `/api/asset/${binary_id}`;
-        console.log(`🗄️ [BG-BinaryStore] ${type} stored: ${binary_id} | dedup=${deduplicated} | saved=${bytes_saved}B`);
+        const finalSize = stored_size;
+        console.log(`🗄️ [BG-BinaryStore] ${type} stored: ${binary_id} | size=${finalSize}B | dedup=${deduplicated}`);
 
         // 2. Database Persistence
-        const table = isLgu ? 'lgu_forms' : 'engineer_documents';
+        const table = isLgu ? 'lgu_projects' : 'engineer_documents';
+        const idCol = isLgu ? 'lgu_project_id' : 'project_id';
+
         if (isLgu) {
-            await pool.query(`UPDATE ${table} SET ${field} = $1, binary_id = $2 WHERE project_id = $3`, [finalDocValue, binary_id, projectId]);
+            await pool.query(`UPDATE ${table} SET ${field} = $1, binary_id = $2, ${sizeField} = $3 WHERE ${idCol} = $4`, [finalDocValue, binary_id, finalSize, projectId]);
         } else {
             if (filenameField && originalFilename) {
                 await pool.query(`
-                    INSERT INTO engineer_documents (project_id, ipc, ${field}, ${filenameField}, binary_id, uploader_id)
-                    VALUES ($1, $2, $3, $4, $5, $6)
+                    INSERT INTO engineer_documents (project_id, ipc, ${field}, ${filenameField}, binary_id, uploader_id, ${sizeField})
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
                     ON CONFLICT (ipc) WHERE ipc IS NOT NULL
-                    DO UPDATE SET ${field} = EXCLUDED.${field}, ${filenameField} = EXCLUDED.${filenameField}, binary_id = EXCLUDED.binary_id, uploader_id = EXCLUDED.uploader_id
-                `, [projectId, ipc, finalDocValue, originalFilename, binary_id, uid]);
+                    DO UPDATE SET ${field} = EXCLUDED.${field}, ${filenameField} = EXCLUDED.${filenameField}, binary_id = EXCLUDED.binary_id, uploader_id = EXCLUDED.uploader_id, ${sizeField} = EXCLUDED.${sizeField}
+                `, [projectId, ipc, finalDocValue, originalFilename, binary_id, uid, finalSize]);
             } else {
                 await pool.query(`
-                    INSERT INTO engineer_documents (project_id, ipc, ${field}, binary_id, uploader_id)
-                    VALUES ($1, $2, $3, $4, $5)
+                    INSERT INTO engineer_documents (project_id, ipc, ${field}, binary_id, uploader_id, ${sizeField})
+                    VALUES ($1, $2, $3, $4, $5, $6)
                     ON CONFLICT (ipc) WHERE ipc IS NOT NULL
-                    DO UPDATE SET ${field} = EXCLUDED.${field}, binary_id = EXCLUDED.binary_id, uploader_id = EXCLUDED.uploader_id
-                `, [projectId, ipc, finalDocValue, binary_id, uid]);
+                    DO UPDATE SET ${field} = EXCLUDED.${field}, binary_id = EXCLUDED.binary_id, uploader_id = EXCLUDED.uploader_id, ${sizeField} = EXCLUDED.${sizeField}
+                `, [projectId, ipc, finalDocValue, binary_id, uid, finalSize]);
             }
         }
 
@@ -930,7 +991,8 @@ const runAutoMigrations = async () => {
     await pool.query('ALTER TABLE buildable_spaces ADD CONSTRAINT buildable_spaces_iern_number_unique UNIQUE (iern, space_number)').catch(() => {});
 
     // -- school_ownership_docs --
-    // Deduplicate: Keep latest record per IERN
+    // Deduplication Strategy (HAWKEYE PROTOCOL v2):
+    // 1. Purge all except latest before applying UNIQUE constraint
     await pool.query(`
       DELETE FROM school_ownership_docs WHERE id NOT IN (
         SELECT id FROM (
@@ -938,8 +1000,17 @@ const runAutoMigrations = async () => {
           FROM school_ownership_docs WHERE iern IS NOT NULL
         ) s WHERE s.rn = 1
       )
-    `).catch(() => {});
-    await pool.query('ALTER TABLE school_ownership_docs ADD CONSTRAINT school_ownership_docs_iern_unique UNIQUE (iern)').catch(() => {});
+    `).catch(e => console.warn('⚠️ [IERN Migration] school_ownership_docs dedup error:', e.message, e.detail));
+
+    // 2. Apply Unique Constraint (Safely via idempotent DO block)
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'school_ownership_docs_iern_unique') THEN
+          ALTER TABLE school_ownership_docs ADD CONSTRAINT school_ownership_docs_iern_unique UNIQUE (iern);
+        END IF;
+      END $$;
+    `).catch(e => console.error('❌ [IERN Migration] Failed to apply school_ownership_docs_iern_unique:', e.message, e.detail));
 
 
     // 4. Drop problematic Foreign Key constraints that rely on school_id
@@ -1420,6 +1491,11 @@ const initFinanceDB = async () => {
     await checkAndAddColumn('lgu_projects', 'nature_of_delay', 'TEXT');
     await checkAndAddColumn('lgu_projects', 'root_project_id', 'INTEGER');
     await checkAndAddColumn('lgu_projects', 'finance_id', 'INTEGER');
+    await checkAndAddColumn('lgu_projects', 'pow_size', 'BIGINT');
+    await checkAndAddColumn('lgu_projects', 'dupa_size', 'BIGINT');
+    await checkAndAddColumn('lgu_projects', 'contract_size', 'BIGINT');
+    await checkAndAddColumn('lgu_projects', 'moa_size', 'BIGINT');
+    await checkAndAddColumn('lgu_projects', 'rta_size', 'BIGINT');
 
     await pool.query(`
         UPDATE lgu_projects 
@@ -1443,9 +1519,11 @@ const initFinanceDB = async () => {
             project_id INT REFERENCES lgu_projects(lgu_project_id) ON DELETE CASCADE,
             image_data TEXT,
             uploaded_by TEXT,
+            file_size BIGINT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     `);
+    await checkAndAddColumn('lgu_image', 'file_size', 'BIGINT');
 
     console.log("✅ Finance DB Init: lgu_projects schema verified.");
 
@@ -8005,6 +8083,11 @@ app.post('/api/save-project', async (req, res) => {
         (SELECT contract_pdf FROM engineer_documents WHERE ipc = $1 AND contract_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as contract_pdf,
         (SELECT moa_pdf FROM engineer_documents WHERE ipc = $1 AND moa_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as moa_pdf,
         (SELECT rta_pdf FROM engineer_documents WHERE ipc = $1 AND rta_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as rta_pdf,
+        (SELECT pow_size FROM engineer_documents WHERE ipc = $1 AND pow_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as pow_size,
+        (SELECT dupa_size FROM engineer_documents WHERE ipc = $1 AND dupa_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as dupa_size,
+        (SELECT contract_size FROM engineer_documents WHERE ipc = $1 AND contract_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as contract_size,
+        (SELECT moa_size FROM engineer_documents WHERE ipc = $1 AND moa_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as moa_size,
+        (SELECT rta_size FROM engineer_documents WHERE ipc = $1 AND rta_pdf IS NOT NULL ORDER BY created_at DESC LIMIT 1) as rta_size,
         (SELECT pow_filename FROM engineer_documents WHERE ipc = $1 AND pow_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as pow_filename,
         (SELECT dupa_filename FROM engineer_documents WHERE ipc = $1 AND dupa_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as dupa_filename,
         (SELECT contract_filename FROM engineer_documents WHERE ipc = $1 AND contract_filename IS NOT NULL ORDER BY created_at DESC LIMIT 1) as contract_filename
@@ -8066,16 +8149,17 @@ app.post('/api/save-project', async (req, res) => {
     // 4. Insert Images (If they exist in the payload)
     if (data.images && Array.isArray(data.images) && data.images.length > 0) {
       const imageQuery = `
-        INSERT INTO "engineer_image" (project_id, image_data, uploaded_by, category, ipc)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO "engineer_image" (project_id, image_data, uploaded_by, category, ipc, file_size)
+        VALUES ($1, $2, $3, $4, $5, $6)
       `;
 
       for (const imgItem of data.images) {
         // Handle both string (legacy) and object formats
         const imgData = typeof imgItem === 'string' ? imgItem : imgItem.image_data;
         const category = typeof imgItem === 'object' ? imgItem.category : 'Internal';
+        const imgSize = imgData ? Math.round((imgData.replace(/=/g, "").length * 0.75)) : 0;
 
-        await client.query(imageQuery, [newProjectId, imgData, data.uid, category, newIpc]);
+        await client.query(imageQuery, [newProjectId, imgData, data.uid, category, newIpc, imgSize]);
       }
     }
 
@@ -8114,13 +8198,14 @@ app.post('/api/save-project', async (req, res) => {
         // 2. Insert Images
         if (data.images && Array.isArray(data.images) && data.images.length > 0) {
           const imageQuery = `
-            INSERT INTO "engineer_image" (project_id, image_data, uploaded_by, category, ipc)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO "engineer_image" (project_id, image_data, uploaded_by, category, ipc, file_size)
+            VALUES ($1, $2, $3, $4, $5, $6)
           `;
           for (const imgItem of data.images) {
             const imgData = typeof imgItem === 'string' ? imgItem : imgItem.image_data;
             const category = typeof imgItem === 'object' ? imgItem.category : 'Internal';
-            await clientNew.query(imageQuery, [newProjIdSecondary, imgData, data.uid, category, newIpc]);
+            const imgSize = imgData ? Math.round((imgData.replace(/=/g, "").length * 0.75)) : 0;
+            await clientNew.query(imageQuery, [newProjIdSecondary, imgData, data.uid, category, newIpc, imgSize]);
           }
         }
 
@@ -9556,7 +9641,7 @@ app.post('/api/upload/multipart-finalize', async (req, res) => {
       fs.writeFileSync(tempInput, finalBuffer);
 
       const scriptPath = path.resolve(__dirname, '..', 'compress_pdf.py');
-      const cmd = (py) => `${py} "${scriptPath}" "${tempInput}" "${outputPath}"`;
+      const cmd = (py) => `${py} "${scriptPath}" "${tempInput}" "${outputPath}" 96`;
 
       try {
         try { await execAsync(cmd('python')); } catch {
@@ -10003,10 +10088,11 @@ app.post('/api/upload-image', (req, res, next) => {
     if (req.file && req.file.buffer) {
         try {
             // ☁️ Primary: Postgres unified_binaries (WebP + SHA-256 dedup)
-            const { binary_id, deduplicated, bytes_saved } = await upsertBinary(pool, req.file.buffer, req.file.mimetype || 'image/jpeg');
+            const { binary_id, deduplicated, stored_size } = await upsertBinary(pool, req.file.buffer, req.file.mimetype || 'image/jpeg');
             finalBinaryId = binary_id;
             finalImageValue = `/api/asset/${binary_id}`;
-            console.log(`🗄️ [BinaryStore] Stored asset ${binary_id} | dedup=${deduplicated} | saved=${bytes_saved}B`);
+            const finalSize = stored_size;
+            console.log(`🗄️ [BinaryStore] Stored asset ${binary_id} | size=${finalSize}B | dedup=${deduplicated}`);
         } catch (binErr) {
             console.error('⚠️ [BinaryStore] Pipeline failed, falling back to Azure:', binErr.message);
             // Fallback: Azure Blob
@@ -10044,17 +10130,17 @@ app.post('/api/upload-image', (req, res, next) => {
       }
     }
 
-    const query = `INSERT INTO engineer_image (project_id, image_data, file_path, uploaded_by, category, ipc, binary_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id;`;
-    const result = await pool.query(query, [finalProjectId, finalImageValue, finalFilePath, uploadedBy, category || 'Internal', ipc, finalBinaryId]);
+    const query = `INSERT INTO engineer_image (project_id, image_data, file_path, uploaded_by, category, ipc, binary_id, file_size) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id;`;
+    const result = await pool.query(query, [finalProjectId, finalImageValue, finalFilePath, uploadedBy, category || 'Internal', ipc, finalBinaryId, typeof finalSize !== 'undefined' ? finalSize : (req.file ? req.file.size : 0)]);
 
     await logActivity(uploadedBy, 'Engineer', 'Engineer', 'UPLOAD', `Project ID: ${projectId}`, `Uploaded optimized site image (${category || 'Internal'})`);
 
     // 3. Dual-Write (Async/Non-blocking)
     if (poolNew && ipc) {
       poolNew.query(
-        `INSERT INTO engineer_image (project_id, image_data, file_path, uploaded_by, category, ipc, binary_id)
-         VALUES ((SELECT project_id FROM engineer_form WHERE ipc = $1 ORDER BY project_id DESC LIMIT 1), $2, $3, $4, $5, $1, $6)`,
-        [ipc, finalImageValue, finalFilePath, uploadedBy, category || 'Internal', finalBinaryId]
+        `INSERT INTO engineer_image (project_id, image_data, file_path, uploaded_by, category, ipc, binary_id, file_size)
+         VALUES ((SELECT project_id FROM engineer_form WHERE ipc = $1 ORDER BY project_id DESC LIMIT 1), $2, $3, $4, $5, $1, $6, $7)`,
+        [ipc, finalImageValue, finalFilePath, uploadedBy, category || 'Internal', finalBinaryId, finalSize]
       ).catch(e => console.error("❌ Dual-Write Error (Upload Image):", e.message));
     }
 
@@ -10160,13 +10246,15 @@ app.post('/api/upload-project-document', (req, res, next) => {
     // 2. Process File — Postgres Binary Storage (Primary)
     let finalDocValue = base64; // Default for legacy/offline
     let finalBinaryId = null;
+    let finalSize = 0;
 
     if (req.file && req.file.buffer) {
         try {
-            const { binary_id, deduplicated, bytes_saved } = await upsertBinary(client, req.file.buffer, 'application/pdf');
+            const { binary_id, deduplicated, stored_size } = await upsertBinary(client, req.file.buffer, 'application/pdf');
             finalBinaryId = binary_id;
             finalDocValue = `/api/asset/${binary_id}`;
-            console.log(`🗄️ [DocStore] ${type} stored: ${binary_id} | dedup=${deduplicated} | saved=${bytes_saved}B`);
+            finalSize = stored_size;
+            console.log(`🗄️ [DocStore] ${type} stored: ${binary_id} | size=${finalSize}B | dedup=${deduplicated}`);
         } catch (binErr) {
             console.error(`⚠️ [DocStore] Binary pipeline failure for ${type}:`, binErr.message);
             // Fallback: Legacy processPdfFile (Disk)
@@ -10179,14 +10267,17 @@ app.post('/api/upload-project-document', (req, res, next) => {
         finalDocValue = await processPdfFile(req.file, ipcFilename);
     }
 
+    const sizeColumn = column.replace('_pdf', '_size');
+
     // 3. UPSERT keyed on IPC
     const upsertQuery = `
-      INSERT INTO engineer_documents (project_id, ipc, ${column}, uploader_id, ${filenameColumn ? filenameColumn + ',' : ''} binary_id, created_at)
-      VALUES ($1, $2, $3, $4, ${filenameColumn ? '$5,' : ''} $${filenameColumn ? '6' : '5'}, CURRENT_TIMESTAMP)
+      INSERT INTO engineer_documents (project_id, ipc, ${column}, uploader_id, ${filenameColumn ? filenameColumn + ',' : ''} ${sizeColumn}, binary_id, created_at)
+      VALUES ($1, $2, $3, $4, ${filenameColumn ? '$5,' : ''} $${filenameColumn ? '6' : '5'}, $${filenameColumn ? '7' : '6'}, CURRENT_TIMESTAMP)
       ON CONFLICT (ipc) WHERE ipc IS NOT NULL
       DO UPDATE SET
         ${column} = EXCLUDED.${column},
         ${filenameColumn ? filenameColumn + ' = EXCLUDED.' + filenameColumn + ',' : ''}
+        ${sizeColumn} = EXCLUDED.${sizeColumn},
         binary_id = EXCLUDED.binary_id,
         uploader_id = EXCLUDED.uploader_id,
         created_at = CURRENT_TIMESTAMP
@@ -10195,6 +10286,7 @@ app.post('/api/upload-project-document', (req, res, next) => {
 
     const queryParams = [parseInt(finalProjectId), ipc, finalDocValue, uid];
     if (filenameColumn) queryParams.push(filename);
+    queryParams.push(finalSize);
     queryParams.push(finalBinaryId);
 
     await client.query(upsertQuery, queryParams);
@@ -10219,15 +10311,7 @@ app.post('/api/upload-project-document', (req, res, next) => {
 // /api/schools/:iern/ownership-docs route at line 260.
 // app.post('/api/schools/:iern/ownership-docs', upload.single('file'), ...) removed.
 
-app.delete('/api/schools/:iern/ownership-docs/:id', async (req, res) => {
-  try {
-    // Return success to allow frontend to remove the reference in its state.
-    res.json({ success: true, message: "Document mapping removed" });
-  } catch (error) {
-    console.error("Ownership Doc Delete Error:", error);
-    res.status(500).json({ error: "Failed to delete document" });
-  }
-});
+// DELETED: Duplicate route consolidated at line 390
 
 // --- NEW BLUK UPLOAD ENDPOINT TO PREVENT DUPLICATES ---
 const bulkUploadFields = memoryUpload.fields([
@@ -15544,9 +15628,9 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
           unit3: row?.unit3_updated_at,
           unit4: row?.unit4_updated_at,
           unit5: row?.unit5_updated_at,
-          unit6: row?.unit7_updated_at,
-          unit7: row?.unit8_updated_at,
-          unit8: row?.unit9_updated_at,
+          unit6: row?.unit6_updated_at,
+          unit7: row?.unit7_updated_at,
+          unit8: row?.unit8_updated_at,
           unit9: row?.unit10_updated_at,
         }
       } 
@@ -15584,17 +15668,26 @@ app.get('/api/ph_schools/:schoolId', async (req, res) => {
       // --- END FALLBACK ---
 
       // --- OWNERSHIP DOCUMENT DETAILS ---
+      // 1. First priority: New columns in ph_schools (Single Truth)
+      // 2. Second priority: If local_file_path is empty, use ownership_document_path
+      if (!row.local_file_path && row.ownership_document_path) {
+          row.local_file_path = row.ownership_document_path;
+      }
+
+      // 3. Third priority: Fallback to school_ownership_docs Table (Legacy Sync)
       const docRes = await pool.query(
-        'SELECT id, file_path, file_name FROM school_ownership_docs WHERE iern = $1 ORDER BY created_at DESC LIMIT 1',
-        [row.iern || schoolId]
+        'SELECT id, file_path, file_name, file_size FROM school_ownership_docs WHERE iern = $1 OR iern = $2 ORDER BY created_at DESC LIMIT 1',
+        [row.iern, schoolId]
       );
       if (docRes.rows.length > 0) {
         row.ownership_doc_id = docRes.rows[0].id;
-        row.local_file_path = docRes.rows[0].file_path;
-        row.local_file_name = docRes.rows[0].file_name;
+        // Only overwrite if currently empty to favor the most recent submit
+        if (!row.local_file_path) row.local_file_path = docRes.rows[0].file_path;
+        if (!row.local_file_name) row.local_file_name = docRes.rows[0].file_name;
+        if (!row.local_file_size) row.local_file_size = docRes.rows[0].file_size;
       }
 
-      console.log(`[GET /api/ph_schools/${schoolId}] RETURNING unit5_completed: `, row.unit5_completed);
+      console.log(`[GET /api/ph_schools/${schoolId}] RETURNING unit1/local_file_path: `, !!row.local_file_path);
       res.json({ exists: true, data: row });
     } else {
       res.json({ exists: false, data: null });
@@ -15816,8 +15909,10 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         ownership_document_type, established_month, established_year,
         head_first_name, head_middle_name, head_last_name, head_sex, head_position_title,
         head_date_of_birth, head_date_hired, google_drive_link, google_drive_file_id,
-        google_drive_file_name, google_drive_thumbnail_url, unit1_updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, CURRENT_TIMESTAMP)
+        google_drive_file_name, google_drive_thumbnail_url, 
+        local_file_path, local_file_name, local_file_size,
+        unit1_updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, CURRENT_TIMESTAMP)
       ON CONFLICT (iern) DO UPDATE SET
         school_id = EXCLUDED.school_id,
         school_name = EXCLUDED.school_name,
@@ -15854,6 +15949,9 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         google_drive_file_id = EXCLUDED.google_drive_file_id,
         google_drive_file_name = EXCLUDED.google_drive_file_name,
         google_drive_thumbnail_url = EXCLUDED.google_drive_thumbnail_url,
+        local_file_path = EXCLUDED.local_file_path,
+        local_file_name = EXCLUDED.local_file_name,
+        local_file_size = EXCLUDED.local_file_size,
         unit1_updated_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP;
     `;
@@ -15864,7 +15962,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.division, data.district, data.leg_district, data.curricular_offering,
       data.latitude, data.longitude, data.school_head || null,
       data.contact_number || null, data.ownership || null,
-      data.google_drive_link || null, // ownership_document_path
+      data.google_drive_link || data.local_file_path || null, // ownership_document_path
       data.school_type || null,
       data.mother_school_id || null, data.extension_mother_school_name || null,
       isCompleted, isCompleted ? 1 : 0,
@@ -15874,7 +15972,8 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.head_sex || null, data.head_position_title || null,
       data.head_date_of_birth || null, data.head_date_hired || null,
       data.google_drive_link || null, data.google_drive_file_id || null,
-      data.google_drive_file_name || null, data.google_drive_thumbnail_url || null
+      data.google_drive_file_name || null, data.google_drive_thumbnail_url || null,
+      data.local_file_path || null, data.local_file_name || null, (data.local_file_size ? parseInt(data.local_file_size) : null)
     ];
 
     // 1. Attempt an UPDATE first based on permanent IERN to safely allow school_id changes
@@ -15919,6 +16018,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
           head_sex = $29, head_position_title = $30, head_date_of_birth = $31,
           head_date_hired = $32, google_drive_link = $33, google_drive_file_id = $34,
           google_drive_file_name = $35, google_drive_thumbnail_url = $36,
+          local_file_path = $37, local_file_name = $38, local_file_size = $39,
           unit1_updated_at = CURRENT_TIMESTAMP,
           updated_at = CURRENT_TIMESTAMP
         WHERE iern = $2

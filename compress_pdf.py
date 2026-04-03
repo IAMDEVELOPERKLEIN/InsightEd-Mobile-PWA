@@ -51,6 +51,9 @@ def compress_pdf_gs(input_path, output_path, dpi=96):
             "-sDEVICE=pdfwrite",
             "-dCompatibilityLevel=1.4",
             "-dPDFSETTINGS=/screen",
+            f"-dColorImageResolution={dpi}",
+            f"-dGrayImageResolution={dpi}",
+            f"-dMonoImageResolution={dpi}",
             "-dNOPAUSE",
             "-dQUIET",
             "-dBATCH",
@@ -111,16 +114,24 @@ if __name__ == "__main__":
         output_temp = os.path.join(dir_name, f"{name}_optimized{ext}")
     
     print(f"Starting compression for {input_file}...")
-    success = compress_pdf(input_file, output_temp, dpi=target_dpi)
-    
-    if not success:
-        print("PDF compression failed all methods.")
+    try:
+        success = compress_pdf(input_file, output_temp, dpi=target_dpi)
+        
+        if not success:
+            print("PDF compression failed all methods.")
+            sys.exit(1)
+        
+        # If output_path wasn't specified, replace the original
+        if len(sys.argv) <= 2 and os.path.exists(output_temp):
+            try:
+                os.replace(output_temp, input_file)
+                print("Original file replaced with optimized version.")
+            except Exception as e:
+                print(f"Error replacing original file: {e}")
+                sys.exit(1)
+        
+        print("SUCCESS: Compression successful.")
+        sys.exit(0)
+    except Exception as e:
+        print(f"FAIL: Unhandled error during compression: {e}")
         sys.exit(1)
-    
-    # If output_path wasn't specified, replace the original
-    if len(sys.argv) <= 2 and os.path.exists(output_temp):
-        try:
-            os.replace(output_temp, input_file)
-            print("Original file replaced with optimized version.")
-        except Exception as e:
-            print(f"Error replacing original file: {e}")

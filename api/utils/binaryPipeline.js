@@ -1,5 +1,17 @@
 import crypto from 'crypto';
 import sharp from 'sharp';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { exec } from 'child_process';
+import util from 'util';
+import { fileURLToPath } from 'url';
+
+const execAsync = util.promisify(exec);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, '..', '..');
+const SCRIPT_PATH = path.join(ROOT_DIR, 'compress_pdf.py');
 
 const WEBP_MAX_WIDTH = 1200;
 const WEBP_QUALITY = 65;
@@ -15,14 +27,55 @@ export async function compressToWebP(inputBuffer) {
 }
 
 /**
- * Compress a PDF buffer (96 DPI Placeholder).
- * Note: Real 96 DPI reduction usually requires 'pdf-lib' or 'ghostscript'.
- * We deduplicate here to ensure minimal storage regardless.
+ * Compress a PDF buffer (96 DPI Optimized).
+ * Uses the external 'compress_pdf.py' script for heavy-duty compression.
  */
 export async function compressPDF(inputBuffer) {
-    // For now, we rely on deduplication for PDFs. 
-    // To enable 96 DPI, install 'pdf-lib' and use page-level downsampling.
-    return inputBuffer; 
+    const tempId = Date.now() + Math.random().toString(36).substring(7);
+    const tempIn = path.join(os.tmpdir(), `bin_in_${tempId}.pdf`);
+    const tempOut = path.join(os.tmpdir(), `bin_out_${tempId}.pdf`);
+
+    try {
+        fs.writeFileSync(tempIn, inputBuffer);
+        
+        // Strategy: Try 'python', 'py', 'python3' for cross-platform robustness
+        const cmdPattern = (py) => `${py} "${SCRIPT_PATH}" "${tempIn}" "${tempOut}" 96`;
+        
+        let success = false;
+        const pyCommands = ['python', 'py', 'python3'];
+        
+        for (const py of pyCommands) {
+            try {
+                await execAsync(cmdPattern(py));
+                if (fs.existsSync(tempOut) && fs.statSync(tempOut).size > 0) {
+                    success = true;
+                    break;
+                }
+            } catch (err) {
+                // Try next command
+            }
+        }
+
+        if (success) {
+            const optimizedBuffer = fs.readFileSync(tempOut);
+            // Only use optimized if it's actually smaller
+            if (optimizedBuffer.length < inputBuffer.length) {
+                console.log(`[BinaryPipeline] PDF Optimized: ${(inputBuffer.length / 1024).toFixed(1)}KB -> ${(optimizedBuffer.length / 1024).toFixed(1)}KB`);
+                return optimizedBuffer;
+            }
+            console.log(`[BinaryPipeline] PDF Optimization skipped (original smaller/equal)`);
+        } else {
+            console.warn('[BinaryPipeline] PDF Optimization failed all Python executors, skipping.');
+        }
+
+        return inputBuffer;
+    } catch (err) {
+        console.error('[BinaryPipeline] PDF compression logic error:', err.message);
+        return inputBuffer;
+    } finally {
+        if (fs.existsSync(tempIn)) try { fs.unlinkSync(tempIn); } catch (e) {}
+        if (fs.existsSync(tempOut)) try { fs.unlinkSync(tempOut); } catch (e) {}
+    }
 }
 
 /**
@@ -50,7 +103,7 @@ export function isCompressibleImage(mimeType) {
  * @param {import('pg').Pool} pool
  * @param {Buffer} rawBuffer  — unprocessed upload buffer
  * @param {string} mimeType
- * @returns {Promise<{ binary_id: string, deduplicated: boolean, bytes_saved: number }>}
+ * @returns {Promise<{ binary_id: string, deduplicated: boolean, stored_size: number }>}
  */
 export async function upsertBinary(pool, rawBuffer, mimeType) {
     let finalBuffer = rawBuffer;
@@ -80,10 +133,15 @@ export async function upsertBinary(pool, rawBuffer, mimeType) {
     );
 
     if (existing.rows.length > 0) {
+        const existingId = existing.rows[0].id;
+        // Fetch actual size for accurate metadata persistence
+        const sizeRes = await pool.query('SELECT size_bytes FROM unified_binaries WHERE id = $1', [existingId]);
+        const actualSize = sizeRes.rows.length > 0 ? Number(sizeRes.rows[0].size_bytes) : rawBuffer.length;
+
         return {
-            binary_id: existing.rows[0].id,
+            binary_id: existingId,
             deduplicated: true,
-            bytes_saved: rawBuffer.length
+            stored_size: actualSize
         };
     }
 
@@ -97,6 +155,6 @@ export async function upsertBinary(pool, rawBuffer, mimeType) {
     return {
         binary_id: insertResult.rows[0].id,
         deduplicated: false,
-        bytes_saved: rawBuffer.length - finalBuffer.length
+        stored_size: finalBuffer.length
     };
 }
