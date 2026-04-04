@@ -415,6 +415,7 @@ const AnimatedRoutes = () => {
 
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
 import ScrollToTop from './components/ScrollToTop';
+import ForceUpdateModal from './components/ForceUpdateModal';
 
 function App() {
   return (
@@ -433,6 +434,7 @@ const AppContent = () => {
   return (
     <>
       <ScrollToTop />
+      <ForceUpdateModal />
       <SuperUserFloatingSwitch />
       <ChatWidget showFloatingButton={showChatFloating} />
       <PasscodeSetupPrompt />

@@ -5,7 +5,7 @@ author: Gemini Skill Builder
 target_engines: 
   - Claude (3.5 Sonnet / 3 Opus)
   - Google Antigravity Agent Framework
-tags: [prompt-engineering, vibe-coding, agentic-workflows, code-generation, step-by-step-execution, diagnostics]
+tags: [implementation-plan,prompt-engineering, vibe-coding, agentic-workflows, code-generation, step-by-step-execution, diagnostics]
 ---
 
 # 🧠 Skill: Vibe Coding Prompt Architect
@@ -30,7 +30,7 @@ Use this internal heuristic to translate user vibes into technical specification
 ---
 
 ## 🏗️ Generation Template (The Output Format)
-*When a user gives you a vibe-coding task, generate a prompt using EXACTLY this structure below. This is what you will hand off to Claude/Antigravity.*
+*When the system creates an implementation plan, generate a prompt using EXACTLY this structure below and save it in the claude folder. This is what you will hand off to Claude/Antigravity.*
 
 ```text
 # SYSTEM ROLE

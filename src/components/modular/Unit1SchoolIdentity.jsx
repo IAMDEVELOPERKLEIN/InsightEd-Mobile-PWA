@@ -9,6 +9,7 @@ import LocationPickerMap from "../LocationPickerMap";
 import useReadOnly from "../../hooks/useReadOnly";
 import { normalizeOffering } from "../../utils/dataNormalization";
 import DocumentUpload from "./DocumentUpload";
+import { resolveAssetUrl, resolveDocUrl } from "../../utils/assetHelper";
 
 const TOTAL_STEPS = 7;
 
@@ -87,6 +88,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         google_drive_file_name: "",
         google_drive_thumbnail_url: "",
         local_file_path: "",
+        local_file_name: "",
         school_type: "",
         mother_school_id: "",
         extension_mother_school_name: "",
@@ -103,6 +105,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         head_hired_day: "",
         head_hired_year: "",
         ownership_doc_id: null,
+        local_file_size: null,
     });
 
     const [originalSchoolLocation, setOriginalSchoolLocation] = useState(null);
@@ -218,6 +221,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     extension_mother_school_name: d.extension_mother_school_name || merged.extension_mother_school_name,
                     ownership_document_type: d.ownership_document_type || merged.ownership_document_type,
                     local_file_path: d.local_file_path || merged.local_file_path,
+                    local_file_name: d.local_file_name || merged.local_file_name,
                     head_position_title: d.head_position_title || merged.head_position_title,
                     ...(() => {
                         const hiredVal = (d.head_date_hired) ? d.head_date_hired.split('T')[0] : merged.head_date_hired;
@@ -628,6 +632,8 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 head_position_title: formData.head_position_title,
                 head_date_hired: formData.head_date_hired,
                 local_file_path: formData.local_file_path,
+                local_file_name: formData.local_file_name,
+                local_file_size: formData.local_file_size,
             };
             
             const res = await fetch("/api/ph_schools/unit1", {
@@ -913,8 +919,18 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             <div className="flex items-center gap-4 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100">
                                                 <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center text-xl shadow-inner">📄</div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="font-bold text-slate-700 text-sm truncate">{formData.local_file_path.split('/').pop()}</p>
-                                                    <a href={formData.local_file_path} target="_blank" rel="noopener noreferrer" className="text-indigo-600 text-[10px] font-black uppercase tracking-tighter mt-0.5 hover:underline">View Document &rarr;</a>
+                                                    <p className="font-bold text-slate-700 text-sm truncate">
+                                                        {formData.local_file_name || formData.local_file_path.split('/').pop()}
+                                                    </p>
+                                                    <a 
+                                                        href={resolveDocUrl(formData.local_file_path, { download: true })} 
+                                                        target="_blank" 
+                                                        rel="noopener noreferrer" 
+                                                        download={`Ownership_Document_${formData.school_id || 'Unit1'}.pdf`}
+                                                        className="text-indigo-600 text-[10px] font-black uppercase tracking-tighter mt-0.5 hover:underline"
+                                                    >
+                                                        View Document &rarr;
+                                                    </a>
                                                 </div>
                                             </div>
                                         </div>
@@ -1414,14 +1430,17 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                         docType={formData.ownership_document_type}
                                                         initialFile={formData.local_file_path}
                                                         initialDocId={formData.ownership_doc_id}
-                                                        onUploadSuccess={(path, id) => setFormData(prev => ({ ...prev, local_file_path: path, ownership_doc_id: id }))}
+                                                        initialFileSize={formData.local_file_size}
+                                                        onUploadSuccess={(path, id, name, size) => setFormData(prev => ({ 
+                                                            ...prev, 
+                                                            local_file_path: path, 
+                                                            ownership_doc_id: id, 
+                                                            local_file_name: name,
+                                                            local_file_size: size 
+                                                        }))}
                                                     />
                                                     
-                                                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-2xl flex items-center gap-3 mt-4">
-                                                        <p className="text-[11px] text-blue-700 font-bold flex-1">
-                                                            💡 Tip: Your PDF will be optimized to 96 DPI in the background once uploaded to ensure fast loading for everyone.
-                                                        </p>
-                                                    </div>
+
                                                 </div>
                                             </motion.div>
                                         )}

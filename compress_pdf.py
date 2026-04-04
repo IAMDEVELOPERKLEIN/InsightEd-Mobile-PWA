@@ -2,6 +2,7 @@ import os
 import sys
 import subprocess
 import shutil
+import json
 
 # Hybrid approach: Prefer PyMuPDF (fitz) if available, fallback to Ghostscript
 try:
@@ -12,34 +13,163 @@ except ImportError:
 
 def compress_pdf_fitz(input_path, output_path, dpi=96):
     """
-    Compresses PDF by re-rendering pages to images at target DPI.
-    Very effective for reducing size of scanned documents.
+    Smarter PyMuPDF compression:
+    1. Structural optimization (garbage collection, deflation).
+    2. Image re-compression (rewrite_images).
+    3. Aggressive rasterization (only if beneficial).
     """
+    temp_files = []
     try:
         doc = fitz.open(input_path)
-        out_doc = fitz.open()
+        if doc.is_encrypted:
+            doc.authenticate("")  # Unlock owner-password-only PDFs
+        orig_size = os.path.getsize(input_path)
+        
+        candidates = [] # List of (size, path)
 
-        for page in doc:
-            # Render page to an image with the specified DPI
-            pix = page.get_pixmap(dpi=dpi)
-            
-            # Convert the pixmap to jpeg bytes for maximum compression
-            img_bytes = pix.tobytes("jpeg", jpg_quality=70)
-            
-            # Create a new page with the exact dimensions of the original
-            out_page = out_doc.new_page(width=page.rect.width, height=page.rect.height)
-            
-            # Insert the newly rendered image filling the entire page
-            out_page.insert_image(page.rect, stream=img_bytes)
+        # Stage 1: Fast Optimization (Structural)
+        s1_path = output_path + ".s1.pdf"
+        doc.save(s1_path, garbage=4, deflate=True, clean=True)
+        candidates.append((os.path.getsize(s1_path), s1_path))
+        temp_files.append(s1_path)
 
-        # Save with compression options enabled
-        out_doc.save(output_path, garbage=4, deflate=True)
-        out_doc.close()
+        # Stage 2: Image Re-compression (Internal)
+        if hasattr(doc, 'rewrite_images'):
+            try:
+                s2_path = output_path + ".s2.pdf"
+                doc.rewrite_images()
+                doc.save(s2_path, garbage=4, deflate=True)
+                candidates.append((os.path.getsize(s2_path), s2_path))
+                temp_files.append(s2_path)
+            except:
+                 pass
+
+        # Stage 3: Aggressive Rasterization (The original method, as a last resort)
+        # We only do this if the file is still large (> 500KB)
+        if orig_size > 500 * 1024:
+            s3_path = output_path + ".s3.pdf"
+            out_doc = fitz.open()
+            for page in doc:
+                pix = page.get_pixmap(dpi=dpi)
+                img_bytes = pix.tobytes("jpeg", jpg_quality=70)
+                out_page = out_doc.new_page(width=page.rect.width, height=page.rect.height)
+                out_page.insert_image(page.rect, stream=img_bytes)
+            out_doc.save(s3_path, garbage=4, deflate=True)
+            candidates.append((os.path.getsize(s3_path), s3_path))
+            temp_files.append(s3_path)
+            out_doc.close()
+
         doc.close()
-        return True
+
+        # Pick the absolute best (smallest)
+        candidates.sort() # Sort by size
+        best_size, best_path = candidates[0]
+
+        if best_size < orig_size:
+            shutil.copy2(best_path, output_path)
+            print(f"Fitz success: {orig_size} -> {best_size} using {best_path.split('.')[-2]}")
+            return True
+        else:
+            print("Fitz failed to reduce size.")
+            return False
+
     except Exception as e:
         print(f"PyMuPDF Error: {str(e)}")
         return False
+    finally:
+        for f in temp_files:
+            if os.path.exists(f):
+                try: os.remove(f)
+                except: pass
+
+def compress_pdf_hydra(input_path, output_dir, dpi=120):
+    """
+    Project Hydra: Convert PDF pages to a sequence of optimized images.
+    Returns a list of image paths and the total size.
+    """
+    if not HAS_FITZ:
+        print("Hydra requires PyMuPDF (fitz).")
+        return None
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    try:
+        doc = fitz.open(input_path)
+        if doc.is_encrypted:
+            doc.authenticate("")  # Unlock owner-password-only PDFs
+        manifest = []
+        total_size = 0
+
+        for i, page in enumerate(doc):
+            # 120 DPI is a good balance for Hydra (better than 96 for text legibility)
+            pix = page.get_pixmap(dpi=dpi)
+            
+            # Use JPEG-80 as the standard Hydra shard format for compatibility
+            img_name = f"page_{i+1}.jpg"
+            img_path = os.path.join(output_dir, img_name)
+            
+            # save() also supports jpg_quality
+            pix.save(img_path, "jpg", jpg_quality=85)
+            
+            size = os.path.getsize(img_path)
+            total_size += size
+            manifest.append({
+                "page": i + 1,
+                "file": img_name,
+                "size": size,
+                "width": page.rect.width,
+                "height": page.rect.height
+            })
+
+        doc.close()
+        
+        # Save manifest.json in the hydra directory
+        with open(os.path.join(output_dir, "manifest.json"), "w") as f:
+            json.dump(manifest, f, indent=2)
+
+        print(f"Hydra success: {len(manifest)} pages -> {total_size} bytes in {output_dir}")
+        return manifest
+
+    except Exception as e:
+        import time
+        if "closed or encrypted" in str(e):
+            time.sleep(0.1) # Small retry delay for Windows file locks
+            try:
+                doc = fitz.open(input_path)
+                if doc.is_encrypted:
+                    doc.authenticate("")
+                return _process_hydra_doc(doc, output_dir, dpi)
+            except Exception as retry_e:
+                file_size = os.path.getsize(input_path) if os.path.exists(input_path) else "N/A"
+                print(f"Hydra Error (Retry): {str(retry_e)} | Path exists: {os.path.exists(input_path)} | Size: {file_size}")
+        else:
+            print(f"Hydra Error: {str(e)}")
+        return None
+
+def _process_hydra_doc(doc, output_dir, dpi):
+    manifest = []
+    total_size = 0
+    for i, page in enumerate(doc):
+        pix = page.get_pixmap(dpi=dpi)
+        img_name = f"page_{i+1}.jpg"
+        img_path = os.path.join(output_dir, img_name)
+        pix.save(img_path, "jpg", jpg_quality=85)
+        size = os.path.getsize(img_path)
+        total_size += size
+        manifest.append({
+            "page": i + 1,
+            "file": img_name,
+            "size": size,
+            "width": page.rect.width,
+            "height": page.rect.height
+        })
+    doc.close()
+    with open(os.path.join(output_dir, "manifest.json"), "w") as f:
+        json.dump(manifest, f, indent=2)
+    print(f"Hydra success: {len(manifest)} pages -> {total_size} bytes in {output_dir}")
+    return manifest
+
 
 def compress_pdf_gs(input_path, output_path, dpi=96):
     """
@@ -51,6 +181,9 @@ def compress_pdf_gs(input_path, output_path, dpi=96):
             "-sDEVICE=pdfwrite",
             "-dCompatibilityLevel=1.4",
             "-dPDFSETTINGS=/screen",
+            f"-dColorImageResolution={dpi}",
+            f"-dGrayImageResolution={dpi}",
+            f"-dMonoImageResolution={dpi}",
             "-dNOPAUSE",
             "-dQUIET",
             "-dBATCH",
@@ -97,30 +230,55 @@ def compress_pdf(input_path, output_path, dpi=96):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python compress_pdf.py <input_path> [output_path] [dpi]")
+        print("Usage: python compress_pdf.py <input_path> [output_path/dir] [dpi] [--hydra]")
         sys.exit(1)
         
     input_file = sys.argv[1]
-    output_temp = sys.argv[2] if len(sys.argv) > 2 else None
-    target_dpi = int(sys.argv[3]) if len(sys.argv) > 3 else 96
+    is_hydra = "--hydra" in sys.argv
     
-    if not output_temp:
+    # Remove flags from arguments
+    args = [a for a in sys.argv if not a.startswith("--")]
+    
+    output_target = args[2] if len(args) > 2 else None
+    target_dpi = int(args[3]) if len(args) > 3 else 96
+    
+    if is_hydra:
+        if not output_target:
+            output_target = input_file + "_hydra"
+        print(f"Starting Hydra transformation for {input_file}...")
+        manifest = compress_pdf_hydra(input_file, output_target, dpi=target_dpi or 120)
+        if manifest:
+            print(f"HYDRA_MANIFEST_FILE: {os.path.join(output_target, 'manifest.json')}")
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    
+    # Standard compression path
+    if not output_target:
         dir_name = os.path.dirname(input_file)
         base_name = os.path.basename(input_file)
         name, ext = os.path.splitext(base_name)
-        output_temp = os.path.join(dir_name, f"{name}_optimized{ext}")
+        output_target = os.path.join(dir_name, f"{name}_optimized{ext}")
     
-    print(f"Starting compression for {input_file}...")
-    success = compress_pdf(input_file, output_temp, dpi=target_dpi)
-    
-    if not success:
-        print("PDF compression failed all methods.")
+    print(f"Starting standard compression for {input_file}...")
+    try:
+        success = compress_pdf(input_file, output_target, dpi=target_dpi)
+        
+        if not success:
+            print("PDF compression failed all methods.")
+            sys.exit(1)
+        
+        # If output_path wasn't specified, replace the original
+        if len(args) <= 2 and os.path.exists(output_target):
+            try:
+                os.replace(output_target, input_file)
+                print("Original file replaced with optimized version.")
+            except Exception as e:
+                print(f"Error replacing original file: {e}")
+                sys.exit(1)
+        
+        print("SUCCESS: Compression successful.")
+        sys.exit(0)
+    except Exception as e:
+        print(f"FAIL: Unhandled error during compression: {e}")
         sys.exit(1)
-    
-    # If output_path wasn't specified, replace the original
-    if len(sys.argv) <= 2 and os.path.exists(output_temp):
-        try:
-            os.replace(output_temp, input_file)
-            print("Original file replaced with optimized version.")
-        except Exception as e:
-            print(f"Error replacing original file: {e}")

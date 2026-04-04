@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { FiUploadCloud, FiFile, FiCheckCircle, FiLoader, FiAlertCircle, FiX, FiEdit2, FiTrash2 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
+import { resolveDocUrl } from "../../utils/assetHelper";
 
-const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null, initialDocId = null }) => {
+const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null, initialDocId = null, initialFileSize = null }) => {
     const [file, setFile] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [status, setStatus] = useState(initialFile ? "success" : "idle"); // idle, uploading, optimizing, success, error
     const [progress, setProgress] = useState(0);
     const [errorMessage, setErrorMessage] = useState("");
     const [uploadedPath, setUploadedPath] = useState(initialFile);
+    const [uploadedFileName, setUploadedFileName] = useState(null);
+    const [uploadedFileSize, setUploadedFileSize] = useState(initialFileSize);
     const [documentId, setDocumentId] = useState(initialDocId);
 
     // Sync initial props if they change (e.g. on mount/load)
@@ -16,9 +19,10 @@ const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null, in
         if (initialFile) {
             setUploadedPath(initialFile);
             setDocumentId(initialDocId);
+            setUploadedFileSize(initialFileSize);
             setStatus("success");
         }
-    }, [initialFile, initialDocId]);
+    }, [initialFile, initialDocId, initialFileSize]);
 
     const handleFileChange = (e) => {
         const selectedFile = e.target.files[0];
@@ -70,9 +74,11 @@ const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null, in
             }
 
             setUploadedPath(result.data.filePath);
+            setUploadedFileName(result.data.fileName);
+            if (result.data.file_size) setUploadedFileSize(result.data.file_size);
             setDocumentId(result.data.id);
             setStatus("optimizing");
-            onUploadSuccess(result.data.filePath, result.data.id);
+            onUploadSuccess(result.data.filePath, result.data.id, result.data.fileName, result.data.file_size);
 
             setTimeout(() => {
                 setStatus("success");
@@ -123,6 +129,15 @@ const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null, in
         } finally {
             setUploading(false);
         }
+    };
+
+    const formatFileSize = (bytes) => {
+        if (!bytes) return "";
+        if (bytes < 1024) return bytes + " B";
+        const kb = bytes / 1024;
+        if (kb < 1024) return kb.toFixed(1) + " KB";
+        const mb = kb / 1024;
+        return mb.toFixed(2) + " MB";
     };
 
     return (
@@ -198,10 +213,10 @@ const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null, in
                             </div>
                             <div>
                                 <p className="text-sm font-black text-emerald-900">
-                                    {status === "optimizing" ? "Optimizing PDF..." : "Document Secured"}
+                                    {status === "optimizing" ? "Securing PDF..." : "Document Secured"}
                                 </p>
                                 <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest leading-none mt-1">
-                                    {status === "optimizing" ? "Applying 96 DPI compression" : "Local server storage active"}
+                                    {status === "optimizing" ? "Deduplicating & Indexing" : "Postgres Binary Registry Active"}
                                 </p>
                             </div>
                             {status === "success" && (
@@ -218,8 +233,21 @@ const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null, in
                         </div>
 
                         <div className="flex items-center justify-between p-3 bg-white/50 rounded-xl border border-emerald-100">
-                            <span className="text-[11px] font-bold text-gray-500 truncate max-w-[200px]">{uploadedPath}</span>
-                            <a href={uploadedPath} target="_blank" rel="noopener noreferrer" className="text-[10px] font-black text-emerald-600 uppercase hover:underline">
+                            <span className="text-[11px] font-bold text-gray-500 truncate max-w-[200px]">
+                                {uploadedFileName || uploadedPath?.split('/').pop() || "View Document"}
+                                {uploadedFileSize && (
+                                    <span className="ml-2 text-blue-500 font-black">
+                                        [{formatFileSize(uploadedFileSize)}]
+                                    </span>
+                                )}
+                            </span>
+                            <a 
+                                href={resolveDocUrl(uploadedPath, { download: true })} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                download
+                                className="text-[10px] font-black text-emerald-600 uppercase hover:underline"
+                            >
                                 View File &rarr;
                             </a>
                         </div>

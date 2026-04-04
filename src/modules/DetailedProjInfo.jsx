@@ -8,8 +8,10 @@ import { TbPhoto } from "react-icons/tb";
 import { useAuth } from '../context/AuthContext';
 import EditProjectModal from '../components/EditProjectModal';
 import ProjectEditModal from '../components/ProjectEditModal';
-import { LuHistory, LuUser, LuCalendar, LuX, LuInfo, LuMapPin, LuShoppingBag, LuDollarSign, LuFileText, LuImages } from "react-icons/lu";
+import { LuHistory, LuUser, LuCalendar, LuX, LuInfo, LuMapPin, LuShoppingBag, LuDollarSign, LuFileText, LuImages, LuEye } from "react-icons/lu";
 import { FiSettings, FiImage, FiFileText } from 'react-icons/fi';
+import { resolveAssetUrl, resolveDocUrl } from '../utils/assetHelper';
+import HydraDocViewer from '../components/HydraDocViewer';
 
 // --- SUB-COMPONENT: REMARKS HISTORY ---
 const RemarksHistory = ({ history, loading, currentRemarks }) => {
@@ -274,17 +276,17 @@ const VOHistoryList = ({ voHistory, loading }) => {
                                     <div className="h-[1px] flex-1 bg-slate-50"></div>
                                 </span>
                                 {vo.revised_pow_pdf && (
-                                    <a href={vo.revised_pow_pdf.startsWith('data:') || vo.revised_pow_pdf.startsWith('/uploads/') ? vo.revised_pow_pdf : `data:application/pdf;base64,${vo.revised_pow_pdf}`} download={`Revised_POW_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
+                                    <a href={resolveDocUrl(vo.revised_pow_pdf, { download: true })} download={`Revised_POW_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
                                         📄 POW
                                     </a>
                                 )}
                                 {vo.revised_dupa_pdf && (
-                                    <a href={vo.revised_dupa_pdf.startsWith('data:') || vo.revised_dupa_pdf.startsWith('/uploads/') ? vo.revised_dupa_pdf : `data:application/pdf;base64,${vo.revised_dupa_pdf}`} download={`Revised_DUPA_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
+                                    <a href={resolveDocUrl(vo.revised_dupa_pdf, { download: true })} download={`Revised_DUPA_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
                                         📄 DUPA
                                     </a>
                                 )}
                                 {vo.revised_contract_pdf && (
-                                    <a href={vo.revised_contract_pdf.startsWith('data:') || vo.revised_contract_pdf.startsWith('/uploads/') ? vo.revised_contract_pdf : `data:application/pdf;base64,${vo.revised_contract_pdf}`} download={`Revised_Contract_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
+                                    <a href={resolveDocUrl(vo.revised_contract_pdf, { download: true })} download={`Revised_Contract_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
                                         📄 CONTRACT
                                     </a>
                                 )}
@@ -481,6 +483,7 @@ const DetailedProjInfo = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState(0);
     const [isEditMode, setIsEditMode] = useState(false);
+    const [selectedHydraDoc, setSelectedHydraDoc] = useState(null); // { type: 'POW', manifest: {...} }
 
     // History State
     const [history, setHistory] = useState([]);
@@ -555,8 +558,8 @@ const DetailedProjInfo = () => {
         if (data.startsWith('data:') || data.startsWith('http')) {
             return data;
         }
-        if (data.startsWith('/uploads/')) {
-            return data; // Already an absolute path from root — do not prepend BASE_URL
+        if (data.startsWith('/uploads/') || data.startsWith('/api/asset/')) {
+            return resolveAssetUrl(data);
         }
 
         // 5. Otherwise assume it's raw base64 and wrap it
@@ -679,8 +682,15 @@ const DetailedProjInfo = () => {
                             region: data.region,
                             division: data.division,
                             pow_pdf: data.pow_pdf,
+                            pow_size: data.pow_size,
                             dupa_pdf: data.dupa_pdf,
+                            dupa_size: data.dupa_size,
                             contract_pdf: data.contract_pdf,
+                            contract_size: data.contract_size,
+                            moa_pdf: data.moa_pdf,
+                            moa_size: data.moa_size,
+                            rta_pdf: data.rta_pdf,
+                            rta_size: data.rta_size,
                             latitude: data.latitude,
                             longitude: data.longitude,
                             lguData: {
@@ -1023,16 +1033,27 @@ const DetailedProjInfo = () => {
                 body: fd,
             });
 
-            if (!res.ok) {
-                const errBody = await res.json().catch(() => ({}));
-                throw new Error(errBody.error || `HTTP ${res.status}`);
+            const resText = await res.text();
+            let resData;
+            try {
+                resData = JSON.parse(resText);
+            } catch (e) {
+                throw new Error(`Server returned invalid response (${res.status})`);
             }
 
-            // File will appear at the predictable IPC-named path once background compression finishes
-            const expectedPath = `/uploads/project_docs/${project.ipc}_${key}.pdf`;
-            console.log(`✅ [DOC UPLOAD] Queued. Expected path: ${expectedPath}`);
+            if (!res.ok) {
+                throw new Error(resData.error || `HTTP ${res.status}`);
+            }
 
-            setProject(prev => ({ ...prev, [`${key.toLowerCase()}_pdf`]: expectedPath }));
+            // Use the actual path returned by the API (binary storage: /api/asset/{id})
+            const actualPath = resData.filePath || resData.data?.filePath || `/uploads/project_docs/${project.ipc}_${key}.pdf`;
+            console.log(`✅ [DOC UPLOAD] Stored. Path: ${actualPath}`);
+
+            setProject(prev => ({
+                ...prev,
+                [`${key.toLowerCase()}_pdf`]: actualPath,
+                ...(resData.data?.file_size ? { [`${key.toLowerCase()}_size`]: resData.data.file_size } : {}),
+            }));
             setDocStatus(prev => ({ ...prev, [key]: 'success' }));
             // Reset to idle after 3 s so the user can re-upload
             setTimeout(() => setDocStatus(prev => ({ ...prev, [key]: 'idle' })), 3000);
@@ -1188,7 +1209,9 @@ const DetailedProjInfo = () => {
                                     Most Recent Update
                                 </div>
                                 <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-black/80 via-black/20 to-transparent">
-                                    <p className="text-[10px] font-black text-white/70 uppercase tracking-[0.2em] mb-1">Captured Date</p>
+                                    <p className="text-[10px] font-black text-white/70 uppercase tracking-[0.2em] mb-1">
+                                        Captured Date {featured.file_size ? `• ${formatFileSize(featured.file_size)}` : ''}
+                                    </p>
                                     <p className="text-lg font-bold text-white">
                                         {new Date(featured.uploaded_at || featured.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                                     </p>
@@ -1241,6 +1264,14 @@ const DetailedProjInfo = () => {
         );
     };
 
+    const formatFileSize = (bytes) => {
+        if (!bytes) return "";
+        if (bytes < 1024) return bytes + " B";
+        const kb = bytes / 1024;
+        if (kb < 1024) return kb.toFixed(1) + " KB";
+        const mb = kb / 1024;
+        return mb.toFixed(2) + " MB";
+    };
     const renderDocuments = () => (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
             <SectionHeader title="Essential Documents" />
@@ -1249,6 +1280,10 @@ const DetailedProjInfo = () => {
                     const docKey = `${key.toLowerCase()}_pdf`;
                     const hasExisting = !!project[docKey];
                     const status = docStatus[key]; // 'idle' | 'uploading' | 'success' | 'error'
+
+                    // Check if Hydra Manifest exists for this document type
+                    const manifestKey = key.toLowerCase();
+                    const hydraManifest = project.hydra_manifest?.[manifestKey];
 
                     return (
                         <div key={key} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 gap-4 group">
@@ -1265,8 +1300,13 @@ const DetailedProjInfo = () => {
                                         : <LuFileText size={20} />
                                     }
                                 </div>
-                                <div>
-                                    <p className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{key}</p>
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{key}</p>
+                                        {hydraManifest && (
+                                            <span className="bg-emerald-100 text-emerald-700 text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter">Hydra Optimized</span>
+                                        )}
+                                    </div>
                                     <p className={`text-[8px] font-bold mt-0.5 ${
                                         status === 'uploading' ? 'text-blue-400' :
                                         status === 'success'   ? 'text-emerald-500' :
@@ -1277,7 +1317,7 @@ const DetailedProjInfo = () => {
                                         {status === 'uploading' ? 'Uploading...' :
                                          status === 'success'   ? '✅ Saved — compressing in background' :
                                          status === 'error'     ? '❌ Upload failed' :
-                                         hasExisting           ? 'On file' :
+                                         hasExisting           ? `On file ${project[`${key.toLowerCase()}_size`] ? `[${formatFileSize(project[`${key.toLowerCase()}_size`])}]` : ''}` :
                                                                  'Not uploaded'}
                                     </p>
                                 </div>
@@ -1286,13 +1326,24 @@ const DetailedProjInfo = () => {
                             {/* Right: actions */}
                             <div className="flex items-center gap-2 w-full sm:w-auto">
                                 {hasExisting && status !== 'uploading' && (
-                                    <a
-                                        href={project[docKey].startsWith('/uploads/') ? `${API_BASE}${project[docKey]}` : project[docKey]}
-                                        download={`${project.schoolName}_${key}.pdf`}
-                                        className="flex-1 sm:flex-none text-center bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-[9px] font-black uppercase hover:bg-slate-200 transition-all active:scale-95"
-                                    >
-                                        Download
-                                    </a>
+                                    <>
+                                        {hydraManifest && (
+                                            <button
+                                                onClick={() => setSelectedHydraDoc({ type: key, manifest: hydraManifest })}
+                                                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-emerald-600 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase hover:bg-emerald-700 transition-all active:scale-95 shadow-lg shadow-emerald-100"
+                                            >
+                                                <LuEye size={12} />
+                                                View (Fast)
+                                            </button>
+                                        )}
+                                        <a
+                                            href={resolveAssetUrl(project[docKey], { download: true })}
+                                            download={`${project.schoolName}_${key}.pdf`}
+                                            className="flex-1 sm:flex-none text-center bg-slate-100 text-slate-600 px-4 py-2 rounded-xl text-[9px] font-black uppercase hover:bg-slate-200 transition-all active:scale-95"
+                                        >
+                                            Download
+                                        </a>
+                                    </>
                                 )}
 
                                 {/* Upload / Replace — always available, not gated by isEditMode */}
@@ -1542,6 +1593,22 @@ const DetailedProjInfo = () => {
                 )}
             </div>
         </PageTransition>
+
+        {selectedHydraDoc && (
+            <HydraDocViewer 
+                manifest={selectedHydraDoc.manifest}
+                title={`${selectedHydraDoc.type}: ${project.schoolName}`}
+                onClose={() => setSelectedHydraDoc(null)}
+                onDownload={() => {
+                    const docKey = `${selectedHydraDoc.type.toLowerCase()}_pdf`;
+                    const url = resolveAssetUrl(project[docKey], { download: true });
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `${project.schoolName}_${selectedHydraDoc.type}.pdf`;
+                    link.click();
+                }}
+            />
+        )}
 
 
         <ProjectEditModal

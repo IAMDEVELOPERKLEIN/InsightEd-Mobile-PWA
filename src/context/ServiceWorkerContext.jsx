@@ -63,21 +63,24 @@ export const ServiceWorkerProvider = ({ children }) => {
                     });
 
 
-                    // 4. Check for updates on Window Focus / Visibility Change
-                    // DEACTIVATED: Overly aggressive in dev mode, hourly check is enough.
-                    /*
+                    // 4. Check for updates on Window Focus / Visibility Change (AGGRESSIVE MODE)
                     document.addEventListener('visibilitychange', () => {
                         if (document.visibilityState === 'visible') {
-                            console.log('App visible, checking for SW updates...');
+                            console.log('[SW] App visible, checking for updates...');
                             reg.update();
                         }
                     });
 
                     window.addEventListener('focus', () => {
-                        console.log('Window focused, checking for SW updates...');
+                        console.log('[SW] Window focused, checking for updates...');
                         reg.update();
                     });
-                    */
+
+                    // 5. Check if ?forceUpdate=1 is in URL
+                    if (window.location.search.includes('forceUpdate=1')) {
+                        console.warn('[SW] Force Update triggered via URL.');
+                        hardReset();
+                    }
                 } catch (err) {
                     console.error('PWA Registration Failed:', err);
                 }
@@ -141,14 +144,17 @@ export const ServiceWorkerProvider = ({ children }) => {
         try {
             console.log('Manual update check triggered...');
             await registration.update();
+            console.log('registration.update() completed.');
 
             // Check immediately after update() if there's a new worker installing or waiting
+            console.log('SW Status - Installing:', !!registration.installing, 'Waiting:', !!registration.waiting, 'Active:', !!registration.active);
+            
             if (registration.installing || registration.waiting) {
-                console.log('Update found!');
+                console.log('Update found in installing/waiting state!');
                 return true;
             }
 
-            console.log('No update found.');
+            console.log('No update found on network (sw.js byte-comparison matched).');
             return false;
         } catch (error) {
             console.error('Error checking for updates:', error);

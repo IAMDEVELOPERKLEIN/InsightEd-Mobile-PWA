@@ -329,72 +329,16 @@ const UserProfile = () => {
 
     const handleCheckUpdate = async () => {
         setCheckingForUpdate(true);
-        // Simulate a small delay for UX so the user sees the "Checking..." state
         setTimeout(async () => {
             const updateFound = await checkForUpdates();
             setCheckingForUpdate(false);
-
-            // Always show the modal - the render function will decide what to show based on isUpdateAvailable
-            // If updateFound is true, isUpdateAvailable should eventually become true via context listeners
-            setShowUpdateModal(true);
+            
+            // If no update was found, show a toast or alert. 
+            // If it WAS found, the global ForceUpdateModal in App.jsx will trigger automatically via isUpdateAvailable context
+            if (!updateFound) {
+                alert("You're up to date! You are using the latest version of InsightEd.");
+            }
         }, 1500);
-    };
-
-    const renderUpdateModal = () => {
-        if (!showUpdateModal) return null;
-
-        // Determine content based on whether an update is waiting
-        // We use isUpdateAvailable from context which should be true if an update is waiting/installed
-        const updateReady = isUpdateAvailable;
-
-        return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in duration-200">
-                <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-xs shadow-2xl transform transition-all scale-100">
-                    <div className="text-center">
-                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${updateReady ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-blue-50 text-[#004A99] dark:bg-blue-900/30 dark:text-blue-300'}`}>
-                            {updateReady ? <FiDownloadCloud size={32} /> : <FiCheckCircle size={32} />}
-                        </div>
-
-                        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">
-                            {updateReady ? "Update Available!" : "You're up to date!"}
-                        </h3>
-
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 w-full">
-                            {updateReady
-                                ? "A new version of InsightEd is ready. Reload to apply changes."
-                                : "You are currently using the latest version of InsightEd."}
-                        </p>
-
-                        {updateReady ? (
-                            <div className="flex flex-col gap-2">
-                                <button
-                                    onClick={() => {
-                                        updateApp();
-                                        setShowUpdateModal(false);
-                                    }}
-                                    className="w-full py-2.5 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors shadow-lg shadow-green-900/20"
-                                >
-                                    Update Now
-                                </button>
-                                <button
-                                    onClick={() => setShowUpdateModal(false)}
-                                    className="w-full py-2.5 bg-transparent text-gray-500 rounded-xl font-medium hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
-                                >
-                                    Later
-                                </button>
-                            </div>
-                        ) : (
-                            <button
-                                onClick={() => setShowUpdateModal(false)}
-                                className="w-full py-2.5 bg-[#004A99] text-white rounded-xl font-semibold hover:bg-blue-800 transition-colors"
-                            >
-                                Awesome!
-                            </button>
-                        )}
-                    </div>
-                </div>
-            </div>
-        );
     };
 
 
@@ -975,8 +919,6 @@ const UserProfile = () => {
                     {activeTab === 'faq' && renderFAQ()}
                     {activeTab === 'feedback' && renderFeedback()}
                     {activeTab === 'about' && renderAbout()}
-
-                    {renderUpdateModal()}
 
                 </div>
 

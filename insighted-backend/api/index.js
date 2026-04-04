@@ -818,6 +818,22 @@ const initOtpTable = async () => {
         console.error('❌ Failed to migrate VO and Realignment tables:', migErr.message);
       }
 
+      // --- MIGRATION: UNIT 1 PERSISTENCE COLUMNS ---
+      try {
+        await client.query(`
+          ALTER TABLE ph_schools 
+          ADD COLUMN IF NOT EXISTS local_file_path TEXT,
+          ADD COLUMN IF NOT EXISTS local_file_name TEXT,
+          ADD COLUMN IF NOT EXISTS local_file_size BIGINT,
+          ADD COLUMN IF NOT EXISTS head_position_title TEXT,
+          ADD COLUMN IF NOT EXISTS head_sex TEXT,
+          ADD COLUMN IF NOT EXISTS head_date_hired TIMESTAMP;
+        `);
+        console.log('✅ Checked/Added Unit 1 Persistence columns to ph_schools');
+      } catch (migErr) {
+        console.error('❌ Failed to migrate Unit 1 columns:', migErr.message);
+      }
+
     } finally {
       client.release();
     }
@@ -1212,7 +1228,7 @@ app.get('/api/schools/:schoolId/health-score', async (req, res) => {
         (CASE WHEN sp.shift_kinder IS NOT NULL THEN true ELSE false END) as shifting_status,
         (CASE WHEN sp.teach_kinder > 0 THEN true ELSE false END) as personnel_status,
         (CASE WHEN sp.spec_math_major > 0 OR sp.spec_guidance > 0 THEN true ELSE false END) as specialization_status,
-        (CASE WHEN sp.res_water_source IS NOT NULL OR sp.res_toilets_male > 0 THEN true ELSE false END) as resources_status,
+        (CASE WHEN sp.res_water_source IS NOT NULL OR sp.res_toilets_male IS NOT NULL THEN true ELSE false END) as resources_status,
         (CASE WHEN sp.stat_ip IS NOT NULL OR sp.stat_displaced IS NOT NULL THEN true ELSE false END) as learner_stats_status,
         (CASE WHEN sp.build_classrooms_total IS NOT NULL THEN true ELSE false END) as facilities_status
       FROM school_profiles sp
@@ -1942,10 +1958,55 @@ app.post('/api/update-offering', async (req, res) => {
   }
 });
 
+/**
+ * 🖼️ processAndSaveImage
+ * Helper to save a base64 image (or buffer) to disk and return the path.
+ */
+async function processAndSaveImage(imageData, project_id, ipc, uploadedBy) {
+  if (!imageData) return null;
+  
+  const uploadDir = path.resolve(__dirname, '..', '..', 'uploads');
+  if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
-// --- 8. POST: Save New Project (Updated for Images & Transactions) ---
-// --- 8. POST: Save New Project (Updated for Images, Transactions & IPC) ---
-app.post('/api/save-project', async (req, res) => {
+  let buffer;
+  let extension = 'jpg'; // Default
+
+  if (imageData.startsWith('data:image/')) {
+    const matches = imageData.match(/^data:image\/([A-Za-z-+\/]+);base64,(.+)$/);
+    if (matches && matches.length === 3) {
+      extension = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+      buffer = Buffer.from(matches[2], 'base64');
+    } else {
+      buffer = Buffer.from(imageData.split(',')[1], 'base64');
+    }
+  } else if (imageData.length > 500) { // Likely raw base64
+    buffer = Buffer.from(imageData, 'base64');
+  } else if (imageData.startsWith('/uploads/')) {
+    return imageData; // Already a path
+  } else {
+    return imageData; // Unknown format, return as is
+  }
+
+  const fileName = `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${extension}`;
+  const filePath = path.join(uploadDir, fileName);
+  fs.writeFileSync(filePath, buffer);
+  
+  const relativePath = `/uploads/${fileName}`;
+  
+  // Persistence logic (if requested by the caller)
+  if (project_id) {
+    const query = `
+      INSERT INTO "engineer_image" (project_id, image_data, uploaded_by, ipc) 
+      VALUES ($1, $2, $3, $4) 
+      RETURNING id;
+    `;
+    await pool.query(query, [project_id, relativePath, uploadedBy, ipc || null]);
+  }
+
+  return relativePath;
+}
+
+app.post('/api/create-project', async (req, res) => {
   const data = req.body;
 
   if (!data.schoolName || !data.projectName || !data.schoolId) {
@@ -1974,7 +2035,6 @@ app.post('/api/save-project', async (req, res) => {
     }
     const newIpc = `INF-${year}-${String(nextSeq).padStart(5, '0')}`;
 
-    // 2. Prepare Project Data
     // 2. Prepare Project Data
     const engineerName = await getUserFullName(data.uid);
     const resolvedEngineerName = engineerName || data.modifiedBy || 'Engineer';
@@ -2041,15 +2101,10 @@ app.post('/api/save-project', async (req, res) => {
     const newProject = projectResult.rows[0];
     const newProjectId = newProject.project_id;
 
-    // 4. Insert Images (If they exist in the payload)
+    // 4. Insert Images via processAndSaveImage
     if (data.images && Array.isArray(data.images) && data.images.length > 0) {
-      const imageQuery = `
-        INSERT INTO "engineer_image" (project_id, image_data, uploaded_by)
-        VALUES ($1, $2, $3)
-      `;
-
-      for (const imgBase64 of data.images) {
-        await client.query(imageQuery, [newProjectId, imgBase64, data.uid]);
+      for (const imgData of data.images) {
+        await processAndSaveImage(imgData, newProjectId, newIpc, data.uid);
       }
     }
 
@@ -2152,15 +2207,18 @@ app.put('/api/update-project/:id', upload.fields([
     // Handle uploaded PDF files (multipart/form-data)
     if (req.files) {
       if (req.files['pow_pdf']) {
-        pow_pdf = fs.readFileSync(req.files['pow_pdf'][0].path, { encoding: 'base64' });
+        const buffer = fs.readFileSync(req.files['pow_pdf'][0].path);
+        pow_pdf = await compressDocument(buffer, 'POW');
         pow_filename = req.files['pow_pdf'][0].originalname;
       }
       if (req.files['dupa_pdf']) {
-        dupa_pdf = fs.readFileSync(req.files['dupa_pdf'][0].path, { encoding: 'base64' });
+        const buffer = fs.readFileSync(req.files['dupa_pdf'][0].path);
+        dupa_pdf = await compressDocument(buffer, 'DUPA');
         dupa_filename = req.files['dupa_pdf'][0].originalname;
       }
       if (req.files['contract_pdf']) {
-        contract_pdf = fs.readFileSync(req.files['contract_pdf'][0].path, { encoding: 'base64' });
+        const buffer = fs.readFileSync(req.files['contract_pdf'][0].path);
+        contract_pdf = await compressDocument(buffer, 'CONTRACT');
         contract_filename = req.files['contract_pdf'][0].originalname;
       }
     }
@@ -2339,6 +2397,72 @@ app.put('/api/update-project/:id', upload.fields([
 const VALID_DOC_TYPES = ['POW', 'DUPA', 'CONTRACT', 'RTA', 'MOA'];
 const DOC_COLUMN_MAP = { POW: 'pow_pdf', DUPA: 'dupa_pdf', CONTRACT: 'contract_pdf', RTA: 'rta_pdf', MOA: 'moa_pdf' };
 
+/**
+ * 🗜️ compressDocument
+ * Core logic to compress a PDF buffer using the python script.
+ * Returns either a relative path (success) or a base64 data URI (failure).
+ */
+async function compressDocument(fileBuffer, type) {
+  const typeUpper = type?.toUpperCase();
+  const docsDir = path.resolve(__dirname, '..', '..', 'uploads', 'project_docs');
+  if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir, { recursive: true });
+
+  const outputFilename = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.pdf`;
+  const outputPath = path.join(docsDir, outputFilename);
+  const tempInput = path.join(docsDir, `tmp_doc_${Date.now()}.pdf`);
+  let filePath = null;
+
+  try {
+    fs.writeFileSync(tempInput, fileBuffer);
+    const scriptPath = path.resolve(__dirname, '..', '..', 'compress_pdf.py');
+    const cmd = (py) => `"${py}" "${scriptPath}" "${tempInput}" "${outputPath}"`;
+    
+    let compressionSuccess = false;
+    for (const py of ['python', 'py', 'python3']) {
+      try {
+        await execAsync(cmd(py));
+        compressionSuccess = true;
+        break;
+      } catch (err) { /* Next alias */ }
+    }
+
+    if (compressionSuccess && fs.existsSync(outputPath)) {
+      filePath = `/uploads/project_docs/${outputFilename}`;
+    } else {
+      throw new Error("All compression methods failed.");
+    }
+  } catch (err) {
+    console.warn(`⚠️ [COMPRESSION] Failed for ${typeUpper}:`, err.message);
+    filePath = `data:application/pdf;base64,${fileBuffer.toString('base64')}`;
+    if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+  } finally {
+    if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
+  }
+  return filePath;
+}
+
+/**
+ * 📦 processAndCompressDocument
+ * Wrapper that compresses and then UPSERTS into engineer_documents.
+ */
+async function processAndCompressDocument(fileBuffer, type, project_id, ipc, uid) {
+  const filePath = await compressDocument(fileBuffer, type);
+  const column = DOC_COLUMN_MAP[type?.toUpperCase()];
+  
+  if (column) {
+    await pool.query(`
+      INSERT INTO engineer_documents (project_id, ipc, ${column}, uploader_id)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (project_id) DO UPDATE SET
+        ${column} = EXCLUDED.${column},
+        uploader_id = EXCLUDED.uploader_id
+    `, [parseInt(project_id), ipc || null, filePath, uid || null]);
+    
+    console.log(`✅ [DOC] ${type} saved/updated for Project ${project_id}`);
+  }
+  return filePath;
+}
+
 app.post('/api/upload-project-document', (req, res) => {
   const bb = busboy({ headers: req.headers });
   const fields = {};
@@ -2374,42 +2498,8 @@ app.post('/api/upload-project-document', (req, res) => {
       res.json({ success: true, message: `${typeUpper} received. Compressing in background…` });
 
       // Background: compress + UPSERT into engineer_documents
-      (async () => {
-        const docsDir = path.resolve(__dirname, '..', '..', 'uploads', 'project_docs');
-        if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir, { recursive: true });
-
-        const outputFilename = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.pdf`;
-        const outputPath = path.join(docsDir, outputFilename);
-        const tempInput = path.join(docsDir, `tmp_doc_${Date.now()}.pdf`);
-        let filePath = null;
-
-        try {
-          fs.writeFileSync(tempInput, fileBuffer);
-          const scriptPath = path.resolve(__dirname, '..', '..', 'compress_pdf.py');
-          const cmd = (py) => `${py} "${scriptPath}" "${tempInput}" "${outputPath}"`;
-          try { await execAsync(cmd('python')); } catch {
-            try { await execAsync(cmd('py')); } catch { await execAsync(cmd('python3')); }
-          }
-          filePath = `/uploads/project_docs/${outputFilename}`;
-        } catch (compressErr) {
-          console.error(`⚠️ Compression failed for ${typeUpper}, storing raw:`, compressErr.message);
-          // Fallback: store as base64 data URL
-          filePath = `data:application/pdf;base64,${fileBuffer.toString('base64')}`;
-          if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-        } finally {
-          if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
-        }
-
-        await pool.query(`
-          INSERT INTO engineer_documents (project_id, ipc, ${column}, uploader_id)
-          VALUES ($1, $2, $3, $4)
-          ON CONFLICT (project_id) DO UPDATE SET
-            ${column} = EXCLUDED.${column},
-            uploader_id = EXCLUDED.uploader_id
-        `, [parseInt(project_id), projectIpc, filePath, uid || null]);
-
-        console.log(`✅ [DOC] ${typeUpper} saved for Project ${project_id}: ${filePath?.slice(0, 60)}`);
-      })().catch(err => console.error('❌ [DOC] Background save error:', err.message));
+      processAndCompressDocument(fileBuffer, typeUpper, project_id, projectIpc, uid)
+        .catch(err => console.error('❌ [DOC] Background save error:', err.message));
 
     } catch (err) {
       if (!res.headersSent) res.status(500).json({ error: 'Internal Server Error', message: err.message });
@@ -2819,7 +2909,10 @@ app.post('/api/upload-image', upload.single('image'), async (req, res) => {
     const fileName = `${Date.now()}-${req.file.originalname}`;
     const newPath = path.join(__dirname, '..', '..', 'uploads', fileName);
     fs.renameSync(req.file.path, newPath);
-    imageData = `/uploads/${fileName}`; // Store the path instead of raw base64
+    imageData = `/uploads/${fileName}`; 
+  } else if (imageData && !imageData.startsWith('/')) {
+    // If sent as base64 in body, use healer to save to disk
+    imageData = await processAndSaveImage(imageData, null, null, uploadedBy);
   }
 
   if (!projectId || !imageData) return res.status(400).json({ error: "Missing required data" });
@@ -2838,7 +2931,7 @@ app.post('/api/upload-image', upload.single('image'), async (req, res) => {
     `;
     const result = await pool.query(query, [projectId, imageData, uploadedBy, category || 'Internal', finalIpc]);
 
-    console.log(`📸 Image Saved: ID ${result.rows[0].id} for Project ${projectId} (${imageData.startsWith('/') ? 'FILE' : 'BASE64'})`);
+    console.log(`📸 [HEALED] Image Saved: ID ${result.rows[0].id} for Project ${projectId} -> ${imageData}`);
     await logActivity(uploadedBy, 'Engineer', 'Engineer', 'UPLOAD', `Project ID: ${projectId}`, `Uploaded image: ${category || 'Internal'}`);
     res.status(201).json({ success: true, imageId: result.rows[0].id, imageUrl: imageData });
   } catch (err) {
@@ -3485,7 +3578,7 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
            (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
         ) = 10 THEN 1 ELSE 0 END) as completed_schools
       FROM school_profiles
@@ -3521,7 +3614,7 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
            (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
         ) = 10 THEN 1 ELSE 0 END) as completed_schools
       FROM school_profiles
@@ -3553,7 +3646,7 @@ app.get('/api/monitoring/schools', async (req, res) => {
       (CASE WHEN sp.shift_kinder IS NOT NULL THEN true ELSE false END) as shifting_status,
       (CASE WHEN sp.teach_kinder > 0 THEN true ELSE false END) as personnel_status,
       (CASE WHEN sp.spec_math_major > 0 OR sp.spec_guidance > 0 THEN true ELSE false END) as specialization_status,
-      (CASE WHEN sp.res_water_source IS NOT NULL OR sp.res_toilets_male > 0 THEN true ELSE false END) as resources_status,
+      (CASE WHEN sp.res_water_source IS NOT NULL OR sp.res_toilets_male IS NOT NULL THEN true ELSE false END) as resources_status,
       (CASE WHEN sp.stat_ip IS NOT NULL OR sp.stat_displaced IS NOT NULL THEN true ELSE false END) as learner_stats_status,
       (CASE WHEN sp.build_classrooms_total IS NOT NULL THEN true ELSE false END) as facilities_status
 
@@ -4176,26 +4269,83 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
   }
 });
 
-// --- 29. POST: Save Unit 1 School Identity Data (Modular Beta) ---
+// --- 29. GET: Fetch School Details by ID (Modular Beta) ---
+app.get('/api/ph_schools/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM ph_schools WHERE school_id = $1', [schoolId]);
+    if (result.rows.length === 0) {
+      return res.json({ exists: false });
+    }
+    res.json({ exists: true, data: result.rows[0] });
+  } catch (err) {
+    console.error("Fetch School Details Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// --- 30. POST: Save Unit 1 School Identity Data (Modular Beta) ---
 app.post('/api/ph_schools/unit1', async (req, res) => {
   const data = req.body;
   try {
     const query = `
       INSERT INTO ph_schools (
-        school_id, iern, school_name, region, division, district, curricular_offering
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        school_id, iern, school_name, region, province, division, district, 
+        municipality, barangay, leg_district, curricular_offering,
+        school_head, contact_number, ownership, ownership_document_type,
+        google_drive_link, google_drive_file_id, google_drive_file_name,
+        google_drive_thumbnail_url, school_type, mother_school_id,
+        extension_mother_school_name, established_month, established_year,
+        head_first_name, head_middle_name, head_last_name, head_sex,
+        head_position_title, head_date_hired, local_file_path, local_file_name, local_file_size,
+        updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, CURRENT_TIMESTAMP
+      )
       ON CONFLICT (school_id) DO UPDATE SET
         iern = EXCLUDED.iern,
         school_name = EXCLUDED.school_name,
         region = EXCLUDED.region,
+        province = EXCLUDED.province,
         division = EXCLUDED.division,
         district = EXCLUDED.district,
+        municipality = EXCLUDED.municipality,
+        barangay = EXCLUDED.barangay,
+        leg_district = EXCLUDED.leg_district,
         curricular_offering = EXCLUDED.curricular_offering,
+        school_head = EXCLUDED.school_head,
+        contact_number = EXCLUDED.contact_number,
+        ownership = EXCLUDED.ownership,
+        ownership_document_type = EXCLUDED.ownership_document_type,
+        google_drive_link = EXCLUDED.google_drive_link,
+        google_drive_file_id = EXCLUDED.google_drive_file_id,
+        google_drive_file_name = EXCLUDED.google_drive_file_name,
+        google_drive_thumbnail_url = EXCLUDED.google_drive_thumbnail_url,
+        school_type = EXCLUDED.school_type,
+        mother_school_id = EXCLUDED.mother_school_id,
+        extension_mother_school_name = EXCLUDED.extension_mother_school_name,
+        established_month = EXCLUDED.established_month,
+        established_year = EXCLUDED.established_year,
+        head_first_name = EXCLUDED.head_first_name,
+        head_middle_name = EXCLUDED.head_middle_name,
+        head_last_name = EXCLUDED.head_last_name,
+        head_sex = EXCLUDED.head_sex,
+        head_position_title = EXCLUDED.head_position_title,
+        head_date_hired = EXCLUDED.head_date_hired,
+        local_file_path = EXCLUDED.local_file_path,
+        local_file_name = EXCLUDED.local_file_name,
+        local_file_size = EXCLUDED.local_file_size,
         updated_at = CURRENT_TIMESTAMP;
     `;
     const values = [
-      data.school_id, data.iern || null, data.school_name,
-      data.region, data.division, data.district, data.curricular_offering
+      data.school_id, data.iern || null, data.school_name, data.region, data.province, data.division, data.district,
+      data.municipality, data.barangay, data.leg_district, data.curricular_offering,
+      valueOrNull(data.school_head), valueOrNull(data.contact_number), valueOrNull(data.ownership), valueOrNull(data.ownership_document_type),
+      valueOrNull(data.google_drive_link), valueOrNull(data.google_drive_file_id), valueOrNull(data.google_drive_file_name),
+      valueOrNull(data.google_drive_thumbnail_url), valueOrNull(data.school_type), valueOrNull(data.mother_school_id),
+      valueOrNull(data.extension_mother_school_name), valueOrNull(data.established_month), valueOrNull(data.established_year),
+      valueOrNull(data.head_first_name), valueOrNull(data.head_middle_name), valueOrNull(data.head_last_name), valueOrNull(data.head_sex),
+      valueOrNull(data.head_position_title), valueOrNull(data.head_date_hired), valueOrNull(data.local_file_path), valueOrNull(data.local_file_name), parseIntOrNull(data.local_file_size)
     ];
     await pool.query(query, values);
 
@@ -4435,35 +4585,16 @@ app.post('/api/upload/multipart-finalize', async (req, res) => {
     }
     const finalBuffer = Buffer.concat(chunkBuffers);
 
-    // Attempt compression via compress_pdf.py (96 DPI)
+    // Attempt compression via centralized helper
     const isPdf = (contentType || '').includes('pdf') || finalBuffer.slice(0, 4).toString() === '%PDF';
     if (isPdf) {
-      // compress_pdf.py lives two levels up: insighted-backend/api/ → insighted-backend/ → root/
-      const scriptPath = path.resolve(__dirname, '..', '..', 'compress_pdf.py');
-      const docsDir = path.resolve(__dirname, '..', '..', 'uploads', 'project_docs');
-      if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir, { recursive: true });
-
-      const outputFilename = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.pdf`;
-      const outputPath = path.join(docsDir, outputFilename);
-      tempInput = path.join(docsDir, `tmp_${fileUUID}.pdf`);
-      fs.writeFileSync(tempInput, finalBuffer);
-
-      const cmd = (py) => `${py} "${scriptPath}" "${tempInput}" "${outputPath}"`;
-      try {
-        try { await execAsync(cmd('python')); } catch {
-          try { await execAsync(cmd('py')); } catch { await execAsync(cmd('python3')); }
-        }
-        console.log(`✅ Chunked PDF compressed to 96 DPI: ${outputFilename}`);
-        fs.rmSync(chunkDir, { recursive: true, force: true });
-        return res.status(200).json({ success: true, url: `/uploads/project_docs/${outputFilename}` });
-      } catch (compressErr) {
-        console.error('⚠️ Compression failed, falling back to base64:', compressErr.message);
-        if (outputPath && fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-      }
+      const filePath = await compressDocument(finalBuffer, 'CHUNKED_MULTIPART');
+      fs.rmSync(chunkDir, { recursive: true, force: true });
+      return res.status(200).json({ success: true, url: filePath });
     }
 
-    // Fallback: return raw base64 data URL
-    const dataUrl = `data:${contentType || 'application/pdf'};base64,${finalBuffer.toString('base64')}`;
+    // Default: Fallback to base64 ONLY if not a PDF (e.g. some other small binary)
+    const dataUrl = `data:${contentType || 'application/octet-stream'};base64,${finalBuffer.toString('base64')}`;
     fs.rmSync(chunkDir, { recursive: true, force: true });
     res.status(200).json({ success: true, url: dataUrl });
   } catch (err) {
@@ -4494,6 +4625,11 @@ if (isMainModule || process.env.START_SERVER === 'true') {
     console.log(`🚀 Time: ${new Date().toLocaleString()}`);
     console.log(`================================================\n`);
   });
+
+  // Hardened timeouts for large PDF uploads (10 minutes)
+  server.timeout = 600000;
+  server.keepAliveTimeout = 610000;
+  server.headersTimeout = 620000;
 
   server.on('error', (e) => {
     if (e.code === 'EADDRINUSE') {

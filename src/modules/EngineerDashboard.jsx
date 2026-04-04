@@ -392,39 +392,6 @@ const EngineerDashboard = () => {
         <div className="px-5 -mt-16 relative z-10 space-y-6">
           <StatsOverview projects={projects} />
 
-
-
-          {/* --- NEW UPDATE MODAL --- */}
-          {isUpdateAvailable && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
-              <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-5 relative overflow-hidden border border-emerald-200 dark:border-emerald-900/40">
-                {/* Glowing Background Effect */}
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-teal-500"></div>
-                <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl"></div>
-
-                <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mx-auto text-emerald-500 mb-2 shadow-sm animate-pulse">
-                  <span className="text-3xl">🔄</span>
-                </div>
-
-                <div className="text-center space-y-2">
-                  <h2 className="text-xl font-bold text-slate-800 dark:text-white leading-tight">
-                    Update Available
-                  </h2>
-                  <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                    A new version of InsightEd is ready. <br />Please reload to apply the latest changes.
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => updateApp()}
-                  className="w-full py-3.5 bg-[#004A99] hover:bg-blue-800 text-white font-bold rounded-xl shadow-lg shadow-blue-900/20 hover:shadow-xl hover:scale-[1.02] transition-all active:scale-95"
-                >
-                  Reload Now
-                </button>
-              </div>
-            </div>
-          )}
-
           <div className="w-full">
             <Swiper
               modules={[Pagination, Autoplay]}

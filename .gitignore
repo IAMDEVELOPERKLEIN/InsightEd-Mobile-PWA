@@ -42,3 +42,9 @@ scripts
 
 # Ignore uploads directory
 uploads/
+
+# Temporary audit and setup scripts
+tmp/
+production_debug_audit.cjs
+setup-ssh-key.*
+.claude/settings.local.json

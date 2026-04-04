@@ -475,7 +475,8 @@ const runMigrations = async (client, dbLabel) => {
             `);
             await client.query(`
                 ALTER TABLE engineer_image 
-                ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Internal';
+                ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Internal',
+                ADD COLUMN IF NOT EXISTS file_size BIGINT;
             `);
             console.log(`✅ [${dbLabel}] Engineer Image Schema Updated`);
         } catch (imgErr) {
@@ -509,7 +510,14 @@ const runMigrations = async (client, dbLabel) => {
                 ADD COLUMN IF NOT EXISTS contract_filename TEXT,
                 ADD COLUMN IF NOT EXISTS moa_pdf TEXT,
                 ADD COLUMN IF NOT EXISTS rta_pdf TEXT,
-                ADD COLUMN IF NOT EXISTS uploader_id TEXT;
+                ADD COLUMN IF NOT EXISTS uploader_id TEXT,
+                ADD COLUMN IF NOT EXISTS binary_id UUID,
+                ADD COLUMN IF NOT EXISTS pow_size BIGINT,
+                ADD COLUMN IF NOT EXISTS dupa_size BIGINT,
+                ADD COLUMN IF NOT EXISTS contract_size BIGINT,
+                ADD COLUMN IF NOT EXISTS moa_size BIGINT,
+                ADD COLUMN IF NOT EXISTS rta_size BIGINT,
+                ADD COLUMN IF NOT EXISTS hydra_manifest JSONB;
             `);
             console.log(`✅ [${dbLabel}] Engineer Documents Table Ready`);
         } catch (docsErr) {
@@ -1260,11 +1268,55 @@ const runMigrations = async (client, dbLabel) => {
                 file_name TEXT,
                 doc_type TEXT,
                 status TEXT DEFAULT 'pending', -- pending, optimized
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                CONSTRAINT fk_school_ownership_iern FOREIGN KEY (iern) REFERENCES ph_schools(iern) ON DELETE CASCADE
+                binary_id UUID,
+                file_size BIGINT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log(`✅ [${dbLabel}] School Ownership Documents Table Initialized`);
+
+        // Idempotent column additions
+        await client.query(`ALTER TABLE school_ownership_docs ADD COLUMN IF NOT EXISTS binary_id UUID;`).catch(() => {});
+        await client.query(`ALTER TABLE school_ownership_docs ADD COLUMN IF NOT EXISTS file_size BIGINT;`).catch(() => {});
+        await client.query(`ALTER TABLE school_ownership_docs ADD COLUMN IF NOT EXISTS hydra_manifest JSONB;`).catch(() => {});
+
+        // Data Healing: Cleanup orphans to allow FK creation
+        await client.query("DELETE FROM school_ownership_docs WHERE iern NOT IN (SELECT iern FROM ph_schools)");
+
+        // Idempotent Unique Constraint Enforcement (HAWKEYE Protocol)
+        // Step 1: Deduplicate — keep only the latest row per IERN before applying constraint
+        await client.query(`
+            DELETE FROM school_ownership_docs WHERE id NOT IN (
+                SELECT id FROM (
+                    SELECT id, ROW_NUMBER() OVER (PARTITION BY iern ORDER BY created_at DESC) as rn
+                    FROM school_ownership_docs WHERE iern IS NOT NULL
+                ) s WHERE s.rn = 1
+            )
+        `).catch(e => console.warn(`⚠️ [${dbLabel}] school_ownership_docs dedup skipped:`, e.message));
+
+        // Step 2: Apply unique constraint idempotently
+        await client.query(`
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'school_ownership_docs_iern_unique') THEN
+                    ALTER TABLE school_ownership_docs ADD CONSTRAINT school_ownership_docs_iern_unique UNIQUE (iern);
+                END IF;
+            END $$;
+        `);
+
+        // Idempotent Foreign Key Enforcement
+        await client.query(`
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_school_ownership_iern') THEN
+                    ALTER TABLE school_ownership_docs
+                    ADD CONSTRAINT fk_school_ownership_iern
+                    FOREIGN KEY (iern) REFERENCES ph_schools(iern)
+                    ON DELETE CASCADE;
+                END IF;
+            END $$;
+        `);
+
+        console.log(`✅ [${dbLabel}] School Ownership Documents Table Initialized & Healed`);
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to init school_ownership_docs table:`, migErr.message);
     }
@@ -1329,6 +1381,40 @@ const runMigrations = async (client, dbLabel) => {
         console.log(`✅ [${dbLabel}] IPC Indices and Backfill Complete`);
     } catch (ipcErr) {
         console.error(`❌ [${dbLabel}] IPC Migration Failed:`, ipcErr.message);
+    }
+
+    // --- UNIFIED BINARY STORAGE ---
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS unified_binaries (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                hash TEXT NOT NULL,
+                content BYTEA NOT NULL,
+                mime_type TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // TOAST hint: store BYTEA chunks externally to keep main table indices snappy
+        await client.query(`
+            ALTER TABLE unified_binaries ALTER COLUMN content SET STORAGE EXTERNAL;
+        `);
+
+        // O(log n) deduplication lookups
+        await client.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_unified_binaries_hash ON unified_binaries(hash);
+        `);
+
+        // Add binary_id reference column to engineer_image (nullable for backward compat)
+        await client.query(`ALTER TABLE engineer_image ADD COLUMN IF NOT EXISTS binary_id UUID REFERENCES unified_binaries(id) ON DELETE SET NULL;`);
+        
+        // Ensure LGU projects also support Hydra
+        await client.query(`ALTER TABLE lgu_projects ADD COLUMN IF NOT EXISTS hydra_manifest JSONB;`).catch(() => {});
+
+        console.log(`✅ [${dbLabel}] Unified Binaries Table & Indices Initialized`);
+    } catch (binErr) {
+        console.error(`❌ [${dbLabel}] Unified Binaries Migration Failed:`, binErr.message);
     }
 
 };
