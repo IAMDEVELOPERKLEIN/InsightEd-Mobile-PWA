@@ -87,7 +87,6 @@ const BottomNav = ({ userRole: propRole }) => {
         'Regional Office': [
             { label: 'Home', path: '/monitoring-dashboard', icon: TbHomeEdit },
             { label: 'Schools', path: '/school-management', icon: TbSchool },
-            { label: 'Insights', path: '/monitoring-dashboard', state: { activeTab: 'insights' }, icon: TbChartBar },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Regional Engineer': [
@@ -97,7 +96,6 @@ const BottomNav = ({ userRole: propRole }) => {
         'School Division Office': [
             { label: 'Home', path: '/monitoring-dashboard', icon: TbHomeEdit },
             { label: 'Schools', path: '/school-management', icon: TbSchool },
-            { label: 'Insights', path: '/monitoring-dashboard', state: { activeTab: 'insights' }, icon: TbChartBar },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Central Office': [

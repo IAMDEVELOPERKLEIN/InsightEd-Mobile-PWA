@@ -514,6 +514,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                     teacher_id: "",
                     condition: isBuildingCondemned ? buildingFormData.status : "Good Condition",
                     seats: isBuildingCondemned ? "0" : "",
+                    is_in_use: true,
                 });
             }
         }
@@ -858,7 +859,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             spaces,
             hasRepair
         };
-        await saveUnitDraft(8, schoolId, draftData);
+        await saveUnitDraft(7, schoolId, draftData);
         navigate("/modular-dashboard");
     };
 
@@ -1637,7 +1638,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                     const isBuildingCondemned = building?.status === "For Condemnation" || building?.status === "Condemned";
 
                                     return (
-                                        <div key={room.id} className={`bg-white p-6 rounded-3xl shadow-sm border-2 ${isDuplicate ? 'border-rose-200 shadow-rose-50' : isBuildingCondemned ? 'border-amber-200 bg-amber-50/20 shadow-amber-50' : 'border-gray-100'}`}>
+                                        <div key={room.id} className={`bg-white p-6 rounded-3xl shadow-sm border-2 ${isDuplicate ? 'border-rose-200 shadow-rose-50' : isBuildingCondemned ? 'border-amber-200 bg-amber-50/20 shadow-amber-50' : room.is_in_use === false ? 'border-slate-100 opacity-60 bg-slate-50/10' : 'border-gray-100'}`}>
                                             <div className="flex justify-between items-start mb-4">
                                                 <div className="flex-1 mr-4">
                                                     <input
@@ -1792,6 +1793,28 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                     />
                                                 </div>
                                             )}
+                                            
+                                            {/* In Use / Not Used Toggle */}
+                                            <div className="md:col-span-2 pt-4 border-t-2 border-dashed border-gray-100 flex items-center justify-between mt-2">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg shadow-sm ${room.is_in_use !== false ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'}`}>
+                                                        {room.is_in_use !== false ? '✅' : '🚫'}
+                                                    </div>
+                                                    <div>
+                                                        <p className={`font-black text-[11px] uppercase tracking-wider ${room.is_in_use !== false ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                                            {room.is_in_use !== false ? 'Currently In Use' : 'Not Currently In Use'}
+                                                        </p>
+                                                        <p className="text-[9px] font-bold text-gray-400 mt-0.5">Instructional Space Status</p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, is_in_use: !(r.is_in_use !== false) } : r))}
+                                                    className={`relative w-12 h-6 rounded-full transition-all duration-500 ease-out outline-none ${room.is_in_use !== false ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                                                >
+                                                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-500 ease-out shadow-sm ${room.is_in_use !== false ? 'left-7' : 'left-1'}`} />
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                     );

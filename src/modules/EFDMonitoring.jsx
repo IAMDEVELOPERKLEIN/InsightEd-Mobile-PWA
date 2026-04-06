@@ -17,11 +17,11 @@ import FilterDrawer from '../components/FilterDrawer';
 const EFDMonitoring = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const [projects, setProjects] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [projects, setProjects] = useState(() => JSON.parse(sessionStorage.getItem('efd_cached_projects')) || []);
+    const [loading, setLoading] = useState(!sessionStorage.getItem('efd_cached_projects'));
     const [userData, setUserData] = useState(null);
     const [viewMode, setViewMode] = useState('card'); // 'table' or 'card'
-    const [currentPage, setCurrentPage] = useState(1);
+    const [currentPage, setCurrentPage] = useState(() => Number(localStorage.getItem('efd_currentPage')) || 1);
     const [searchQuery, setSearchQuery] = useState(() => localStorage.getItem('efd_searchQuery') || '');
     const [selectedRegions, setSelectedRegions] = useState(() => JSON.parse(localStorage.getItem('efd_selectedRegions') || '[]'));
     const [selectedCategories, setSelectedCategories] = useState(() => JSON.parse(localStorage.getItem('efd_selectedCategories') || '[]'));
@@ -42,7 +42,7 @@ const EFDMonitoring = () => {
     const [message, setMessage] = useState({ text: '', type: '' });
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [efdLocations, setEfdLocations] = useState([]);
-    const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 12, totalPages: 1 });
+    const [pagination, setPagination] = useState(() => JSON.parse(sessionStorage.getItem('efd_cached_pagination')) || { total: 0, page: 1, limit: 12, totalPages: 1 });
     const [summaryData, setSummaryData] = useState(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
     
@@ -55,7 +55,17 @@ const EFDMonitoring = () => {
         localStorage.setItem('efd_selectedDistrict', selectedDistrict);
         localStorage.setItem('efd_selectedCategories', JSON.stringify(selectedCategories));
         localStorage.setItem('efd_searchQuery', searchQuery);
-    }, [selectedRegions, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict, selectedCategories, searchQuery]);
+        localStorage.setItem('efd_currentPage', currentPage);
+    }, [selectedRegions, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict, selectedCategories, searchQuery, currentPage]);
+    
+    // Debug Telemetry
+    useEffect(() => {
+        const DEBUG_MODE = false; // Toggle for local development
+        if (DEBUG_MODE) {
+            console.log("[EFD_CACHE] Hydrated projects count:", projects?.length);
+            console.log("[EFD_CACHE] Current Page:", currentPage);
+        }
+    }, [projects, currentPage]);
     
     // For UpdateWizard internal states (though Wizard handles most)
     const [internalFiles, setInternalFiles] = useState([]);
@@ -103,7 +113,12 @@ const EFDMonitoring = () => {
             if (res.ok) {
                 const result = await res.json();
                 setProjects(result.data || []);
-                setPagination(result.pagination || { total: result.data?.length || 0, page: p, limit: 12, totalPages: 1 });
+                const pagMeta = result.pagination || { total: result.data?.length || 0, page: p, limit: 12, totalPages: 1 };
+                setPagination(pagMeta);
+                
+                // Cache for snap-back navigation
+                sessionStorage.setItem('efd_cached_projects', JSON.stringify(result.data || []));
+                sessionStorage.setItem('efd_cached_pagination', JSON.stringify(pagMeta));
             }
         } catch (error) {
             console.error("Error fetching projects:", error);

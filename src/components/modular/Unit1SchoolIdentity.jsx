@@ -1260,6 +1260,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     <option value="School Principal IV">School Principal IV</option>
                                                     <option value="Assistant School Principal I">Assistant School Principal I</option>
                                                     <option value="Assistant School Principal II">Assistant School Principal II</option>
+                                                    <option value="PSDS (Officer-in-Charge)">PSDS (Officer-in-Charge)</option>
                                                 </select>
                                             </div>
                                             <div className="space-y-4">

@@ -115,12 +115,12 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             });
         });
         // SNED
-        if (hasSNED) {
+        if (hasSNED && snedProgramType === 'Self-Contained') {
             sum += (parseInt(snedTotalCount) || 0);
         }
 
         return sum;
-    }, [kinderEnrollment, gradeTotals, activeMonogrades, mgCombinations, hasSNED, snedTotalCount, gradeGenderMap]);
+    }, [kinderEnrollment, gradeTotals, activeMonogrades, mgCombinations, hasSNED, snedTotalCount, snedProgramType, gradeGenderMap]);
 
     const genderSum = useMemo(() => {
         // We sum up the final mapping that will actually be saved
@@ -146,12 +146,12 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         });
         
         // SNED
-        if (hasSNED) {
+        if (hasSNED && snedProgramType === 'Self-Contained') {
             s += (parseInt(gradeGenderMap['sned']?.male) || 0) + (parseInt(gradeGenderMap['sned']?.female) || 0);
         }
         
         return s;
-    }, [gradeGenderMap, gradeAvailability, activeMonogrades, mgCombinations, hasSNED]);
+    }, [gradeGenderMap, gradeAvailability, activeMonogrades, mgCombinations, hasSNED, snedProgramType]);
 
     const gradeCapacities = useMemo(() => {
         const caps = {};
