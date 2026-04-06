@@ -110,6 +110,10 @@ const LocationPickerMap = ({ latitude, longitude, onLocationSelect, onChange, di
     const handleLocationSelect = onLocationSelect || onChange;
     // Initial position state
     const [position, setPosition] = useState(PHILIPPINES_CENTER);
+    // Internal edit toggle — marker is locked until user clicks the edit button
+    const [isEditing, setIsEditing] = useState(false);
+
+    const markerDisabled = disabled || !isEditing;
 
     // Sync internal state with props when they change (validating they exist)
     useEffect(() => {
@@ -133,7 +137,7 @@ const LocationPickerMap = ({ latitude, longitude, onLocationSelect, onChange, di
                 />
 
                 {/* Click Listener */}
-                <MapEvents setPosition={setPosition} onLocationSelect={onLocationSelect} disabled={disabled} />
+                <MapEvents setPosition={setPosition} onLocationSelect={onLocationSelect} disabled={markerDisabled} />
 
                 {/* Aggressive Recenter */}
                 <RobustCenter position={position} />
@@ -143,7 +147,7 @@ const LocationPickerMap = ({ latitude, longitude, onLocationSelect, onChange, di
                     position={position}
                     setPosition={setPosition}
                     onLocationSelect={handleLocationSelect}
-                    disabled={disabled}
+                    disabled={markerDisabled}
                 />
 
                 {/* User Location Marker & Geofence Visual (Read-Only) */}
@@ -152,20 +156,39 @@ const LocationPickerMap = ({ latitude, longitude, onLocationSelect, onChange, di
                         <Marker position={[userLocation.lat, userLocation.lng]} opacity={0.7}>
                             <Popup>You are Here</Popup>
                         </Marker>
-                        {/* Draw a line connecting them? Optional. For now just circle around user or school? 
-                            The requirement is "copy the map". Register had school geofence. 
-                            Let's add the 200m circle around the SCHOOL to show the zone.
-                        */}
                         <Circle
                             center={position}
-                            radius={200} // standard geofence
+                            radius={200}
                             pathOptions={{ color: 'blue', fillColor: 'blue', fillOpacity: 0.1 }}
                         />
                     </>
                 )}
             </MapContainer>
 
-            {/* Disabled Overlay Removed to allow Panning/Zooming but keep Marker Read-Only */}
+            {/* Edit / Lock toggle button — only shown when not externally disabled */}
+            {!disabled && (
+                <button
+                    type="button"
+                    onClick={() => setIsEditing(prev => !prev)}
+                    className={`absolute bottom-3 right-3 z-[1000] flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black shadow-lg border transition-all active:scale-95 ${
+                        isEditing
+                            ? 'bg-emerald-500 text-white border-emerald-600 hover:bg-emerald-600'
+                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                    }`}
+                >
+                    {isEditing ? (
+                        <>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            DONE
+                        </>
+                    ) : (
+                        <>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            EDIT LOCATION
+                        </>
+                    )}
+                </button>
+            )}
         </div>
     );
 };
