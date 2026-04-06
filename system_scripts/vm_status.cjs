@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 const { Client } = require('ssh2');
 
 const CONFIG = {

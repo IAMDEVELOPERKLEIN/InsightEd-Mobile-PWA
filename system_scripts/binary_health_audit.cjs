@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * binary_health_audit.cjs
  * Unified Binary Storage Health Audit

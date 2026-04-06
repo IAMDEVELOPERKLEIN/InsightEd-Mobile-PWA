@@ -101,26 +101,34 @@ export function isCompressibleImage(mimeType) {
  * Returns the binary_id (UUID) — existing if duplicate, new if first time.
  *
  * @param {import('pg').Pool} pool
- * @param {Buffer} rawBuffer  — unprocessed upload buffer
+ * @param {Buffer} rawBuffer  — unprocessed or pre-compressed upload buffer
  * @param {string} mimeType
- * @returns {Promise<{ binary_id: string, deduplicated: boolean, stored_size: number }>}
+ * @param {number} [originalSize] — true original size if rawBuffer is already compressed
+ * @returns {Promise<{ binary_id: string, deduplicated: boolean, stored_size: number, original_size: number }>}
  */
-export async function upsertBinary(pool, rawBuffer, mimeType) {
+export async function upsertBinary(pool, rawBuffer, mimeType, originalSize) {
     let finalBuffer = rawBuffer;
     let finalMime = mimeType;
+    const trueOriginalSize = originalSize || rawBuffer.length;
 
-    if (isCompressibleImage(mimeType)) {
-        try {
-            finalBuffer = await compressToWebP(rawBuffer);
-            finalMime = 'image/webp';
-        } catch (err) {
-            console.warn('[BinaryPipeline] WebP conversion failed, using original:', err.message);
-        }
-    } else if (mimeType === 'application/pdf') {
-        try {
-            finalBuffer = await compressPDF(rawBuffer);
-        } catch (err) {
-            console.warn('[BinaryPipeline] PDF compression failed, using original:', err.message);
+    // Skip compression if the buffer appears to be already optimized (size mismatch with originalSize)
+    // or if the user explicitly wants to store it as is.
+    const alreadyOptimized = originalSize && originalSize > rawBuffer.length;
+
+    if (!alreadyOptimized) {
+        if (isCompressibleImage(mimeType)) {
+            try {
+                finalBuffer = await compressToWebP(rawBuffer);
+                finalMime = 'image/webp';
+            } catch (err) {
+                console.warn('[BinaryPipeline] WebP conversion failed, using original:', err.message);
+            }
+        } else if (mimeType === 'application/pdf') {
+            try {
+                finalBuffer = await compressPDF(rawBuffer);
+            } catch (err) {
+                console.warn('[BinaryPipeline] PDF compression failed, using original:', err.message);
+            }
         }
     }
 
@@ -136,12 +144,13 @@ export async function upsertBinary(pool, rawBuffer, mimeType) {
         const existingId = existing.rows[0].id;
         // Fetch actual size for accurate metadata persistence
         const sizeRes = await pool.query('SELECT size_bytes FROM unified_binaries WHERE id = $1', [existingId]);
-        const actualSize = sizeRes.rows.length > 0 ? Number(sizeRes.rows[0].size_bytes) : rawBuffer.length;
+        const actualSize = sizeRes.rows.length > 0 ? Number(sizeRes.rows[0].size_bytes) : finalBuffer.length;
 
         return {
             binary_id: existingId,
             deduplicated: true,
-            stored_size: actualSize
+            stored_size: actualSize,
+            original_size: trueOriginalSize
         };
     }
 
@@ -155,6 +164,7 @@ export async function upsertBinary(pool, rawBuffer, mimeType) {
     return {
         binary_id: insertResult.rows[0].id,
         deduplicated: false,
-        stored_size: finalBuffer.length
+        stored_size: finalBuffer.length,
+        original_size: trueOriginalSize
     };
 }
