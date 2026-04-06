@@ -104,6 +104,10 @@ const MonitoringDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
+  // --- Filtering & Sorting state ---
+  const [sortBy, setSortBy] = useState('completion'); // 'completion', 'name', 'school_id'
+  const [completionFilter, setCompletionFilter] = useState('all'); // 'all', '100', 'incomplete', 'not_started'
+
   // --- Drill-down navigation state ---
   // level: 'division' | 'district' | 'schools'
   const [level, setLevel] = useState('division');
@@ -211,12 +215,58 @@ const MonitoringDashboard = () => {
     if (!selectedDistrict || !selectedDivision) return [];
     const divSchools = groupedByDivision[selectedDivision] || [];
     let list = divSchools.filter(s => (s.district || 'Unknown District') === selectedDistrict);
+    
+    // 1. Text Search Filter
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
-      list = list.filter(s => s.school_name?.toLowerCase().includes(q) || s.school_id?.toLowerCase().includes(q));
+      list = list.filter(s => 
+        s.school_name?.toLowerCase().includes(q) || 
+        s.school_id?.toLowerCase().includes(q)
+      );
     }
-    return list.sort((a, b) => parseFloat(b.completion_percentage) - parseFloat(a.completion_percentage));
-  }, [selectedDistrict, selectedDivision, groupedByDivision, searchTerm]);
+
+    // 2. Completion Status Filter
+    if (completionFilter !== 'all') {
+      list = list.filter(s => {
+        const pct = parseFloat(s.completion_percentage || 0);
+        if (completionFilter === '100') return pct >= 100;
+        if (completionFilter === 'incomplete') return pct > 0 && pct < 100;
+        if (completionFilter === 'not_started') return pct <= 0;
+        return true;
+      });
+    }
+
+    // 3. Sorting Logic
+    return [...list].sort((a, b) => {
+      const pctA = parseFloat(a.completion_percentage || 0);
+      const pctB = parseFloat(b.completion_percentage || 0);
+
+      // ALWAYS Prioritize 100% if sortBy is 'completion' or by default
+      if (sortBy === 'completion') {
+        if (pctA >= 100 && pctB < 100) return -1;
+        if (pctA < 100 && pctB >= 100) return 1;
+        return pctB - pctA; // Then sort by highest pct
+      }
+
+      if (sortBy === 'name') {
+        // Even when sorting by name, keep 100% schools at top if desired (or just true A-Z)
+        // Let's do true A-Z/ID but keep the 100% at very top if they are the primary focus
+        // Actually, user said "make 100% schools on top" + "also add filters".
+        // I'll make 100% always at top regardless of sort choice for maximum visibility.
+        if (pctA >= 100 && pctB < 100) return -1;
+        if (pctA < 100 && pctB >= 100) return 1;
+        return (a.school_name || '').localeCompare(b.school_name || '');
+      }
+
+      if (sortBy === 'school_id') {
+        if (pctA >= 100 && pctB < 100) return -1;
+        if (pctA < 100 && pctB >= 100) return 1;
+        return (a.school_id || '').localeCompare(b.school_id || '');
+      }
+
+      return 0;
+    });
+  }, [selectedDistrict, selectedDivision, groupedByDivision, searchTerm, sortBy, completionFilter]);
 
   // --- Navigation helpers ---
   const drillToDivision = (name) => {
@@ -312,22 +362,77 @@ const MonitoringDashboard = () => {
             </div>
           </div>
 
-          {/* Search — only visible at schools level */}
+          {/* Search & Filters — only visible at schools level */}
           <AnimatePresence>
             {level === 'schools' && (
               <motion.div
-                initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                initial={{ height: 0, opacity: 0 }} 
+                animate={{ height: 'auto', opacity: 1 }} 
+                exit={{ height: 0, opacity: 0 }}
                 className="overflow-hidden"
               >
-                <div className="relative mt-3 group">
-                  <FiSearch size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-                  <input
-                    type="text"
-                    placeholder="Search school name or ID..."
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 dark:text-slate-200"
-                  />
+                <div className="flex flex-col gap-3 py-3 mt-1">
+                  {/* Search Bar */}
+                  <div className="relative group">
+                    <FiSearch size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                    <input
+                      type="text"
+                      placeholder="Find school name or ID..."
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-slate-700 dark:text-slate-200"
+                    />
+                  </div>
+
+                  {/* Filter Chips Container */}
+                  <div className="flex flex-col gap-2.5">
+                    {/* Completion Status Filters */}
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">Filter:</span>
+                      {[
+                        { id: 'all', label: 'All Schools', icon: FiGrid },
+                        { id: '100', label: '100% Done', icon: FiCheckCircle },
+                        { id: 'incomplete', label: 'In Progress', icon: FiClock },
+                        { id: 'not_started', label: 'Zero %', icon: FiAlertCircle }
+                      ].map(f => (
+                        <button
+                          key={f.id}
+                          onClick={() => setCompletionFilter(f.id)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all ${
+                            completionFilter === f.id 
+                            ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
+                            : 'bg-white dark:bg-slate-800 text-slate-500 border border-slate-100 dark:border-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <f.icon size={12} />
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Sort Options */}
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">Sort:</span>
+                      {[
+                        { id: 'completion', label: 'Progress', icon: FiActivity },
+                        { id: 'name', label: 'Alphabetical', icon: FiLayers },
+                        { id: 'school_id', label: 'School ID', icon: FiFileText }
+                      ].map(s => (
+                        <button
+                          key={s.id}
+                          onClick={() => setSortBy(s.id)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all ${
+                            sortBy === s.id 
+                            ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-md' 
+                            : 'bg-white dark:bg-slate-800 text-slate-500 border border-slate-100 dark:border-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <s.icon size={12} />
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             )}

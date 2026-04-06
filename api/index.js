@@ -881,6 +881,16 @@ app.use(express.urlencoded({ limit: '500mb', extended: true }));
  * Recalculates and updates the total completion percentage for a school.
  * Considers 8 Modular Units.
  */
+// Helper to map UI Unit ID (1-8) to old ph_schools DB Column Index (1,2,3,4,5,7,8,9)
+const getDBUnitFromUIUnit = (uiUnit) => {
+  const num = parseInt(uiUnit, 10);
+  if (num <= 5) return num;
+  if (num === 6) return 7; // School Resources
+  if (num === 7) return 8; // Physical Facilities
+  if (num === 8) return 9; // School Terrain
+  return num;
+};
+
 async function updateSchoolTotalCompletion(iern) {
   if (!iern) return;
   try {
@@ -10858,6 +10868,23 @@ app.post('/api/save-organized-classes', async (req, res) => {
     }
 
     res.json({ message: "Classes saved successfully!" });
+
+    // --- SYNC COMPLETION (Unit 4 -> unit4_completion) ---
+    try {
+      const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [data.schoolId]);
+      if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
+        const iern = iernRes.rows[0].iern;
+        await pool.query('UPDATE ph_schools SET unit4_completed = TRUE, unit4 = 1 WHERE iern = $1', [iern]);
+        await pool.query(`
+          INSERT INTO ph_school_completion (iern, school_id, unit4_completion)
+          VALUES ($1, $2, true)
+          ON CONFLICT (iern) DO UPDATE SET unit4_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+        `, [iern, data.schoolId]);
+        updateSchoolTotalCompletion(iern);
+      }
+    } catch (e) {
+      console.warn("[Unit 4 Sync Error]:", e.message);
+    }
     // SNAPSHOT UPDATE (Primary)
     /* Truly removed now */
 
@@ -11812,37 +11839,35 @@ app.post('/api/save-physical-facilities', async (req, res) => {
       }
     }
 
-    // 5. Mark unit8_completed flag in ph_schools
+    // 5. Mark unit8_completed flag in ph_schools (UI Unit 7 -> DB Unit 8)
     // STRICT VALIDATION: Only mark as completed if there is at least one building in inventory
     const inventoryCount = (data.inventoryEntries && Array.isArray(data.inventoryEntries)) ? data.inventoryEntries.length : 0;
-    const isUnit8Completed = inventoryCount > 0;
+    const isUnit7Completed = inventoryCount > 0;
 
     await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE;`);
     await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_updated_at TIMESTAMP;`);
     
     if (data.iern) {
-        await client.query(`UPDATE ph_schools SET unit8_completed = $1, unit8 = $2, unit8_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit8_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE iern = $3`, [isUnit8Completed, isUnit8Completed ? 1 : 0, data.iern]);
+        await client.query(`UPDATE ph_schools SET unit8_completed = $1, unit8 = $2, unit8_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit8_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE iern = $3`, [isUnit7Completed, isUnit7Completed ? 1 : 0, data.iern]);
         
-        // --- SYNC COMPLETION (UI Unit 7 Audit -> unit7_completion) ---
-        if (isUnit8Completed) {
+        // --- SYNC COMPLETION (UI Unit 7 Facilities -> unit7_completion) ---
+        if (isUnit7Completed) {
             await client.query(`
                 INSERT INTO ph_school_completion (iern, school_id, unit7_completion)
                 VALUES ($1, $2, true)
                 ON CONFLICT (iern) DO UPDATE SET unit7_completion = true, updated_at = CURRENT_TIMESTAMP
             `, [data.iern, sId]);
-            // This runs inside the transaction, but updateSchoolTotalCompletion is async-safe
-            // We'll call it AFTER commit for reliability
         }
     } else {
-        await client.query(`UPDATE ph_schools SET unit8_completed = $1, unit8 = $2, unit8_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit8_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $3`, [isUnit8Completed, isUnit8Completed ? 1 : 0, sId]);
+        await client.query(`UPDATE ph_schools SET unit8_completed = $1, unit8 = $2, unit8_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit8_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $3`, [isUnit7Completed, isUnit7Completed ? 1 : 0, sId]);
     }
 
     await client.query('COMMIT');
     
     // Trigger total recalculation if completed
-    if (isUnit8Completed) {
+    if (isUnit7Completed) {
         const finalIern = data.iern || (await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [sId])).rows[0]?.iern;
-        if (finalIern) updateSchoolTotalCompletion(finalIern);
+        if (finalIern) await updateSchoolTotalCompletion(finalIern);
     }
     res.json({ success: true, message: "Facilities and details saved!" });
 
@@ -11996,6 +12021,23 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
     if (result.rowCount === 0) return res.status(404).json({ error: "Profile not found" });
 
     res.json({ success: true });
+
+    // --- SYNC COMPLETION (Unit 6 -> unit6_completion) ---
+    try {
+      const spRes = await pool.query("SELECT school_id, iern FROM ph_schools WHERE submitted_by = $1", [d.uid]);
+      if (spRes.rows.length > 0) {
+        const { school_id, iern } = spRes.rows[0];
+        await pool.query('UPDATE ph_schools SET unit6_completed = TRUE, unit6 = 1 WHERE iern = $1', [iern]);
+        await pool.query(`
+          INSERT INTO ph_school_completion (iern, school_id, unit6_completion)
+          VALUES ($1, $2, true)
+          ON CONFLICT (iern) DO UPDATE SET unit6_completion = true, updated_at = CURRENT_TIMESTAMP
+        `, [iern, school_id]);
+        updateSchoolTotalCompletion(iern);
+      }
+    } catch (e) {
+      console.warn("Unit 6 Sync Error", e);
+    }
     // SNAPSHOT UPDATE (UID to School ID)
     try {
       const spRes = await pool.query("SELECT school_id FROM ph_schools WHERE submitted_by = $1", [d.uid]);
@@ -15818,9 +15860,9 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
           unit3: row?.unit3_updated_at,
           unit4: row?.unit4_updated_at,
           unit5: row?.unit5_updated_at,
-          unit6: row?.unit6_updated_at,
-          unit7: row?.unit7_updated_at,
-          unit8: row?.unit8_updated_at,
+          unit6: row?.unit7_updated_at,
+          unit7: row?.unit8_updated_at,
+          unit8: row?.unit9_updated_at,
           unit9: row?.unit10_updated_at,
         }
       } 
@@ -16988,7 +17030,7 @@ app.post('/api/ph_schools/unit7/:schoolId', async (req, res) => {
     await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE;`);
     await pool.query('UPDATE ph_schools SET unit7_completed = TRUE, unit7 = 1, unit7_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1', [schoolId]);
 
-    // --- SYNC COMPLETION (Unit 7) ---
+    // --- SYNC COMPLETION (UI Unit 6 Resources -> unit6_completion) ---
     const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
     if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
       const iern = iernRes.rows[0].iern;
@@ -17197,27 +17239,9 @@ app.post('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
     }
     console.log(`[Unit 10 Master Submit] Step 5: Updated unit10_completed = TRUE`);
 
-    // --- SYNC COMPLETION (Unit 10 -> Unit 8 Slot) ---
-    if (iern) {
-      await client.query(`
-          INSERT INTO ph_school_completion (iern, school_id, unit8_completion)
-          VALUES ($1, $2, true)
-          ON CONFLICT (iern) DO UPDATE SET unit8_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
-      `, [iern, schoolId]);
-      await updateSchoolTotalCompletion(iern);
-    } else {
-      // Fallback if IERN missing - fetch and update
-      const iRes = await client.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
-      if (iRes.rows.length > 0 && iRes.rows[0].iern) {
-        const fallbackIern = iRes.rows[0].iern;
-        await client.query(`
-            INSERT INTO ph_school_completion (iern, school_id, unit8_completion)
-            VALUES ($1, $2, true)
-            ON CONFLICT (iern) DO UPDATE SET unit8_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
-        `, [fallbackIern, schoolId]);
-        await updateSchoolTotalCompletion(fallbackIern);
-      }
-    }
+    // --- SYNC COMPLETION (Unit 10 -> Standalone Flag) ---
+    // Unit 10 is verification/mapping, it should not overwrite Unit 8 (Facilities) slot.
+    // We already updated unit10_completed flag in ph_schools above.
 
     await client.query('COMMIT');
     console.log(`[Unit 10 Master Submit] Transaction COMMIT - Success`);
@@ -17621,24 +17645,36 @@ app.post('/api/user/progress', async (req, res) => {
   try {
     // If schoolId was provided, update the flag directly
     if (schoolId && unitId) {
-      const col = `unit${unitId}_completed`;
-      const updateAtCol = `unit${unitId}_updated_at`;
+      const uiUnit = parseInt(unitId, 10);
+      const dbUnit = getDBUnitFromUIUnit(uiUnit);
+
+      // 1. Update ph_schools (with jump-index mapping)
+      const col = `unit${dbUnit}_completed`;
+      const updateAtCol = `unit${dbUnit}_updated_at`;
       await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} BOOLEAN DEFAULT FALSE`);
       await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${updateAtCol} TIMESTAMP`);
-      await pool.query(`UPDATE ph_schools SET ${col} = TRUE, ${updateAtCol} = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1`, [schoolId]);
-
-      // Also update the new integer-based column (unit1-unit8) for the dashboard
-      const unitNum = parseInt(unitId);
-      if (unitNum >= 1 && unitNum <= 9) {
-        await pool.query(`UPDATE ph_schools SET unit${unitNum} = 1 WHERE school_id = $1`, [schoolId]);
-      }
+      await pool.query(`UPDATE ph_schools SET ${col} = TRUE, unit${dbUnit} = 1, ${updateAtCol} = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1`, [schoolId]);
 
       // Log performance for the gamification metric
       if (duration_seconds !== undefined && duration_seconds !== null) {
         await pool.query(
           `INSERT INTO ph_performance_logs (school_id, unit_id, duration_seconds) VALUES ($1, $2, $3)`,
-          [schoolId, parseInt(unitId), parseInt(duration_seconds)]
+          [schoolId, uiUnit, parseInt(duration_seconds)]
         );
+      }
+
+      // 2. Sync to ph_school_completion (sequential 1-8 mapping)
+      const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
+      if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
+        const iern = iernRes.rows[0].iern;
+        const completionCol = `unit${uiUnit}_completion`;
+        await pool.query(`
+          INSERT INTO ph_school_completion (iern, school_id, ${completionCol})
+          VALUES ($1, $2, true)
+          ON CONFLICT (iern) DO UPDATE SET ${completionCol} = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+        `, [iern, schoolId]);
+        
+        await updateSchoolTotalCompletion(iern);
       }
     }
     // Always return success — the frontend treats 404 as an error that blocks navigation

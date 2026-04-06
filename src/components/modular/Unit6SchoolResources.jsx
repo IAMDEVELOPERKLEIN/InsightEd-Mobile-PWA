@@ -854,13 +854,7 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ ecarts: eCarts })
-                    }).catch(e => console.warn("Relational eCart sync failed", e)),
-                    
-                    fetch('/api/user/progress', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ unitId: 7, schoolId: storedId })
-                    }).catch(e => console.warn("Progress sync failed", e))
+                    }).catch(e => console.warn("Relational eCart sync failed", e))
                 ];
 
                 // Update local quest progress immediately
@@ -876,7 +870,7 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     console.warn("Local progress update failed", e);
                 }
 
-                await clearUnitDraft(7, storedId);
+                await clearUnitDraft(6, storedId);
                 await Promise.allSettled(syncPromises);
                 
                 setShowSuccess(true);

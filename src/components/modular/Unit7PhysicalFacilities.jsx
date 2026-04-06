@@ -830,7 +830,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             }).catch(err => console.error("[Unit 7 Sync Error]:", err));
 
             setShowSuccess(true);
-            await clearUnitDraft(8, schoolId);
+            await clearUnitDraft(7, schoolId);
             // Redirection happens via SuccessModal onClose or we can delay it
             setTimeout(() => {
                 navigate("/modular-dashboard");
@@ -2057,7 +2057,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                     setShowSuccess(false);
                     navigate("/modular-dashboard");
                 }}
-                message="Unit 8 Physical Facilities Audit finalized and saved successfully! ✨"
+                message="Unit 7 Physical Facilities Audit finalized and saved successfully! ✨"
                 redirectUrl="/modular-dashboard"
             />
 
