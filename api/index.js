@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import express from 'express';
 console.log("📌 >>> RUNNING: [ROOT]/api/index.js <<< 📌");
+// Dependency fix: sharp installed. Triggering restart.
 
 import { google } from 'googleapis';
 // Force restart to pick up .env changes - Robust Login Fix v1
