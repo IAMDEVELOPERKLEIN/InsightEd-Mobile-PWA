@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FiSettings } from 'react-icons/fi';
+import { FiSettings, FiLock, FiUnlock } from 'react-icons/fi';
 import LocationPickerMap from './LocationPickerMap';
 import { compressImage } from '../utils/imageCompression'; // Assuming this utility exists or will be moved
 
@@ -110,6 +110,20 @@ const EditProjectModal = ({
     });
 
     const [isSubmittingRealignment, setIsSubmittingRealignment] = useState(false);
+    const [isLocationEditing, setIsLocationEditing] = useState(false);
+
+    // Reset location editing mode whenever the modal closes
+    useEffect(() => {
+        if (!isOpen) setIsLocationEditing(false);
+    }, [isOpen]);
+
+    const DEBUG_FILTERS = false;
+    useEffect(() => {
+        if (DEBUG_FILTERS && isOpen) {
+            console.log('[EditProjectModal] DEBUG — userRole:', userRole, '| readOnly:', readOnly);
+            console.log('[EditProjectModal] DEBUG — map disabled:', readOnly && userRole !== 'Division Engineer' && userRole !== 'Architect');
+        }
+    }, [isOpen, userRole, readOnly]);
 
     useEffect(() => {
         if (project && isOpen) {
@@ -1003,15 +1017,33 @@ const EditProjectModal = ({
         );
     };
 
+    const canEditLocation = userRole === 'Division Engineer' || userRole === 'Architect';
+
     const renderLocation = () => (
         <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-4">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Project Location</h3>
-            <div className="rounded-xl overflow-hidden border border-slate-200 h-40 shadow-inner">
+            <div className="flex items-center justify-between mb-2">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Project Location</h3>
+                {canEditLocation && (
+                    <button
+                        type="button"
+                        onClick={() => setIsLocationEditing(prev => !prev)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+                            isLocationEditing
+                                ? 'bg-amber-50 border-amber-300 text-amber-600 shadow-sm shadow-amber-200'
+                                : 'bg-slate-100 border-slate-200 text-slate-400 hover:border-blue-200 hover:text-blue-500'
+                        }`}
+                    >
+                        {isLocationEditing ? <FiUnlock size={11} /> : <FiLock size={11} />}
+                        {isLocationEditing ? 'Editing' : 'Edit Location'}
+                    </button>
+                )}
+            </div>
+            <div className={`rounded-xl overflow-hidden border h-40 shadow-inner transition-colors ${isLocationEditing ? 'border-amber-300' : 'border-slate-200'}`}>
                 <LocationPickerMap
                     latitude={formData.latitude}
                     longitude={formData.longitude}
                     onLocationSelect={handleLocationSelect}
-                    disabled={readOnly}
+                    disabled={!isLocationEditing}
                 />
             </div>
             <div className="grid grid-cols-2 gap-3">

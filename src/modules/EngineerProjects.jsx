@@ -296,6 +296,9 @@ const EngineerProjects = () => {
 
   // --- FILTER STATES ---
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  // Ref mirrors isFilterOpen so async fetch callbacks always read the latest value
+  const isFilterOpenRef = useRef(false);
+  useEffect(() => { isFilterOpenRef.current = isFilterOpen; }, [isFilterOpen]);
   const [selectedRegions, setSelectedRegions] = useState([]);
   const [selectedDivisions, setSelectedDivisions] = useState([]);
   const [selectedCategories, setSelectedCategories] = useState([]);
@@ -423,7 +426,7 @@ const EngineerProjects = () => {
         try {
           const cachedData = await getCachedProjects();
           if (cachedData && cachedData.length > 0) {
-            setProjects(cachedData);
+            if (!isFilterOpenRef.current) setProjects(cachedData);
             currentProjects = cachedData;
             setIsLoading(false);
           }
@@ -510,8 +513,8 @@ const EngineerProjects = () => {
           // Update Cache on success
           await cacheProjects(currentProjects);
 
-          // Update state with fresh data
-          setProjects(currentProjects);
+          // Update state with fresh data — skip if filter drawer is open to prevent ghosting
+          if (!isFilterOpenRef.current) setProjects(currentProjects);
 
         } catch (networkError) {
           console.warn("Network request failed:", networkError);
@@ -546,7 +549,7 @@ const EngineerProjects = () => {
       const matchesBatch = selectedBatchFunds.length === 0 || selectedBatchFunds.includes(p.batch_of_funds || p.batchOfFunds);
 
       return matchesSearch && matchesRegion && matchesDivision && matchesCategory && matchesYear && matchesBatch;
-    });
+    }).sort((a, b) => (b.id ?? 0) - (a.id ?? 0)); // stable DESC order — prevents pop when cache→network transition
   }, [projects, searchQuery, selectedRegions, selectedDivisions, selectedCategories, selectedYears, selectedBatchFunds]);
 
   const stats = React.useMemo(() => {

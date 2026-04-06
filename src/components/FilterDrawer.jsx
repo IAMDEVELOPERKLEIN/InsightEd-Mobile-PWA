@@ -2,9 +2,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { FiX, FiCheck, FiChevronDown } from 'react-icons/fi';
 import { createPortal } from 'react-dom';
 
-const FilterDrawer = ({ 
-    isOpen, 
-    onClose, 
+const FilterDrawer = ({
+    isOpen,
+    onClose,
     onApply,
     projects = [],
     locations = [], // New prop for database-driven locations
@@ -12,6 +12,7 @@ const FilterDrawer = ({
     initialDivisions = [],
     initialCategories = [],
     initialYears = [],
+    initialBatches = [],
     hideRegions = false,
     hideDivisions = false,
     hideProvinces = false,
@@ -25,19 +26,22 @@ const FilterDrawer = ({
     const [selectedMunicipality, setSelectedMunicipality] = useState('');
     const [selectedDistrict, setSelectedDistrict] = useState('');
     const [selectedYears, setSelectedYears] = useState(initialYears);
+    const [selectedBatchFunds, setSelectedBatchFunds] = useState(initialBatches);
 
-    // Sync with initial values when drawer opens
+    // Sync from parent only when the drawer transitions to open.
+    // Array props (initialRegions, etc.) are intentionally excluded from deps —
+    // they're new references on every parent render and would cause an infinite loop.
     useEffect(() => {
         if (isOpen) {
             setSelectedRegions(initialRegions || []);
             setSelectedCategories(initialCategories || []);
             setSelectedDivision(initialDivisions[0] || '');
             setSelectedYears(initialYears || []);
+            setSelectedBatchFunds(initialBatches || []);
         }
-    }, [isOpen, initialRegions, initialDivisions, initialCategories, initialYears]);
+    }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const [selectedBatchFunds, setSelectedBatchFunds] = useState([]);
-
+    const DEBUG_FILTERS = false;
     const normalize = (val) => val?.toString().trim().toUpperCase() || '';
 
     // Derived options based on selected parent layers
@@ -67,18 +71,27 @@ const FilterDrawer = ({
             .filter(l => !selectedMunicipality || normalize(l.municipality) === normalize(selectedMunicipality))
             .map(l => l.legislative_district).filter(Boolean))].map(s => s.trim().toUpperCase());
 
-        const years = [...new Set(sourceData.map(p => p.funding_year || p.fundingYear).filter(Boolean))].map(y => y.toString());
+        const years = [...new Set(sourceData.map(p => p.funding_year || p.fundingYear).filter(Boolean).map(String).filter(Boolean))].sort((a,b) => b.localeCompare(a));
 
-        const batches = [...new Set(sourceData.map(p => p.batch_of_funds || p.batchOfFunds).filter(Boolean))].map(s => s.trim());
+        const batches = [...new Set(sourceData.map(p => p.batch_of_funds || p.batchOfFunds).filter(Boolean).map(s => String(s).trim()).filter(Boolean))].sort();
+
+        if (DEBUG_FILTERS) {
+            console.log('[FilterDrawer] DEBUG — first 3 projects:', sourceData.slice(0, 3).map(p => ({
+                funding_year: p.funding_year, fundingYear: p.fundingYear,
+                batch_of_funds: p.batch_of_funds, batchOfFunds: p.batchOfFunds,
+                project_category: p.project_category, projectCategory: p.projectCategory
+            })));
+            console.log('[FilterDrawer] DEBUG — derived years:', years, '| batches:', batches);
+        }
 
         return {
             divisions: [...new Set(divisions)].sort(),
             provinces: [...new Set(provinces)].sort(),
             municipalities: [...new Set(municipalities)].sort(),
             districts: [...new Set(districts)].sort(),
-            years: Array.from(new Set(years)).sort((a,b) => b.localeCompare(a)),
-            categories: [...new Set(sourceData.map(p => p.project_category || p.projectCategory).filter(Boolean))].map(s => s.trim()),
-            batches: Array.from(new Set(batches)).sort()
+            years,
+            categories: [...new Set(sourceData.map(p => p.project_category || p.projectCategory).filter(Boolean))].map(s => s.trim()).filter(Boolean),
+            batches
         };
     }, [projects, locations, selectedRegions, selectedDivision, selectedProvince, selectedMunicipality]);
 
@@ -171,9 +184,8 @@ const FilterDrawer = ({
                                 <FiX size={20} />
                             </button>
                         </div>
-                        <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Global Criteria</span>
-                            <button 
+                        <div className="flex items-center justify-end">
+                            <button
                                 onClick={clearFilters}
                                 className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest hover:underline"
                             >

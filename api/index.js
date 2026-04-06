@@ -9381,7 +9381,7 @@ app.get('/api/dashboard/efd-summary', async (req, res) => {
       if (userProfile) {
         const role = userProfile.role?.trim().toLowerCase();
         const isAdmin = ['central office', 'hrodi', 'super user', 'super admin', 'admin', 'efd', 'efd engineer', 'hrodi engineer', 'central office finance'].includes(role);
-        const isDivEng = ['division engineer', 'sdo', 'ro', 'regional office', 'school division office', 'deped engineer', 'engineer'].includes(role);
+        const isDivEng = ['division engineer', 'architect', 'sdo', 'ro', 'regional office', 'school division office', 'deped engineer', 'engineer'].includes(role);
 
         if (isAdmin) {
           // admin/HRODI sees all summary stats; skip engineer_id/region/division filters

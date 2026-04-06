@@ -25,6 +25,7 @@ const convertFullFileToBase64 = (file) => {
 };
 import { compressImage } from '../utils/imageCompression';
 import LocationPickerMap from '../components/LocationPickerMap'; // Import Map Component
+import { FiLock, FiUnlock } from 'react-icons/fi';
 
 // Helper component for Section Headers
 const SectionHeader = ({ title }) => (
@@ -41,6 +42,11 @@ const NewProjects = () => {
     const location = useLocation();
     const isDummy = location.state?.isDummy || false;
     const [activeTab, setActiveTab] = useState(0);
+
+    // Lock/unlock for map — covers both raw DB values and normalized display values
+    const canEditLocation = ['Division Engineer', 'deped_engineer', 'DepEd Engineer', 'Architect', 'architect'].includes(userRole);
+    // Start in editing mode for the creation form (user must set a location)
+    const [isLocationEditing, setIsLocationEditing] = useState(true);
 
     const TABS = [
         { id: 0, label: 'Overview' },

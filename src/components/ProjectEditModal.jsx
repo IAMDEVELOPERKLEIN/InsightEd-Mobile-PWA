@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FiX, FiCheck, FiChevronRight } from 'react-icons/fi';
+import { FiX, FiCheck, FiChevronRight, FiLock, FiUnlock } from 'react-icons/fi';
 import LocationPickerMap from './LocationPickerMap';
 
 
@@ -70,6 +70,12 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
     const [activePhotoCategory, setActivePhotoCategory] = useState('Internal');
     const [isCheckingSchool, setIsCheckingSchool] = useState(false);
     const [isSchoolChecked, setIsSchoolChecked] = useState(false);
+    const [isLocationEditing, setIsLocationEditing] = useState(false);
+
+    // Reset map lock whenever the modal closes
+    useEffect(() => {
+        if (!isOpen) setIsLocationEditing(false);
+    }, [isOpen]);
     const [lookupOptions, setLookupOptions] = useState({ provinces: [], municipalities: [], legDistricts: [], fundingYears: [] });
     const bodyRef = useRef(null);
     const internalInputRef = useRef(null);
@@ -557,18 +563,30 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
             case 4:
                 return (
                     <div className="space-y-4">
-                        <div className="rounded-2xl border-2 border-slate-100 overflow-hidden bg-slate-50 shadow-sm transition-all hover:border-slate-200">
+                        <div className={`rounded-2xl border-2 overflow-hidden bg-slate-50 shadow-sm transition-all ${isLocationEditing ? 'border-amber-300' : 'border-slate-100 hover:border-slate-200'}`}>
                             <div className="p-2.5 bg-white border-b border-slate-100 flex items-center justify-between">
                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">📍 Site Map Picker</span>
-                                <span className="text-[9px] text-blue-500 font-bold uppercase tracking-tighter bg-blue-50 px-2 py-0.5 rounded-full">Interactive</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsLocationEditing(prev => !prev)}
+                                    className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+                                        isLocationEditing
+                                            ? 'bg-amber-50 border-amber-300 text-amber-600 shadow-sm shadow-amber-200'
+                                            : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-blue-200 hover:text-blue-500'
+                                    }`}
+                                >
+                                    {isLocationEditing ? <FiUnlock size={11} /> : <FiLock size={11} />}
+                                    {isLocationEditing ? 'Editing' : 'Edit Location'}
+                                </button>
                             </div>
                             <div className="h-[280px]">
-                                <LocationPickerMap 
-                                    latitude={formData.latitude} 
-                                    longitude={formData.longitude} 
+                                <LocationPickerMap
+                                    latitude={formData.latitude}
+                                    longitude={formData.longitude}
                                     onChange={(lat, lng) => {
                                         setFormData(prev => ({ ...prev, latitude: lat.toFixed(6), longitude: lng.toFixed(6) }));
                                     }}
+                                    disabled={!isLocationEditing}
                                     className="h-full border-none rounded-none"
                                 />
                             </div>
