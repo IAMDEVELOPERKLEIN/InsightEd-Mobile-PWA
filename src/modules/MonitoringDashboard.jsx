@@ -195,6 +195,11 @@ const MonitoringDashboard = () => {
     return [...divisionList].sort((a, b) => b.avgPct - a.avgPct)[0];
   }, [divisionList]);
 
+  const leadingDistrict = useMemo(() => {
+    if (districtList.length === 0) return null;
+    return [...districtList].sort((a, b) => b.avgPct - a.avgPct)[0];
+  }, [districtList]);
+
   const districtList = useMemo(() => {
     if (!selectedDivision) return [];
     const divSchools = groupedByDivision[selectedDivision] || [];
@@ -464,9 +469,9 @@ const MonitoringDashboard = () => {
                 subtext="Staged / Verified"
             />
             <TopStatCard 
-                title="Leading Division" 
-                value={leadingDivision ? leadingDivision.name : 'N/A'} 
-                secondaryValue={leadingDivision ? `${Math.round(leadingDivision.avgPct)}%` : ''}
+                title="Leading District" 
+                value={leadingDistrict ? leadingDistrict.name : 'N/A'} 
+                secondaryValue={leadingDistrict ? `${Math.round(leadingDistrict.avgPct)}%` : ''}
                 icon={FiZap} 
                 color="bg-amber-500" 
                 subtext="Rank 1 Completion"
@@ -590,11 +595,9 @@ const MonitoringDashboard = () => {
               >
                 <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
                   {/* Table header */}
-                  <div className="grid grid-cols-[1fr_auto_auto] md:grid-cols-[1fr_auto_140px_auto] gap-4 px-6 py-4 bg-slate-50/70 dark:bg-slate-800/30 border-b border-slate-100 dark:border-slate-700">
+                  <div className="grid grid-cols-[1fr_auto] md:grid-cols-[1fr_140px] gap-4 px-6 py-4 bg-slate-50/70 dark:bg-slate-800/30 border-b border-slate-100 dark:border-slate-700">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">School</span>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Enrolled</span>
                     <span className="hidden md:block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Progress</span>
-                    <span></span>
                   </div>
 
                   {schoolList.length === 0 ? (
@@ -605,7 +608,7 @@ const MonitoringDashboard = () => {
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.03 }}
-                      className="group grid grid-cols-[1fr_auto_auto] md:grid-cols-[1fr_auto_140px_auto] gap-4 items-center px-6 py-5 border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors"
+                      className="group grid grid-cols-[1fr_auto] md:grid-cols-[1fr_140px] gap-4 items-center px-6 py-5 border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -635,15 +638,9 @@ const MonitoringDashboard = () => {
                           )}
                         </p>
                       </div>
-                      <span className="font-bold text-slate-700 dark:text-slate-300 text-sm whitespace-nowrap text-right">
-                        {Number(school.total_enrollment || 0).toLocaleString()}
-                      </span>
                       <div className="hidden md:block">
                         <ProgressBar pct={parseFloat(school.completion_percentage)} />
                       </div>
-                      <button className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-400 hover:text-blue-600 hover:border-blue-200 dark:hover:border-blue-900 transition-all active:scale-90 flex-shrink-0">
-                        <FiChevronRight size={16} />
-                      </button>
                     </motion.div>
                   ))}
 

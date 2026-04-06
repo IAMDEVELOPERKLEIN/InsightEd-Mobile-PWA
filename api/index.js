@@ -11665,6 +11665,7 @@ app.post('/api/save-physical-facilities', async (req, res) => {
         year_completed INTEGER,
         remarks TEXT,
         status TEXT,
+        is_in_use BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `).catch(e => console.warn('[Unit7] ph_buildings_inventory creation skip:', e.message));
@@ -11677,6 +11678,7 @@ app.post('/api/save-physical-facilities', async (req, res) => {
     await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS "7x9" INTEGER DEFAULT 0`).catch(() => {});
     await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS above_7x9 INTEGER DEFAULT 0`).catch(() => {});
     await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS iern TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS is_in_use BOOLEAN DEFAULT TRUE`).catch(() => {});
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS ph_buildings_repairs (
@@ -11843,8 +11845,8 @@ app.post('/api/save-physical-facilities', async (req, res) => {
                   school_id, iern, building_name, room_name, category,
                   storey, classroom, year_completed, remarks,
                   less_than_7x9, "7x9", above_7x9, 
-                  grade_level, advisory_teacher, status
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                  grade_level, advisory_teacher, status, is_in_use
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
           `, [
           sId, data.iern || sId,
           room.building_name, room.room_name,
@@ -11855,7 +11857,8 @@ app.post('/api/save-physical-facilities', async (req, res) => {
           roomDim === '7x9' ? 1 : 0,
           roomDim === 'above 7x9' ? 1 : 0,
           room.grade_level || '', room.teacher_id || '',
-          room.condition || 'Good Condition'
+          room.condition || 'Good Condition',
+          (room.is_in_use !== undefined) ? room.is_in_use : true
         ]);
       }
     }
@@ -11863,7 +11866,7 @@ app.post('/api/save-physical-facilities', async (req, res) => {
     // 5. Mark unit8_completed flag in ph_schools (UI Unit 7 -> DB Unit 8)
     // STRICT VALIDATION: Only mark as completed if there is at least one building in inventory
     const inventoryCount = (data.inventoryEntries && Array.isArray(data.inventoryEntries)) ? data.inventoryEntries.length : 0;
-    const isUnit7Completed = inventoryCount > 0;
+    const isUnit7Completed = inventoryCount > 0 && !data.isPartial;
 
     await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE;`);
     await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_updated_at TIMESTAMP;`);

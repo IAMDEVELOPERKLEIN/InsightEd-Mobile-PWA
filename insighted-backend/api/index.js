@@ -4399,8 +4399,13 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
         totalF = parseInt(rawData.questionnaire.genderTotals.female) || 0;
     }
 
-    const { sned_self_contained_count } = data;
-    const globalTotal = totalM + totalF + (parseInt(sned_self_contained_count) || 0);
+    // Correctly calculate global total based on SNED program type
+    // Mainstreamed SNED learners are already in totalM/totalF, so they are excluded here to avoid double counting.
+    const snedCount = (data.has_sned && data.sned_program_type === 'Self-Contained') 
+        ? (parseInt(data.sned_total_count) || 0) 
+        : 0;
+
+    const globalTotal = totalM + totalF + snedCount;
 
     const fields = [
       'enroll_kinder = $1', 'enroll_g1 = $2', 'enroll_g2 = $3', 'enroll_g3 = $4',

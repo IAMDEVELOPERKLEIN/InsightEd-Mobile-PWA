@@ -263,7 +263,7 @@ const Enrolment = ({ embedded = false }) => {
                 (prev.arts_12 || 0) + (prev.sports_12 || 0);
 
             const shs = g11 + g12;
-            const inclusive = (prev.sned_learners || 0) + (prev.non_graded_learners || 0);
+            const inclusive = (prev.non_graded_learners || 0);
             const grand = es + jhs + shs + inclusive;
 
             const aral = Object.keys(prev)
