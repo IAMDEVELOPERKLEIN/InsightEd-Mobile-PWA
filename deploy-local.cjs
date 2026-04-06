@@ -9,7 +9,7 @@ const SERVER_DIR = "/var/www/html/InsightEd-Mobile-PWA";
 const USER = "Administrator1";
 const PASS = "7v52E69TYgTE";
 const TAR_FILE = "local-deploy.tmp.tar.gz";
-const INCLUDE = ['api', 'dist', 'public', 'package.json', 'package-lock.json'];
+const INCLUDE = ['api', 'dist', 'public', 'package.json', 'package-lock.json', 'compress_pdf.py', 'tmp_stride.conf', 'forensic_heal.sh', 'ecosystem.config.cjs'];
 
 console.log("------------------------------------------------");
 console.log("🚀 Automated Local-to-Remote Deployment (JS)");
@@ -68,9 +68,10 @@ async function deploy() {
                             cd ${SERVER_DIR} && 
                             tar -xzf ${TAR_FILE} && 
                             rm ${TAR_FILE} && 
+                            chmod +x forensic_heal.sh &&
                             npm install --omit=dev --legacy-peer-deps && 
                             pm2 flush && 
-                            (pm2 restart insighted-backend || PORT=3000 pm2 start api/index.js --name insighted-backend)
+                            STAGING_DIR=${SERVER_DIR} PM2_NAME=insighted-backend ./forensic_heal.sh
                         `.replace(/\n/g, '').trim();
 
                         conn.exec(remoteCmd, (err, stream) => {

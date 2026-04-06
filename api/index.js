@@ -458,18 +458,20 @@ app.post('/api/schools/:iern/ownership-docs', memoryUpload.single('file'), async
     let finalBinaryId = null;
     let finalHydraManifest = null;
     let storedSize = req.file.size;
+    let originalSizeFound = req.file.size;
 
     try {
         // Enforce Optimization (Compression + Hydra)
         const { buffer: compressedBuffer, hydraManifest } = await compressBufferTo96Dpi(req.file.buffer);
-        const { binary_id, deduplicated, stored_size } = await upsertBinary(pool, compressedBuffer, 'application/pdf');
+        const { binary_id, stored_size, original_size: returnedOrigSize } = await upsertBinary(pool, compressedBuffer, 'application/pdf', req.file.size);
         
         finalBinaryId = binary_id;
         finalDocValue = `/api/asset/${binary_id}`;
         storedSize = stored_size; 
         finalHydraManifest = hydraManifest;
+        originalSizeFound = returnedOrigSize || req.file.size;
 
-        console.log(`🗄️ [SchoolDocStore] Stored ownership doc: ${binary_id} | size=${storedSize}B | hydra=${!!hydraManifest} | (orig=${req.file.size}B)`);
+        console.log(`🗄️ [SchoolDocStore] Stored ownership doc: ${binary_id} | size=${storedSize}B | hydra=${!!hydraManifest} | (orig=${originalSizeFound}B)`);
     } catch (binErr) {
         console.error('⚠️ [SchoolDocStore] Binary pipeline failure, falling back to disk:', binErr.message);
         // Fallback: Legacy disk storage logic
@@ -480,36 +482,49 @@ app.post('/api/schools/:iern/ownership-docs', memoryUpload.single('file'), async
         fs.writeFileSync(finalPath, req.file.buffer);
         
         finalDocValue = `/uploads/school_docs/${finalFilename}`;
-        finalBinaryId = null; // Explicitly null for fallback
-        // storedSize remains req.file.size from outer scope initialization
+        finalBinaryId = null; 
+        storedSize = req.file.size;
+        originalSizeFound = req.file.size;
     }
 
-    // 2. Save to database using Hawkeye "Single Truth" Protocol (UPSERT on IERN)
+    // 2. Resolve School ID from IERN for unified metadata
+    const schoolRes = await pool.query('SELECT school_id FROM ph_schools WHERE iern = $1 OR school_id = $1 LIMIT 1', [iern]);
+    const resolvedSchoolId = schoolRes.rows[0]?.school_id || null;
+
+    console.log(`📂 [SchoolDocStore] Resolved for ${iern}: SID=${resolvedSchoolId} | Stored=${storedSize}B | Original=${originalSizeFound}B`);
+
+    // 3. Save to database using Hawkeye "Single Truth" Protocol (UPSERT on IERN)
     const dbRes = await pool.query(
-      `INSERT INTO school_ownership_docs (iern, file_path, file_name, doc_type, status, binary_id, file_size, hydra_manifest) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO school_ownership_docs (iern, school_id, file_path, file_name, doc_type, status, binary_id, file_size, original_size, hydra_manifest) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (iern) DO UPDATE SET
+          school_id = EXCLUDED.school_id,
           file_path = EXCLUDED.file_path,
           file_name = EXCLUDED.file_name,
           doc_type = EXCLUDED.doc_type,
           status = EXCLUDED.status,
           binary_id = EXCLUDED.binary_id,
           file_size = EXCLUDED.file_size,
+          original_size = EXCLUDED.original_size,
           hydra_manifest = EXCLUDED.hydra_manifest,
           created_at = CURRENT_TIMESTAMP
-       RETURNING id`,
-      [iern, finalDocValue, req.file.originalname, doc_type, 'optimized', finalBinaryId, storedSize, finalHydraManifest ? JSON.stringify(finalHydraManifest) : null]
+       RETURNING id, file_size, original_size`,
+      [iern, resolvedSchoolId, finalDocValue, req.file.originalname, doc_type, 'optimized', finalBinaryId, storedSize, originalSizeFound, finalHydraManifest ? JSON.stringify(finalHydraManifest) : null]
     );
+
+    const savedRow = dbRes.rows[0];
+    console.log(`✅ [SchoolDocStore] Record Saved ID=${savedRow.id} | Stored=${savedRow.file_size}B | Original=${savedRow.original_size}B`);
 
     res.status(200).json({ 
       success: true, 
       message: 'Upload and database storage complete.',
       data: { 
-        id: dbRes.rows[0].id, 
+        id: savedRow.id, 
         filePath: finalDocValue, 
         fileName: req.file.originalname,
         binaryId: finalBinaryId,
-        file_size: storedSize
+        file_size: savedRow.file_size,
+        original_size: savedRow.original_size
       }
     });
 
@@ -653,9 +668,11 @@ const processPdfFile = async (file, outputFilename = null) => {
 const processPdfInBackground = async (file, projectId, type, ipc, uid, isLgu = false) => {
     const fieldMap = { 'POW': 'pow_pdf', 'DUPA': 'dupa_pdf', 'CONTRACT': 'contract_pdf', 'RTA': 'rta_pdf', 'MOA': 'moa_pdf' };
     const sizeFieldMap = { 'POW': 'pow_size', 'DUPA': 'dupa_size', 'CONTRACT': 'contract_size', 'MOA': 'moa_size', 'RTA': 'rta_size' };
+    const originalSizeFieldMap = { 'POW': 'pow_original_size', 'DUPA': 'dupa_original_size', 'CONTRACT': 'contract_original_size', 'MOA': 'moa_original_size', 'RTA': 'rta_original_size' };
     const filenameFieldMap = { 'POW': 'pow_filename', 'DUPA': 'dupa_filename', 'CONTRACT': 'contract_filename' };
     const field = fieldMap[type];
     const sizeField = sizeFieldMap[type];
+    const originalSizeField = originalSizeFieldMap[type];
     if (!field) return;
 
     const originalFilename = file?.originalname || null;
@@ -674,10 +691,10 @@ const processPdfInBackground = async (file, projectId, type, ipc, uid, isLgu = f
         const { buffer: finalBuffer, hydraManifest } = await compressBufferTo96Dpi(buffer);
 
         // 2. Postgres Binary Storage (Primary)
-        const { binary_id, deduplicated, stored_size } = await upsertBinary(pool, finalBuffer, 'application/pdf');
+        const { binary_id, deduplicated, stored_size, original_size: returnedOrigSize } = await upsertBinary(pool, finalBuffer, 'application/pdf', originalSize);
         const finalDocValue = `/api/asset/${binary_id}`;
         const finalSize = stored_size;
-        console.log(`🗄️ [BG-BinaryStore] ${type} stored: ${binary_id} | size=${finalSize}B | hydra=${!!hydraManifest} | (orig=${originalSize}B)`);
+        console.log(`🗄️ [BG-BinaryStore] ${type} for ${projectId} | Stored=${finalSize}B | Original=${returnedOrigSize || originalSize}B | hydra=${!!hydraManifest}`);
 
         // 3. Database Persistence
         const table = isLgu ? 'lgu_projects' : 'engineer_documents';
@@ -691,15 +708,16 @@ const processPdfInBackground = async (file, projectId, type, ipc, uid, isLgu = f
                     ${field} = $1, 
                     binary_id = $2, 
                     ${sizeField} = $3, 
-                    hydra_manifest = COALESCE(hydra_manifest, '{}'::jsonb) || jsonb_build_object($4::text, $5::jsonb)
-                WHERE ${idCol} = $6
-            `, [finalDocValue, binary_id, finalSize, manifestKey, hydraManifest ? JSON.stringify(hydraManifest) : null, projectId]);
+                    ${originalSizeField} = $4,
+                    hydra_manifest = COALESCE(hydra_manifest, '{}'::jsonb) || jsonb_build_object($5::text, $6::jsonb)
+                WHERE ${idCol} = $7
+            `, [finalDocValue, binary_id, finalSize, originalSize, manifestKey, hydraManifest ? JSON.stringify(hydraManifest) : null, projectId]);
         } else {
             const manifestKey = field.replace('_pdf', '');
             if (filenameField && originalFilename) {
                 await pool.query(`
-                    INSERT INTO engineer_documents (project_id, ipc, ${field}, ${filenameField}, binary_id, uploader_id, ${sizeField}, hydra_manifest)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, jsonb_build_object($8::text, $9::jsonb))
+                    INSERT INTO engineer_documents (project_id, ipc, ${field}, ${filenameField}, binary_id, uploader_id, ${sizeField}, ${originalSizeField}, hydra_manifest)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, jsonb_build_object($9::text, $10::jsonb))
                     ON CONFLICT (ipc) WHERE ipc IS NOT NULL
                     DO UPDATE SET
                         ${field} = EXCLUDED.${field},
@@ -707,20 +725,22 @@ const processPdfInBackground = async (file, projectId, type, ipc, uid, isLgu = f
                         binary_id = EXCLUDED.binary_id,
                         uploader_id = EXCLUDED.uploader_id,
                         ${sizeField} = EXCLUDED.${sizeField},
-                        hydra_manifest = COALESCE(engineer_documents.hydra_manifest, '{}'::jsonb) || jsonb_build_object($8::text, $9::jsonb)
-                `, [projectId, ipc, finalDocValue, originalFilename, binary_id, uid, finalSize, manifestKey, hydraManifest ? JSON.stringify(hydraManifest) : null]);
+                        ${originalSizeField} = EXCLUDED.${originalSizeField},
+                        hydra_manifest = COALESCE(engineer_documents.hydra_manifest, '{}'::jsonb) || jsonb_build_object($9::text, $10::jsonb)
+                `, [projectId, ipc, finalDocValue, originalFilename, binary_id, uid, finalSize, originalSize, manifestKey, hydraManifest ? JSON.stringify(hydraManifest) : null]);
             } else {
                 await pool.query(`
-                    INSERT INTO engineer_documents (project_id, ipc, ${field}, binary_id, uploader_id, ${sizeField}, hydra_manifest)
-                    VALUES ($1, $2, $3, $4, $5, $6, jsonb_build_object($7::text, $8::jsonb))
+                    INSERT INTO engineer_documents (project_id, ipc, ${field}, binary_id, uploader_id, ${sizeField}, ${originalSizeField}, hydra_manifest)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, jsonb_build_object($8::text, $9::jsonb))
                     ON CONFLICT (ipc) WHERE ipc IS NOT NULL
                     DO UPDATE SET
                         ${field} = EXCLUDED.${field},
                         binary_id = EXCLUDED.binary_id,
                         uploader_id = EXCLUDED.uploader_id,
                         ${sizeField} = EXCLUDED.${sizeField},
-                        hydra_manifest = COALESCE(engineer_documents.hydra_manifest, '{}'::jsonb) || jsonb_build_object($7::text, $8::jsonb)
-                `, [projectId, ipc, finalDocValue, binary_id, uid, finalSize, manifestKey, hydraManifest ? JSON.stringify(hydraManifest) : null]);
+                        ${originalSizeField} = EXCLUDED.${originalSizeField},
+                        hydra_manifest = COALESCE(engineer_documents.hydra_manifest, '{}'::jsonb) || jsonb_build_object($8::text, $9::jsonb)
+                `, [projectId, ipc, finalDocValue, binary_id, uid, finalSize, originalSize, manifestKey, hydraManifest ? JSON.stringify(hydraManifest) : null]);
             }
         }
 
@@ -7334,7 +7354,8 @@ app.get('/api/locations/municipalities-by-province', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT DISTINCT municipality FROM all_locations
-       WHERE UPPER(TRIM(region)) = UPPER(TRIM($1)) AND UPPER(TRIM(province)) = UPPER(TRIM($2))
+       WHERE REGEXP_REPLACE(UPPER(TRIM(region)), '\\s+', ' ', 'g') = REGEXP_REPLACE(UPPER(TRIM($1)), '\\s+', ' ', 'g') 
+       AND REGEXP_REPLACE(UPPER(TRIM(province)), '\\s+', ' ', 'g') = REGEXP_REPLACE(UPPER(TRIM($2)), '\\s+', ' ', 'g')
        AND municipality IS NOT NULL AND municipality != ''
        ORDER BY municipality ASC`,
       [region, province]
@@ -7349,7 +7370,7 @@ app.get('/api/locations/schools', async (req, res) => {
   const { region, division, district, municipality } = req.query;
   try {
     const result = await pool.query(
-      'SELECT "SchoolID" as school_id, "School_Name" as school_name, "Region" as region, "Division" as division, "District" as district, "Province" as province, "Municipality" as municipality, "Legislative_District" as legislative_district, "Curricular_Offering" as curricular_offering, "Latitude" as latitude, "Longitude" as longitude FROM "schools_IERN" WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) AND UPPER(TRIM("Division")) = UPPER(TRIM($2)) AND UPPER(TRIM("District")) = UPPER(TRIM($3)) AND UPPER(TRIM("Municipality")) = UPPER(TRIM($4)) ORDER BY "School_Name" ASC',
+      'SELECT "SchoolID" as school_id, "School_Name" as school_name, "Region" as region, "Division" as division, "District" as district, "Province" as province, "Municipality" as municipality, "Legislative_District" as legislative_district, "Curricular_Offering" as curricular_offering, "Latitude" as latitude, "Longitude" as longitude FROM "schools_IERN" WHERE REGEXP_REPLACE(UPPER(TRIM("Region")), \'\\s+\', \' \', \'g\') = REGEXP_REPLACE(UPPER(TRIM($1)), \'\\s+\', \' \', \'g\') AND REGEXP_REPLACE(UPPER(TRIM("Division")), \'\\s+\', \' \', \'g\') = REGEXP_REPLACE(UPPER(TRIM($2)), \'\\s+\', \' \', \'g\') AND REGEXP_REPLACE(UPPER(TRIM("District")), \'\\s+\', \' \', \'g\') = REGEXP_REPLACE(UPPER(TRIM($3)), \'\\s+\', \' \', \'g\') AND REGEXP_REPLACE(UPPER(TRIM("Municipality")), \'\\s+\', \' \', \'g\') = REGEXP_REPLACE(UPPER(TRIM($4)), \'\\s+\', \' \', \'g\') ORDER BY "School_Name" ASC',
       [region, division, district, municipality]
     );
     res.json(result.rows);
@@ -7361,9 +7382,9 @@ app.get('/api/locations/barangays', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT DISTINCT barangay FROM ph_barangays
-       WHERE UPPER(TRIM(region)) = UPPER(TRIM($1))
-       AND UPPER(TRIM(province)) = UPPER(TRIM($2))
-       AND UPPER(TRIM(municipality)) = UPPER(TRIM($3))
+       WHERE REGEXP_REPLACE(UPPER(TRIM(region)), '\\s+', ' ', 'g') = REGEXP_REPLACE(UPPER(TRIM($1)), '\\s+', ' ', 'g')
+       AND REGEXP_REPLACE(UPPER(TRIM(province)), '\\s+', ' ', 'g') = REGEXP_REPLACE(UPPER(TRIM($2)), '\\s+', ' ', 'g')
+       AND REGEXP_REPLACE(UPPER(TRIM(municipality)), '\\s+', ' ', 'g') = REGEXP_REPLACE(UPPER(TRIM($3)), '\\s+', ' ', 'g')
        ORDER BY barangay ASC`,
       [region, province, municipality]
     );

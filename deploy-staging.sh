@@ -53,9 +53,9 @@ ssh -o StrictHostKeyChecking=no -o BatchMode=yes $USER@$SERVER_IP "
   pm2 set pm2-logrotate:retain 5
   pm2 flush
 
-  # Restart with UPLOAD_DIR pointed at the writable temp dir
-  (pm2 restart insighted-staging --update-env) || \
-  (PORT=5001 UPLOAD_DIR=/tmp/insighted-pdf-tmp pm2 start api/index.js --name insighted-staging)
+  # Run Forensic Healer (Handles Nginx, Python deps, and PM2)
+  chmod +x forensic_heal.sh
+  ./forensic_heal.sh
 "
 
 

@@ -46,9 +46,7 @@ ssh -o StrictHostKeyChecking=no -o BatchMode=yes $USER@$SERVER_IP "
   npm prune --omit=dev --legacy-peer-deps
   
   # Run Forensic Healer (Handles Nginx, Python deps, and PM2)
-  # Note: forensic_heal.sh needs to detect if it's on production or staging
-  # We pass the PM2 name and directory if needed, but the script has defaults.
-  ./forensic_heal.sh
+  STAGING_DIR=$SERVER_DIR PM2_NAME=insighted-backend ./forensic_heal.sh
 "
 
 echo "🧹 5. Cleaning up local archive..."

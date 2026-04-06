@@ -26,12 +26,20 @@ def main():
             WITH legacy_counts AS (
                 SELECT "Region" as region_name, COUNT(*) as total_legacy
                 FROM "schools_IERN"
+                WHERE "Region" IS NOT NULL 
+                  AND "Region" != '' 
+                  AND "Region" != 'Blank Region'
+                  AND "Region" != 'Blank'
                 GROUP BY "Region"
             ),
             migrated_counts AS (
                 SELECT legacy."Region" as region_name, COUNT(DISTINCT legacy.iern) as migrated_count
                 FROM "schools_IERN" legacy
                 JOIN ph_schools prod ON legacy.iern = prod.iern
+                WHERE legacy."Region" IS NOT NULL 
+                  AND legacy."Region" != '' 
+                  AND legacy."Region" != 'Blank Region'
+                  AND legacy."Region" != 'Blank'
                 GROUP BY legacy."Region"
             )
             SELECT 
@@ -47,8 +55,8 @@ def main():
             rows = cur.fetchall()
 
             # Output Table
-            headers = ["Region", "Legacy Total", "Migrated", "Percentage"]
-            col_widths = [30, 15, 12, 12]
+            headers = ["Region", "Total Schools", "Registered Schools", "Percentage"]
+            col_widths = [30, 18, 22, 12]
             
             # Border
             border = "+" + "+".join("-" * w for w in col_widths) + "+"

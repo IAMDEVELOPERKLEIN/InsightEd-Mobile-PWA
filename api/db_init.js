@@ -517,6 +517,11 @@ const runMigrations = async (client, dbLabel) => {
                 ADD COLUMN IF NOT EXISTS contract_size BIGINT,
                 ADD COLUMN IF NOT EXISTS moa_size BIGINT,
                 ADD COLUMN IF NOT EXISTS rta_size BIGINT,
+                ADD COLUMN IF NOT EXISTS pow_original_size BIGINT,
+                ADD COLUMN IF NOT EXISTS dupa_original_size BIGINT,
+                ADD COLUMN IF NOT EXISTS contract_original_size BIGINT,
+                ADD COLUMN IF NOT EXISTS moa_original_size BIGINT,
+                ADD COLUMN IF NOT EXISTS rta_original_size BIGINT,
                 ADD COLUMN IF NOT EXISTS hydra_manifest JSONB;
             `);
             console.log(`✅ [${dbLabel}] Engineer Documents Table Ready`);
@@ -1277,7 +1282,9 @@ const runMigrations = async (client, dbLabel) => {
         // Idempotent column additions
         await client.query(`ALTER TABLE school_ownership_docs ADD COLUMN IF NOT EXISTS binary_id UUID;`).catch(() => {});
         await client.query(`ALTER TABLE school_ownership_docs ADD COLUMN IF NOT EXISTS file_size BIGINT;`).catch(() => {});
+        await client.query(`ALTER TABLE school_ownership_docs ADD COLUMN IF NOT EXISTS original_size BIGINT;`).catch(() => {});
         await client.query(`ALTER TABLE school_ownership_docs ADD COLUMN IF NOT EXISTS hydra_manifest JSONB;`).catch(() => {});
+        await client.query(`ALTER TABLE school_ownership_docs ADD COLUMN IF NOT EXISTS school_id TEXT;`).catch(() => {});
 
         // Data Healing: Cleanup orphans to allow FK creation
         await client.query("DELETE FROM school_ownership_docs WHERE iern NOT IN (SELECT iern FROM ph_schools)");
@@ -1411,6 +1418,11 @@ const runMigrations = async (client, dbLabel) => {
         
         // Ensure LGU projects also support Hydra
         await client.query(`ALTER TABLE lgu_projects ADD COLUMN IF NOT EXISTS hydra_manifest JSONB;`).catch(() => {});
+        await client.query(`ALTER TABLE lgu_projects ADD COLUMN IF NOT EXISTS pow_original_size BIGINT;`).catch(() => {});
+        await client.query(`ALTER TABLE lgu_projects ADD COLUMN IF NOT EXISTS dupa_original_size BIGINT;`).catch(() => {});
+        await client.query(`ALTER TABLE lgu_projects ADD COLUMN IF NOT EXISTS contract_original_size BIGINT;`).catch(() => {});
+        await client.query(`ALTER TABLE lgu_projects ADD COLUMN IF NOT EXISTS moa_original_size BIGINT;`).catch(() => {});
+        await client.query(`ALTER TABLE lgu_projects ADD COLUMN IF NOT EXISTS rta_original_size BIGINT;`).catch(() => {});
 
         console.log(`✅ [${dbLabel}] Unified Binaries Table & Indices Initialized`);
     } catch (binErr) {

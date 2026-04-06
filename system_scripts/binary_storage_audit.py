@@ -197,13 +197,7 @@ def run_audit(cur):
                 WHEN sod.file_path LIKE '/uploads/%'        THEN 'DISK'
                 ELSE 'UNKNOWN'
             END                                             AS storage_mode,
-            -- file_size is the original upload size ONLY for disk-fallback rows
-            -- (binary rows: file_size ≈ binary_store_size, both post-compression)
-            CASE
-                WHEN sod.binary_id IS NULL
-                     AND sod.file_size IS NOT NULL          THEN sod.file_size
-                ELSE NULL
-            END                                             AS known_original_size,
+            COALESCE(sod.original_size, sod.file_size)       AS known_original_size,
             sod.created_at
         FROM school_ownership_docs sod
         LEFT JOIN unified_binaries ub ON sod.binary_id = ub.id
@@ -286,7 +280,7 @@ def run_audit(cur):
         (SELECT 
             sod.id::TEXT,
             'SOD'                  AS source,
-            sod.file_size          AS original_size,
+            COALESCE(sod.original_size, sod.file_size) AS original_size,
             ub.size_bytes          AS stored_size,
             sod.created_at
         FROM school_ownership_docs sod
@@ -295,12 +289,12 @@ def run_audit(cur):
         (SELECT 
             ed.doc_id::TEXT,
             'ENG.DOC'              AS source,
-            ed.pow_size            AS original_size,
+            COALESCE(ed.pow_original_size, ed.pow_size) AS original_size,
             ub.size_bytes          AS stored_size,
             ed.created_at
         FROM engineer_documents ed
         JOIN unified_binaries ub ON ed.binary_id = ub.id
-        WHERE ed.pow_size IS NOT NULL)
+        WHERE COALESCE(ed.pow_original_size, ed.pow_size) IS NOT NULL)
         ORDER BY created_at DESC
         LIMIT 20;
     """)
