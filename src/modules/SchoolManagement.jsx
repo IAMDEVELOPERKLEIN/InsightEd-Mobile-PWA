@@ -94,40 +94,9 @@ const SchoolManagement = () => {
     const [confirmTimer, setConfirmTimer] = useState(20);
     const [canConfirm, setCanConfirm] = useState(false);
 
-    // Entry Warning State
-    const [showEntryWarning, setShowEntryWarning] = useState(false);
-    const [warningTimer, setWarningTimer] = useState(5);
-    const [canProceed, setCanProceed] = useState(false);
-
     // Success Modal State
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [lastSubmissionDetails, setLastSubmissionDetails] = useState(null);
-
-    // Initial Shield/Warning Effect
-    useEffect(() => {
-        const hasSeenWarning = sessionStorage.getItem('sdo_master_warning_seen');
-        if (!hasSeenWarning) {
-            setShowEntryWarning(true);
-        }
-    }, []);
-
-    // Warning Countdown Logic
-    useEffect(() => {
-        let interval;
-        if (showEntryWarning && warningTimer > 0) {
-            interval = setInterval(() => {
-                setWarningTimer(prev => prev - 1);
-            }, 1000);
-        } else if (warningTimer === 0) {
-            setCanProceed(true);
-        }
-        return () => clearInterval(interval);
-    }, [showEntryWarning, warningTimer]);
-
-    const handleProceed = () => {
-        sessionStorage.setItem('sdo_master_warning_seen', 'true');
-        setShowEntryWarning(false);
-    };
 
     useEffect(() => {
         let interval;
@@ -1372,74 +1341,6 @@ const SchoolManagement = () => {
                     )}
                 </div>
 
-                {/* MODAL: Entry Warning (Critical Component Protocol) */}
-                {showEntryWarning && (
-                    <div className="fixed inset-0 z-[4000] flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-xl animate-in fade-in duration-500">
-                        <div className="bg-white dark:bg-slate-900 rounded-[3rem] p-12 max-w-lg w-full shadow-[0_48px_96px_-12px_rgba(0,0,0,0.8)] border-4 border-rose-600/20 dark:border-rose-400/20 transform scale-100 animate-in zoom-in-95 duration-500 overflow-hidden relative">
-                            {/* Warning Glow Effect */}
-                            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-rose-500 via-amber-500 to-rose-500"></div>
-                            
-                            <div className="w-24 h-24 bg-rose-500/10 dark:bg-rose-400/10 rounded-full flex items-center justify-center mx-auto text-rose-600 dark:text-rose-400 mb-8 border-4 border-rose-500/20 shadow-inner">
-                                <FiShield size={48} className="animate-pulse" />
-                            </div>
-
-                            <h3 className="text-center text-3xl font-black text-slate-900 dark:text-white mb-4 uppercase tracking-tighter sm:text-4xl">
-                                MASTER REGISTRY <br />
-                                <span className="text-rose-600 dark:text-rose-400">ACCESS SHIELD</span>
-                            </h3>
-
-                            <div className="space-y-6 text-center mb-10">
-                                <p className="text-slate-600 dark:text-slate-300 font-bold leading-relaxed text-lg">
-                                    You are entering the high-authority automated registration pipeline.
-                                </p>
-                                
-                                <div className="bg-rose-50 dark:bg-rose-950/40 p-6 rounded-3xl border-2 border-rose-100 dark:border-rose-900/50 text-left space-y-4">
-                                    <div className="flex gap-4">
-                                        <FiAlertTriangle className="text-rose-600 dark:text-rose-400 shrink-0 mt-1" size={24} />
-                                        <p className="text-sm font-black text-rose-700 dark:text-rose-300 uppercase tracking-wide">Instant Activation</p>
-                                    </div>
-                                    <p className="text-[13px] text-slate-700 dark:text-slate-200 font-bold leading-6">
-                                        All submissions take effect <span className="text-rose-600 dark:text-rose-400 underline">INSTANTLY</span> across the national system. There is no secondary approval process for SDO-level registrants.
-                                    </p>
-                                </div>
-                                
-                                <p className="text-sm text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest px-4">
-                                    Double-check School IDs and Coordinates. Once submitted, data is final.
-                                </p>
-                            </div>
-
-                            <div className="flex flex-col gap-4">
-                                <div className="text-center mb-2">
-                                    <span className={`text-5xl font-black tabular-nums tracking-tighter ${warningTimer > 0 ? 'text-rose-500 opacity-50' : 'text-emerald-500'}`}>
-                                        {warningTimer > 0 ? warningTimer : <FiCheck className="inline" />}
-                                    </span>
-                                    {warningTimer > 0 && <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1 pl-1">Syncing Protocol...</p>}
-                                </div>
-
-                                <button
-                                    onClick={handleProceed}
-                                    disabled={!canProceed}
-                                    className={`w-full py-6 rounded-[2rem] font-black text-sm uppercase tracking-[0.3em] transition-all shadow-2xl relative overflow-hidden group ${canProceed
-                                        ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:scale-105 active:scale-95'
-                                        : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                                        }`}
-                                >
-                                    {canProceed ? 'I UNDERSTAND, PROCEED' : 'INITIALIZING ACCESS...'}
-                                    {canProceed && (
-                                        <div className="absolute inset-0 bg-gradient-to-r from-blue-600/0 via-blue-600/10 to-blue-600/0 transform -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-                                    )}
-                                </button>
-                                
-                                <button
-                                    onClick={() => navigate('/monitoring-dashboard')}
-                                    className="w-full py-4 text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
-                                >
-                                    Cancel & Return To Dashboard
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
 
                 {/* MODAL: Confirmation */}
                 {showConfirmModal && (
