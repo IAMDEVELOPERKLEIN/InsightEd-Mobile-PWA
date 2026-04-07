@@ -792,7 +792,7 @@ app.patch('/api/schools/:school_id/units/:unit_number/complete', async (req, res
     client = await pool.connect();
     const result = await client.query(
       `UPDATE ph_schools SET ${col} = 1 WHERE school_id = $1
-       RETURNING unit1, unit2, unit3, unit4, unit5, unit7, unit8, unit9, unit_completion`,
+       RETURNING unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8, unit_completion`,
       [school_id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: "School not found" });
@@ -801,7 +801,7 @@ app.patch('/api/schools/:school_id/units/:unit_number/complete', async (req, res
       success: true,
       data: {
         unit1: row.unit1, unit2: row.unit2, unit3: row.unit3, unit4: row.unit4,
-        unit5: row.unit5, unit6: row.unit7, unit7: row.unit8, unit8: row.unit9,
+        unit5: row.unit5, unit6: row.unit6, unit7: row.unit7, unit8: row.unit8,
         unit_completion: parseFloat(parseFloat(row.unit_completion || 0).toFixed(2))
       }
     });
@@ -904,14 +904,9 @@ app.use(express.urlencoded({ limit: '500mb', extended: true }));
  * Recalculates and updates the total completion percentage for a school.
  * Considers 8 Modular Units.
  */
-// Helper to map UI Unit ID (1-8) to old ph_schools DB Column Index (1,2,3,4,5,7,8,9)
+// Helper to map UI Unit ID (1-10) to ph_schools DB Column Index — direct 1-to-1 mapping
 const getDBUnitFromUIUnit = (uiUnit) => {
-  const num = parseInt(uiUnit, 10);
-  if (num <= 5) return num;
-  if (num === 6) return 7; // School Resources
-  if (num === 7) return 8; // Physical Facilities
-  if (num === 8) return 9; // School Terrain
-  return num;
+  return parseInt(uiUnit, 10);
 };
 
 async function updateSchoolTotalCompletion(iern) {
@@ -922,12 +917,12 @@ async function updateSchoolTotalCompletion(iern) {
 
     const row = res.rows[0];
     let completedCount = 0;
-    // Check Unit 1 to 8
-    for (let i = 1; i <= 8; i++) {
+    // Check Unit 1 to 10
+    for (let i = 1; i <= 10; i++) {
         if (row[`unit${i}_completion`] === true) completedCount++;
     }
 
-    const totalStats = 8;
+    const totalStats = 10;
     const percentage = parseFloat(((completedCount / totalStats) * 100).toFixed(2));
 
     await pool.query(
@@ -12115,17 +12110,17 @@ app.post('/api/save-physical-facilities', async (req, res) => {
       }
     }
 
-    // 5. Mark unit8_completed flag in ph_schools (UI Unit 7 -> DB Unit 8)
+    // 5. Mark unit7_completed flag in ph_schools (UI Unit 7 -> DB Unit 7)
     // STRICT VALIDATION: Only mark as completed if there is at least one building in inventory
     const inventoryCount = (data.inventoryEntries && Array.isArray(data.inventoryEntries)) ? data.inventoryEntries.length : 0;
     const isUnit7Completed = inventoryCount > 0 && !data.isPartial;
 
-    await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE;`);
-    await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_updated_at TIMESTAMP;`);
-    
+    await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE;`);
+    await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_updated_at TIMESTAMP;`);
+
     if (data.iern) {
-        await client.query(`UPDATE ph_schools SET unit8_completed = $1, unit8 = $2, unit8_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit8_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE iern = $3`, [isUnit7Completed, isUnit7Completed ? 1 : 0, data.iern]);
-        
+        await client.query(`UPDATE ph_schools SET unit7_completed = $1, unit7 = $2, unit7_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit7_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE iern = $3`, [isUnit7Completed, isUnit7Completed ? 1 : 0, data.iern]);
+
         // --- SYNC COMPLETION (UI Unit 7 Facilities -> unit7_completion) ---
         if (isUnit7Completed) {
             await client.query(`
@@ -12135,7 +12130,7 @@ app.post('/api/save-physical-facilities', async (req, res) => {
             `, [data.iern, sId]);
         }
     } else {
-        await client.query(`UPDATE ph_schools SET unit8_completed = $1, unit8 = $2, unit8_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit8_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $3`, [isUnit7Completed, isUnit7Completed ? 1 : 0, sId]);
+        await client.query(`UPDATE ph_schools SET unit7_completed = $1, unit7 = $2, unit7_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit7_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $3`, [isUnit7Completed, isUnit7Completed ? 1 : 0, sId]);
     }
 
     await client.query('COMMIT');
@@ -13847,9 +13842,10 @@ app.get('/api/monitoring/schools', async (req, res) => {
     // We use schools table (s) for identity
     // We use ph_schools (sp) for status_of_construction_phase, handling NULLs with COALESCE
     const selectFields = `
-      COALESCE(sp.unit_completion, 0) as completion_percentage,
+      COALESCE(psc.total_completion, sp.unit_completion, 0) as completion_percentage,
       s."School_Name" as school_name,
       s."SchoolID" as school_id,
+      s."Region" as region,
       s."Division" as division,
       s."District" as district,
       COALESCE(sp.total_enrollment, 0) as total_enrollment,
@@ -13882,9 +13878,10 @@ app.get('/api/monitoring/schools', async (req, res) => {
 
     // COUNT Query (Count from schools table)
     const countQuery = `
-      SELECT COUNT(*) as total 
+      SELECT COUNT(*) as total
       FROM "schools_IERN" s
       LEFT JOIN ph_schools sp ON s."SchoolID" = sp.school_id
+      LEFT JOIN ph_school_completion psc ON sp.iern = psc.iern
       LEFT JOIN school_summary ss ON s."SchoolID" = ss.school_id
       LEFT JOIN (SELECT DISTINCT ON (school_id) school_id, status FROM esf7_database ORDER BY school_id, id DESC) e ON s."SchoolID" = e.school_id
       ${whereSql}
@@ -13898,10 +13895,11 @@ app.get('/api/monitoring/schools', async (req, res) => {
       SELECT ${selectFields}
       FROM "schools_IERN" s
       LEFT JOIN ph_schools sp ON s."SchoolID" = sp.school_id
+      LEFT JOIN ph_school_completion psc ON sp.iern = psc.iern
       LEFT JOIN school_summary ss ON s."SchoolID" = ss.school_id
       LEFT JOIN (SELECT DISTINCT ON (school_id) school_id, status FROM esf7_database ORDER BY school_id, id DESC) e ON s."SchoolID" = e.school_id
       ${whereSql}
-      ORDER BY COALESCE(sp.unit_completion, 0) DESC, s."School_Name" ASC
+      ORDER BY COALESCE(psc.total_completion, sp.unit_completion, 0) DESC, s."School_Name" ASC
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
 
@@ -16136,10 +16134,11 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
           unit3: row?.unit3_updated_at,
           unit4: row?.unit4_updated_at,
           unit5: row?.unit5_updated_at,
-          unit6: row?.unit7_updated_at,
-          unit7: row?.unit8_updated_at,
-          unit8: row?.unit9_updated_at,
-          unit9: row?.unit10_updated_at,
+          unit6: row?.unit6_updated_at,
+          unit7: row?.unit7_updated_at,
+          unit8: row?.unit8_updated_at,
+          unit9: row?.unit9_updated_at,
+          unit10: row?.unit10_updated_at,
         }
       } 
     });
@@ -16394,6 +16393,13 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
     console.log(`📝 Unit 1 POST received for school: ${data.school_id}`);
 
 
+    // Auto-migrate: Add annex_details JSONB if missing
+    try {
+      await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS annex_details JSONB');
+    } catch (e) {
+      console.warn("DB Migration Warning for Unit 1 Annex:", e.message);
+    }
+
     const isCompleted = !!(
       data.barangay && 
       data.leg_district && 
@@ -16419,8 +16425,9 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         head_date_of_birth, head_date_hired, google_drive_link, google_drive_file_id,
         google_drive_file_name, google_drive_thumbnail_url, 
         local_file_path, local_file_name, local_file_size,
+        annex_details,
         unit1_updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, CURRENT_TIMESTAMP)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, CURRENT_TIMESTAMP)
       ON CONFLICT (iern) DO UPDATE SET
         school_id = EXCLUDED.school_id,
         school_name = EXCLUDED.school_name,
@@ -16460,6 +16467,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         local_file_path = EXCLUDED.local_file_path,
         local_file_name = EXCLUDED.local_file_name,
         local_file_size = EXCLUDED.local_file_size,
+        annex_details = EXCLUDED.annex_details,
         unit1_updated_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP;
     `;
@@ -16481,7 +16489,8 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.head_date_of_birth || null, data.head_date_hired || null,
       data.google_drive_link || null, data.google_drive_file_id || null,
       data.google_drive_file_name || null, data.google_drive_thumbnail_url || null,
-      data.local_file_path || null, data.local_file_name || null, (data.local_file_size ? parseInt(data.local_file_size) : null)
+      data.local_file_path || null, data.local_file_name || null, (data.local_file_size ? parseInt(data.local_file_size) : null),
+      data.annex_details ? JSON.stringify(data.annex_details) : null
     ];
 
     // 1. Attempt an UPDATE first based on permanent IERN to safely allow school_id changes
@@ -16527,6 +16536,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
           head_date_hired = $32, google_drive_link = $33, google_drive_file_id = $34,
           google_drive_file_name = $35, google_drive_thumbnail_url = $36,
           local_file_path = $37, local_file_name = $38, local_file_size = $39,
+          annex_details = $40,
           unit1_updated_at = CURRENT_TIMESTAMP,
           updated_at = CURRENT_TIMESTAMP
         WHERE iern = $2
@@ -17878,12 +17888,15 @@ app.post('/api/school-location', async (req, res) => {
       ];
 
       const sumProx = proxFields.reduce((acc, field) => acc + (parseFloat(validatedData[field]) || 0), 0);
-      const isUnit9Completed = sumProx > 0;
+      const isUnit8Completed = sumProx > 0;
 
       // 1. Ph_Schools (Quest)
-      await pool.query('UPDATE ph_schools SET unit9_completed = $2, unit9 = $3 WHERE school_id = $1', [schoolId, isUnit9Completed, isUnit9Completed ? 1 : 0]);
+      await pool.query(
+        'UPDATE ph_schools SET unit8_completed = $2, unit8 = $3, unit8_updated_at = CASE WHEN $2 = TRUE THEN CURRENT_TIMESTAMP ELSE unit8_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1',
+        [schoolId, isUnit8Completed, isUnit8Completed ? 1 : 0]
+      );
 
-      console.log(`[Dashboard Integration] Unit 9 Flags updated for school ${schoolId}`);
+      console.log(`[Dashboard Integration] Unit 8 Flags updated for school ${schoolId}`);
     } catch (flagErr) {
       console.warn("[Dashboard Integration] Failed to update flags:", flagErr.message);
     }

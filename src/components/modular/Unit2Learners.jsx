@@ -72,8 +72,9 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     
     // Step 5: Special Learners (SNED / Non-Graded)
     const [hasSNED, setHasSNED] = useState(null);
-    const [snedTotalCount, setSnedTotalCount] = useState("");
-    const [snedProgramType, setSnedProgramType] = useState(null); // 'MAIN STREAM' | 'SELF CONTAINED'
+    const [snedMainstreamedCount, setSnedMainstreamedCount] = useState("");
+    const [snedSelfContainedCount, setSnedSelfContainedCount] = useState("");
+    const [snedProgramType, setSnedProgramType] = useState(null); // Keep for legacy/compat
     const [snedOrganizedClassCount, setSnedOrganizedClassCount] = useState("");
     const [snedLanguage, setSnedLanguage] = useState("en"); // "en" | "ph"
 
@@ -117,8 +118,8 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             });
         });
         // SNED
-        if (hasSNED && snedProgramType === 'Self-Contained') {
-            sum += (parseInt(snedTotalCount) || 0);
+        if (hasSNED) {
+            sum += (parseInt(snedSelfContainedCount) || 0);
         }
 
         return sum;
@@ -148,8 +149,8 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         });
         
         // SNED
-        if (hasSNED && snedProgramType === 'Self-Contained') {
-            s += (parseInt(gradeGenderMap['sned']?.male) || 0) + (parseInt(gradeGenderMap['sned']?.female) || 0);
+        if (hasSNED) {
+            s += (parseInt(gradeGenderMap['sned_self_contained']?.male) || 0) + (parseInt(gradeGenderMap['sned_self_contained']?.female) || 0);
         }
         
         return s;
@@ -229,7 +230,8 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                         setGradeTotals(q.gradeTotals || {});
                                         setGradeAvailability(q.gradeAvailability || {});
                                         setHasSNED(q.hasSNED);
-                                        setSnedTotalCount(q.snedTotalCount || "");
+                                        setSnedMainstreamedCount(q.snedMainstreamedCount || (q.snedProgramType === 'Mainstreamed' ? q.snedTotalCount : ""));
+                                        setSnedSelfContainedCount(q.snedSelfContainedCount || (q.snedProgramType === 'Self-Contained' ? q.snedTotalCount : ""));
                                         setSnedProgramType(q.snedProgramType || null);
                                         setSnedOrganizedClassCount(q.snedOrganizedClassCount || "");
                                         setHasAralMath(q.hasAralMath);
@@ -262,7 +264,8 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         setGradeTotals(q.gradeTotals || {});
                         setGradeAvailability(q.gradeAvailability || {});
                         setHasSNED(q.hasSNED);
-                        setSnedTotalCount(q.snedTotalCount || "");
+                        setSnedMainstreamedCount(q.snedMainstreamedCount || (q.snedProgramType === 'Mainstreamed' ? q.snedTotalCount : ""));
+                        setSnedSelfContainedCount(q.snedSelfContainedCount || (q.snedProgramType === 'Self-Contained' ? q.snedTotalCount : ""));
                         setSnedProgramType(q.snedProgramType || null);
                         setSnedOrganizedClassCount(q.snedOrganizedClassCount || "");
                         setHasAralMath(q.hasAralMath);
@@ -287,7 +290,8 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     setGradeTotals(draft2.gradeTotals || {});
                     setGradeAvailability(draft2.gradeAvailability || {});
                     setHasSNED(draft2.hasSNED);
-                    setSnedTotalCount(draft2.snedTotalCount || "");
+                    setSnedMainstreamedCount(draft2.snedMainstreamedCount || "");
+                    setSnedSelfContainedCount(draft2.snedSelfContainedCount || "");
                     setSnedProgramType(draft2.snedProgramType || null);
                     setSnedOrganizedClassCount(draft2.snedOrganizedClassCount || "");
                     setHasAralMath(draft2.hasAralMath);
@@ -432,15 +436,26 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         if (subject === 'science') setAralScience(prev => ({ ...prev, [gradeId]: sanitized }));
     };
 
-    const handleSnedTotalChange = (val) => {
+    const handleSnedCountChange = (type, val) => {
         const sanitized = sanitizeNumeric(val);
-        setSnedTotalCount(sanitized);
-        if (sanitized === "" || sanitized === "0") {
-            setGradeGenderMap(prev => {
-                const newMap = { ...prev };
-                delete newMap['sned'];
-                return newMap;
-            });
+        if (type === 'mainstreamed') {
+            setSnedMainstreamedCount(sanitized);
+            if (sanitized === "" || sanitized === "0") {
+                setGradeGenderMap(prev => {
+                    const newMap = { ...prev };
+                    delete newMap['sned_mainstreamed'];
+                    return newMap;
+                });
+            }
+        } else {
+            setSnedSelfContainedCount(sanitized);
+            if (sanitized === "" || sanitized === "0") {
+                setGradeGenderMap(prev => {
+                    const newMap = { ...prev };
+                    delete newMap['sned_self_contained'];
+                    return newMap;
+                });
+            }
         }
     };
 
@@ -629,8 +644,8 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             mgCombinations,
             gradeTotals,
             gradeAvailability,
-            hasSNED,
-            snedTotalCount,
+            snedMainstreamedCount,
+            snedSelfContainedCount,
             snedProgramType,
             snedOrganizedClassCount,
             hasAralMath, aralMath,
@@ -659,7 +674,8 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 gradeTotals,
                 gradeAvailability,
                 hasSNED,
-                snedTotalCount: parseInt(snedTotalCount) || 0,
+                snedMainstreamedCount: parseInt(snedMainstreamedCount) || 0,
+                snedSelfContainedCount: parseInt(snedSelfContainedCount) || 0,
                 snedProgramType,
                 snedOrganizedClassCount: parseInt(snedOrganizedClassCount) || 0,
                 hasAralMath, aralMath: hasAralMath ? aralMath : {},
@@ -738,10 +754,12 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     payload: { 
                         iern,
                         unit2_simplified_enrollment: payload,
-                        has_sned: hasSNED,
-                        sned_total_count: parseInt(snedTotalCount) || 0,
-                        sned_program_type: snedProgramType,
-                        sned_organized_class_count: parseInt(snedOrganizedClassCount) || 0,
+                    has_sned: hasSNED,
+                    sned_mainstreamed_count: parseInt(snedMainstreamedCount) || 0,
+                    sned_self_contained_count: parseInt(snedSelfContainedCount) || 0,
+                    sned_total_count: parseInt(snedSelfContainedCount) || 0,
+                    sned_program_type: snedProgramType,
+                    sned_organized_class_count: parseInt(snedOrganizedClassCount) || 0,
                         multigrade_groupings_1: mg_1,
                         multigrade_groupings_2: mg_2,
                         multigrade_groupings_3: mg_3,
@@ -765,7 +783,9 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     iern,
                     unit2_simplified_enrollment: payload,
                     has_sned: hasSNED,
-                    sned_total_count: parseInt(snedTotalCount) || 0,
+                    sned_mainstreamed_count: parseInt(snedMainstreamedCount) || 0,
+                    sned_self_contained_count: parseInt(snedSelfContainedCount) || 0,
+                    sned_total_count: parseInt(snedSelfContainedCount) || 0,
                     sned_program_type: snedProgramType,
                     sned_organized_class_count: parseInt(snedOrganizedClassCount) || 0,
                     multigrade_groupings_1: mg_1,
@@ -1760,96 +1780,118 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             initial={{ opacity: 0, height: 0 }}
                                             animate={{ opacity: 1, height: "auto" }}
                                             exit={{ opacity: 0, height: 0 }}
-                                            className="space-y-8 pt-4 border-t-2 border-indigo-50"
+                                            className="space-y-12 pt-8 border-t-2 border-indigo-50"
                                         >
-                                            {/* How many? */}
-                                            <div className="flex flex-col items-center py-4">
-                                                <label className="text-xs font-black uppercase text-indigo-400 tracking-[0.2em] mb-4">
-                                                    {snedLanguage === "en" ? "How many?" : "Ilan sila?"}
-                                                </label>
-                                                <input 
-                                                    type="number" 
-                                                    placeholder="0" 
-                                                    value={snedTotalCount === "0" ? "" : (snedTotalCount || "")} 
-                                                    onChange={(e) => handleSnedTotalChange(e.target.value)}
-                                                    className={`w-48 h-24 text-5xl font-black text-center rounded-3xl transition-all duration-300 bg-indigo-50 border-4 border-indigo-200 text-indigo-700 focus:bg-white focus:border-indigo-500 shadow-xl shadow-indigo-100/50`}
-                                                />
-                                            </div>
-
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 block mb-2 text-center">Male</label>
-                                                    <input 
-                                                        type="number"
-                                                        value={gradeGenderMap['sned']?.male === "0" ? "" : (gradeGenderMap['sned']?.male || "")}
-                                                        onChange={(e) => handleGradeGenderChange('sned', snedTotalCount, e.target.value)}
-                                                        placeholder="0"
-                                                        className={chunkyInput + " !text-2xl text-center border-blue-100 focus:border-blue-500"}
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 block mb-2 text-center">Female</label>
-                                                    <input 
-                                                        type="number"
-                                                        value={gradeGenderMap['sned']?.female === "0" ? "" : (gradeGenderMap['sned']?.female || "")}
-                                                        onChange={(e) => handleFemaleGenderChange('sned', snedTotalCount, e.target.value)}
-                                                        placeholder="0"
-                                                        className={chunkyInput + " !text-2xl text-center border-rose-100 focus:border-rose-500"}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            {/* Classification Buttons */}
-                                            {snedTotalCount.length > 0 && (
-                                                <motion.div 
-                                                    initial={{ opacity: 0, y: 20 }}
-                                                    animate={{ opacity: 1, y: 0 }}
-                                                    className="space-y-6"
-                                                >
-                                                    <div className="text-center">
-                                                        <label className="text-xs font-black uppercase text-indigo-400 tracking-[0.2em] mb-4 block">
-                                                            {snedLanguage === "en" ? "Program Classification" : "Uri ng Program"}
-                                                        </label>
-                                                        <div className="flex gap-3">
-                                                            <button 
-                                                                onClick={() => {
-                                                                    setSnedProgramType('Mainstreamed');
-                                                                    setSnedOrganizedClassCount("");
-                                                                }}
-                                                                className={`flex-1 py-4 rounded-2xl font-black text-sm border-2 transition-all ${snedProgramType === 'Mainstreamed' ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-white'}`}
-                                                            >
-                                                                MAINSTREAMED
-                                                            </button>
-                                                            <button 
-                                                                onClick={() => setSnedProgramType('Self-Contained')}
-                                                                className={`flex-1 py-4 rounded-2xl font-black text-sm border-2 transition-all ${snedProgramType === 'Self-Contained' ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-white'}`}
-                                                            >
-                                                                SELF-CONTAINED
-                                                            </button>
-                                                        </div>
+                                            {/* 1. Mainstreamed Section */}
+                                            <div className="bg-blue-50/30 rounded-3xl p-6 border-2 border-blue-100/50">
+                                                <div className="flex items-center gap-3 mb-6">
+                                                    <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center text-xl shadow-sm">🤝</div>
+                                                    <div>
+                                                        <h4 className="text-lg font-black text-slate-800 leading-none">Mainstreamed SNED</h4>
+                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Learners integrated in regular classes</p>
                                                     </div>
+                                                </div>
 
-                                                    {/* Organized Class Input (If Self Contained) */}
-                                                    {snedProgramType === 'Self-Contained' && (
-                                                        <motion.div 
-                                                            initial={{ opacity: 0, scale: 0.9 }}
-                                                            animate={{ opacity: 1, scale: 1 }}
-                                                            className="flex flex-col items-center p-6 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200"
-                                                        >
-                                                            <label className="text-[11px] font-black uppercase text-indigo-500 tracking-widest mb-4 text-center">
-                                                                {snedLanguage === "en" ? "How many is the Organized Class?" : "Ilan ang Organized Class?"}
-                                                            </label>
-                                                            <input 
-                                                                type="number" 
-                                                                placeholder="0" 
-                                                                value={snedOrganizedClassCount} 
-                                                                onChange={(e) => setSnedOrganizedClassCount(sanitizeNumeric(e.target.value, 2))} 
-                                                                className="w-32 h-16 text-3xl font-black text-center rounded-2xl bg-white border-2 border-indigo-100 text-indigo-600 outline-none focus:border-indigo-500 shadow-sm"
-                                                            />
-                                                        </motion.div>
-                                                    )}
-                                                </motion.div>
-                                            )}
+                                                <div className="flex flex-col items-center mb-8">
+                                                    <label className="text-[10px] font-black uppercase text-blue-400 tracking-[0.2em] mb-3">Total Integrated</label>
+                                                    <input 
+                                                        type="number" 
+                                                        placeholder="0" 
+                                                        value={snedMainstreamedCount === "0" ? "" : (snedMainstreamedCount || "")} 
+                                                        onChange={(e) => handleSnedCountChange('mainstreamed', e.target.value)}
+                                                        className={`w-40 h-20 text-4xl font-black text-center rounded-2xl transition-all duration-300 bg-white border-2 border-blue-100 text-blue-700 focus:border-blue-500 shadow-sm`}
+                                                    />
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400/70 block mb-2 text-center">Male</label>
+                                                        <input 
+                                                            type="number"
+                                                            value={gradeGenderMap['sned_mainstreamed']?.male === "0" ? "" : (gradeGenderMap['sned_mainstreamed']?.male || "")}
+                                                            onChange={(e) => handleGradeGenderChange('sned_mainstreamed', snedMainstreamedCount, e.target.value)}
+                                                            placeholder="0"
+                                                            className={chunkyInput + " !text-xl !h-12 !p-0 !mt-0 border-blue-50 focus:border-blue-500 bg-white"}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400/70 block mb-2 text-center">Female</label>
+                                                        <input 
+                                                            type="number"
+                                                            value={gradeGenderMap['sned_mainstreamed']?.female === "0" ? "" : (gradeGenderMap['sned_mainstreamed']?.female || "")}
+                                                            onChange={(e) => handleFemaleGenderChange('sned_mainstreamed', snedMainstreamedCount, e.target.value)}
+                                                            placeholder="0"
+                                                            className={chunkyInput + " !text-xl !h-12 !p-0 !mt-0 border-rose-50 focus:border-rose-500 bg-white"}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <p className="text-[9px] text-slate-400 text-center mt-4 italic font-medium">Note: Mainstreamed learners are already counted in their respective grade levels and will not be added to the grand total.</p>
+                                            </div>
+
+                                            {/* 2. Self-Contained Section */}
+                                            <div className="bg-indigo-50/30 rounded-3xl p-6 border-2 border-indigo-100/50">
+                                                <div className="flex items-center gap-3 mb-6">
+                                                    <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center text-xl shadow-sm">🏫</div>
+                                                    <div>
+                                                        <h4 className="text-lg font-black text-slate-800 leading-none">Self-Contained SNED</h4>
+                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Learners in specialized classes</p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex flex-col items-center mb-8">
+                                                    <label className="text-[10px] font-black uppercase text-indigo-400 tracking-[0.2em] mb-3">Total Enrollment</label>
+                                                    <input 
+                                                        type="number" 
+                                                        placeholder="0" 
+                                                        value={snedSelfContainedCount === "0" ? "" : (snedSelfContainedCount || "")} 
+                                                        onChange={(e) => handleSnedCountChange('self_contained', e.target.value)}
+                                                        className={`w-40 h-20 text-4xl font-black text-center rounded-2xl transition-all duration-300 bg-white border-2 border-indigo-100 text-indigo-700 focus:border-indigo-500 shadow-sm`}
+                                                    />
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-4 mb-8">
+                                                    <div>
+                                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400/70 block mb-2 text-center">Male</label>
+                                                        <input 
+                                                            type="number"
+                                                            value={gradeGenderMap['sned_self_contained']?.male === "0" ? "" : (gradeGenderMap['sned_self_contained']?.male || "")}
+                                                            onChange={(e) => handleGradeGenderChange('sned_self_contained', snedSelfContainedCount, e.target.value)}
+                                                            placeholder="0"
+                                                            className={chunkyInput + " !text-xl !h-12 !p-0 !mt-0 border-blue-50 focus:border-blue-500 bg-white"}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400/70 block mb-2 text-center">Female</label>
+                                                        <input 
+                                                            type="number"
+                                                            value={gradeGenderMap['sned_self_contained']?.female === "0" ? "" : (gradeGenderMap['sned_self_contained']?.female || "")}
+                                                            onChange={(e) => handleFemaleGenderChange('sned_self_contained', snedSelfContainedCount, e.target.value)}
+                                                            placeholder="0"
+                                                            className={chunkyInput + " !text-xl !h-12 !p-0 !mt-0 border-rose-50 focus:border-rose-500 bg-white"}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                {/* Organized Class Input */}
+                                                {(parseInt(snedSelfContainedCount) > 0) && (
+                                                    <motion.div 
+                                                        initial={{ opacity: 0, scale: 0.9 }}
+                                                        animate={{ opacity: 1, scale: 1 }}
+                                                        className="flex flex-col items-center p-6 bg-white rounded-2xl border-2 border-dashed border-indigo-100"
+                                                    >
+                                                        <label className="text-[10px] font-black uppercase text-indigo-500 tracking-widest mb-3 text-center">
+                                                            {snedLanguage === "en" ? "Number of Organized Classes" : "Ilan ang Organized Class?"}
+                                                        </label>
+                                                        <input 
+                                                            type="number" 
+                                                            placeholder="0" 
+                                                            value={snedOrganizedClassCount} 
+                                                            onChange={(e) => setSnedOrganizedClassCount(sanitizeNumeric(e.target.value, 2))} 
+                                                            className="w-24 h-12 text-2xl font-black text-center rounded-xl bg-indigo-50 border-2 border-indigo-100 text-indigo-600 outline-none focus:border-indigo-500"
+                                                        />
+                                                    </motion.div>
+                                                )}
+                                            </div>
                                         </motion.div>
                                     )}
                                 </AnimatePresence>
@@ -2064,15 +2106,33 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 </tr>
                                             ))}
 
-                                            {/* SNED */}
-                                            {hasSNED === true && (
-                                                <tr className="hover:bg-slate-50/50 transition-colors border-l-4 border-l-amber-500">
+                                            {/* SNED Mainstreamed */}
+                                            {hasSNED === true && parseInt(snedMainstreamedCount) > 0 && (
+                                                <tr className="hover:bg-slate-50/50 transition-colors border-l-4 border-l-blue-400">
                                                     <td className="px-6 py-5">
-                                                        <span className="text-sm font-black text-amber-700">Special Needs (SNED)</span>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm font-black text-blue-700">SNED Mainstreamed</span>
+                                                            <span className="text-[9px] font-bold text-slate-400 uppercase italic">Excluded from Total Enrollment</span>
+                                                        </div>
                                                     </td>
-                                                    <td className="px-6 py-5 text-center font-bold text-blue-600">{gradeGenderMap['sned']?.male || 0}</td>
-                                                    <td className="px-6 py-5 text-center font-bold text-rose-600">{gradeGenderMap['sned']?.female || 0}</td>
-                                                    <td className="px-6 py-5 text-center font-black text-slate-800 bg-indigo-50/30">{snedTotalCount || 0}</td>
+                                                    <td className="px-6 py-5 text-center font-bold text-blue-600">{gradeGenderMap['sned_mainstreamed']?.male || 0}</td>
+                                                    <td className="px-6 py-5 text-center font-bold text-rose-600">{gradeGenderMap['sned_mainstreamed']?.female || 0}</td>
+                                                    <td className="px-6 py-5 text-center font-black text-slate-400 bg-slate-50/30 line-through decoration-red-500/50">{snedMainstreamedCount || 0}</td>
+                                                </tr>
+                                            )}
+
+                                            {/* SNED Self-Contained */}
+                                            {hasSNED === true && parseInt(snedSelfContainedCount) > 0 && (
+                                                <tr className="hover:bg-slate-50/50 transition-colors border-l-4 border-l-indigo-500">
+                                                    <td className="px-6 py-5">
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm font-black text-indigo-700">SNED Self-Contained</span>
+                                                            <span className="text-[9px] font-bold text-slate-400 uppercase italic">Included in Total Enrollment</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-5 text-center font-bold text-blue-600">{gradeGenderMap['sned_self_contained']?.male || 0}</td>
+                                                    <td className="px-6 py-5 text-center font-bold text-rose-600">{gradeGenderMap['sned_self_contained']?.female || 0}</td>
+                                                    <td className="px-6 py-5 text-center font-black text-slate-800 bg-indigo-50/30">{snedSelfContainedCount || 0}</td>
                                                 </tr>
                                             )}
 
@@ -2084,7 +2144,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                         gradeGenderMap['kinder']?.male || 0,
                                                         ...mgCombinations.map(c => gradeGenderMap[c.id]?.male || 0),
                                                         ...activeMonogrades.map(g => gradeGenderMap[g.id]?.male || 0),
-                                                        (hasSNED === true && snedProgramType === 'Self-Contained') ? (gradeGenderMap['sned']?.male || 0) : 0
+                                                        (hasSNED === true) ? (gradeGenderMap['sned_self_contained']?.male || 0) : 0
                                                     ].reduce((a, b) => parseInt(a) + parseInt(b), 0)}
                                                 </td>
                                                 <td className="px-6 py-6 text-center text-xl font-black text-rose-300">
@@ -2092,7 +2152,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                         gradeGenderMap['kinder']?.female || 0,
                                                         ...mgCombinations.map(c => gradeGenderMap[c.id]?.female || 0),
                                                         ...activeMonogrades.map(g => gradeGenderMap[g.id]?.female || 0),
-                                                        (hasSNED === true && snedProgramType === 'Self-Contained') ? (gradeGenderMap['sned']?.female || 0) : 0
+                                                        (hasSNED === true) ? (gradeGenderMap['sned_self_contained']?.female || 0) : 0
                                                     ].reduce((a, b) => parseInt(a) + parseInt(b), 0)}
                                                 </td>
                                                 <td className="px-6 py-6 text-center text-3xl font-black text-indigo-400">
