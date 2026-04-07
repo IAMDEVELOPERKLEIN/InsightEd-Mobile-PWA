@@ -141,7 +141,27 @@ ADD COLUMN IF NOT EXISTS "Longitude" NUMERIC(10, 7),
 ADD COLUMN IF NOT EXISTS "Mother_School_ID" TEXT;
     </pre>
 
-    <h2>5. Security & Access Protocol</h2>
+    <h2>6. School Conversion & Identity Lifecycle</h2>
+    <div class="card">
+        <p>To support historical tracking, the system implements a <strong>Versioned Identity Lifecycle</strong>. When a school changes its School ID (Conversion), the registry preserves the old record while activating the new one.</p>
+        
+        <h3>The "Archive-and-Replace" Protocol</h3>
+        <p>The system executes an atomic swap to maintain data integrity during a school's identity change:</p>
+        <pre>
+-- 1. Archive legacy record
+UPDATE "schools_IERN" SET status = 'Archived' WHERE "SchoolID" = $OLD_ID;
+
+-- 2. Activate new record (Mirroring original IERN)
+INSERT INTO "schools_IERN" ("SchoolID", iern, status, ...)
+VALUES ($NEW_ID, $ORIGINAL_IERN, 'Active', ...);
+        </pre>
+
+        <h3>Identity Logic & Constraints</h3>
+        <p>Unlike standard registries, this system uses a <strong>Partial Unique Index</strong>. This allows an ID to be archived and later re-purposed or versioned without database conflicts:</p>
+        <code>CREATE UNIQUE INDEX idx_schoolid_active ON "schools_IERN" ("SchoolID") WHERE status = 'Active';</code>
+    </div>
+
+    <h2>7. Security & Access Protocol</h2>
     <p>The system implements a strict <strong>RBAC (Role-Based Access Control)</strong> policy. Access to the <code>SchoolManagement</code> module is limited to accounts holding the <code>School Division Office</code> role. Any unauthorized attempts are logged and redirected to the primary monitoring dashboard.</p>
 
     <footer style="margin-top: 60px; border-top: 1px solid #eee; padding-top: 20px; font-size: 0.8rem; color: #999; text-align: center;">

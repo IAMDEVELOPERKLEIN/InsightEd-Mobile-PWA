@@ -184,6 +184,21 @@ setPool(pool);
         await pool.query('ALTER TABLE "schools_IERN" ADD COLUMN IF NOT EXISTS "Longitude" NUMERIC(10, 7)');
         await pool.query('ALTER TABLE "schools_IERN" ADD COLUMN IF NOT EXISTS "Mother_School_ID" TEXT');
         
+        // Add status column and initialize CURRENT data as 'Active'
+        await pool.query('ALTER TABLE "schools_IERN" ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT \'Active\'');
+        await pool.query('UPDATE "schools_IERN" SET "status" = \'Active\' WHERE "status" IS NULL');
+
+        // UPGRADE: Convert hard unique constraint to Partial Unique Index
+        // This allows history (multiple IDs in table) but only ONE can be 'Active'
+        try {
+            await pool.query('ALTER TABLE "schools_IERN" DROP CONSTRAINT IF EXISTS schools_iern_schoolid_unique');
+            await pool.query('DROP INDEX IF EXISTS idx_schoolid_active');
+            await pool.query('CREATE UNIQUE INDEX idx_schoolid_active ON "schools_IERN" ("SchoolID") WHERE status = \'Active\'');
+            console.log('✅ [DB-Init] SchoolID constraint upgraded to Partial Unique (Active-only).');
+        } catch (idxErr) {
+            console.warn('⚠️ [DB-Init] Index upgrade warning (might already exist):', idxErr.message);
+        }
+        
         console.log('✅ [DB-Init] schools_IERN schema verified & cleaned.');
     } catch (err) {
         console.error('❌ [DB-Init] Failed to harden schools_IERN schema:', err.message);
@@ -5482,57 +5497,90 @@ app.get('/api/master-list/school/:id', async (req, res) => {
   }
 });
 
-// POST - Submit Converted School
+// POST - Submit Converted School (Overhauled: Instant Activation & IERN Mirroring)
 app.post('/api/sdo/convert-school', async (req, res) => {
-  const { school_id, ...newDetails } = req.body;
-  console.log("Received convert-school request for ID:", school_id); // DEBUG LOG
+  const { 
+    old_school_id, 
+    school_id, // This is the NEW SCHOOL ID
+    school_name,
+    region,
+    division,
+    district,
+    province,
+    municipality,
+    leg_district,
+    barangay,
+    street_address,
+    mother_school_id,
+    curricular_offering,
+    latitude,
+    longitude,
+    submitted_by,
+    submitted_by_name,
+    special_order
+  } = req.body;
 
-  if (!school_id) {
-    return res.status(400).json({ error: "School ID is required" });
+  if (!old_school_id || !school_id || !submitted_by) {
+    return res.status(400).json({ error: "Missing required fields (Old ID, New ID, and User ID)" });
   }
 
+  const client = await pool.connect();
   try {
-    // 1. Fetch Original Data
-    console.log(`Querying original school data for ID: ${school_id}`); // DEBUG LOG
-    const originalRes = await pool.query('SELECT "SchoolID" as school_id, "School_Name" as school_name, "Region" as region, "Division" as division, "District" as district, "Province" as province, "Municipality" as municipality, "Legislative_District" as leg_district, "Barangay" as barangay, "Street_Address" as address, "Curricular_Offering" as curricular_offering_classification FROM "schools_IERN" WHERE "SchoolID" = $1', [school_id]);
-    console.log(`Original school query found rows: ${originalRes.rows.length}`); // DEBUG LOG
+    await client.query('BEGIN');
 
+    // 1. Fetch Original IERN from the Old School Record
+    const originalRes = await client.query('SELECT iern FROM "schools_IERN" WHERE "SchoolID" = $1', [old_school_id]);
+    
     if (originalRes.rows.length === 0) {
-      console.error(`Original school record not found for ID: ${school_id}`); // DEBUG LOG
-      return res.status(404).json({ error: "Original school record not found" });
+      throw new Error(`Original school record (${old_school_id}) not found in master registry.`);
     }
-    const originalData = originalRes.rows[0];
+    const sharedIern = originalRes.rows[0].iern;
 
-    // 2. Insert into converted_schools table
-    // Ensure table exists (simple check/create if not exists for now)
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS converted_schools (
-        id SERIAL PRIMARY KEY,
-        school_id VARCHAR(50) NOT NULL,
-        original_data JSONB,
-        new_data JSONB,
-        submitted_by VARCHAR(100),
-        submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        status VARCHAR(50) DEFAULT 'Pending'
+    // 2. Archive the Old School ID
+    await client.query('UPDATE "schools_IERN" SET "status" = \'Archived\' WHERE "SchoolID" = $1', [old_school_id]);
+
+    // 3. Log the Conversion in pending_schools (Audit Record)
+    const auditRes = await client.query(`
+      INSERT INTO pending_schools (
+        school_id, school_name, region, division, district, province, municipality, leg_district,
+        barangay, street_address, mother_school_id, curricular_offering,
+        latitude, longitude, submitted_by, submitted_by_name, special_order,
+        status, reviewed_at, reviewed_by, reviewed_by_name
       )
-    `);
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'approved', CURRENT_TIMESTAMP, $15, $16)
+      RETURNING pending_id
+    `, [
+      school_id, school_name, region, division, district, province, municipality, leg_district,
+      barangay, street_address, mother_school_id, curricular_offering,
+      latitude, longitude, submitted_by, submitted_by_name, special_order
+    ]);
 
-    await pool.query(
-      `INSERT INTO converted_schools (school_id, original_data, new_data, submitted_by, status)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        school_id,
-        originalData,
-        newDetails,
-        newDetails.submitted_by,
-        'Pending'
-      ]
-    );
+    const pending_id = auditRes.rows[0].pending_id;
 
-    res.json({ message: "Converted school application submitted successfully" });
+    // 4. Insert the New School ID Row (sharing the same IERN)
+    await client.query(`
+      INSERT INTO "schools_IERN" (
+        "SchoolID", iern, "School_Name", "Region", "Division", "District", "Province", "Municipality", 
+        "Legislative_District", "Barangay", "Street_Address", "Curricular_Offering",
+        "Latitude", "Longitude", "Mother_School_ID", "status"
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'Active')
+    `, [
+      school_id, sharedIern, school_name, region, division, district, province, municipality,
+      leg_district, barangay, street_address, curricular_offering,
+      latitude, longitude, mother_school_id
+    ]);
+
+    await client.query('COMMIT');
+    console.log(`✅ [SDO-CONVERSION] Identity Shift: ${old_school_id} -> ${school_id} (Shared IERN: ${sharedIern})`);
+    res.json({ success: true, pending_id, iern: sharedIern });
+
   } catch (err) {
-    console.error("Convert School Error:", err);
-    res.status(500).json({ error: "Failed to submit converted school application" });
+    await client.query('ROLLBACK');
+    console.error("Conversion Error:", err);
+    res.status(500).json({ error: err.message || "Failed to process school conversion" });
+  } finally {
+    client.release();
   }
 });
 
@@ -5569,7 +5617,7 @@ app.get('/api/master-list/schools-deprecated', async (req, res) => {
 app.get('/api/sdo/check-id/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await pool.query('SELECT "SchoolID" FROM "schools_IERN" WHERE "SchoolID" = $1', [id]);
+    const result = await pool.query('SELECT "SchoolID" FROM "schools_IERN" WHERE "SchoolID" = $1 AND "status" = \'Active\'', [id]);
     res.json({ exists: result.rows.length > 0 });
   } catch (err) {
     console.error("Check ID Error:", err);
@@ -5682,9 +5730,9 @@ app.post('/api/sdo/submit-school', async (req, res) => {
             INSERT INTO "schools_IERN" (
                 "SchoolID", iern, "School_Name", "Region", "Division", "District", "Province", "Municipality", 
                 "Legislative_District", "Barangay", "Street_Address", "Curricular_Offering",
-                "Latitude", "Longitude", "Mother_School_ID"
+                "Latitude", "Longitude", "Mother_School_ID", "status"
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'Active')
         `, [
             school_id, newIern, school_name, region, division, district, province, municipality,
             leg_district, barangay, street_address, curricular_offering,
@@ -7756,7 +7804,7 @@ app.get('/api/locations/schools', async (req, res) => {
   const { region, division, district, municipality } = req.query;
   try {
     const result = await pool.query(
-      'SELECT "SchoolID" as school_id, "School_Name" as school_name, "Region" as region, "Division" as division, "District" as district, "Province" as province, "Municipality" as municipality, "Legislative_District" as legislative_district, "Curricular_Offering" as curricular_offering, "Latitude" as latitude, "Longitude" as longitude FROM "schools_IERN" WHERE REGEXP_REPLACE(UPPER(TRIM("Region")), \'\\s+\', \' \', \'g\') = REGEXP_REPLACE(UPPER(TRIM($1)), \'\\s+\', \' \', \'g\') AND REGEXP_REPLACE(UPPER(TRIM("Division")), \'\\s+\', \' \', \'g\') = REGEXP_REPLACE(UPPER(TRIM($2)), \'\\s+\', \' \', \'g\') AND REGEXP_REPLACE(UPPER(TRIM("District")), \'\\s+\', \' \', \'g\') = REGEXP_REPLACE(UPPER(TRIM($3)), \'\\s+\', \' \', \'g\') AND REGEXP_REPLACE(UPPER(TRIM("Municipality")), \'\\s+\', \' \', \'g\') = REGEXP_REPLACE(UPPER(TRIM($4)), \'\\s+\', \' \', \'g\') ORDER BY "School_Name" ASC',
+      'SELECT "SchoolID" as school_id, "School_Name" as school_name, "Region" as region, "Division" as division, "District" as district, "Province" as province, "Municipality" as municipality, "Legislative_District" as legislative_district, "Curricular_Offering" as curricular_offering, "Latitude" as latitude, "Longitude" as longitude FROM "schools_IERN" WHERE "status" = \'Active\' AND REGEXP_REPLACE(UPPER(TRIM("Region")), \'\\s+\', \' \', \'g\') = REGEXP_REPLACE(UPPER(TRIM($1)), \'\\s+\', \' \', \'g\') AND REGEXP_REPLACE(UPPER(TRIM("Division")), \'\\s+\', \' \', \'g\') = REGEXP_REPLACE(UPPER(TRIM($2)), \'\\s+\', \' \', \'g\') AND REGEXP_REPLACE(UPPER(TRIM("District")), \'\\s+\', \' \', \'g\') = REGEXP_REPLACE(UPPER(TRIM($3)), \'\\s+\', \' \', \'g\') AND REGEXP_REPLACE(UPPER(TRIM("Municipality")), \'\\s+\', \' \', \'g\') = REGEXP_REPLACE(UPPER(TRIM($4)), \'\\s+\', \' \', \'g\') ORDER BY "School_Name" ASC',
       [region, division, district, municipality]
     );
     res.json(result.rows);
