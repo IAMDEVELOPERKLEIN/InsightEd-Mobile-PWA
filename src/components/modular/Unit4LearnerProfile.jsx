@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiEdit2, FiUsers, FiChevronRight, FiChevronLeft, FiAlertTriangle, FiCheck, FiActivity, FiUnlock, FiSave, FiArrowLeft } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiEdit2, FiUsers, FiChevronRight, FiChevronLeft, FiAlertTriangle, FiCheck, FiActivity, FiUnlock, FiSave, FiArrowLeft, FiWifiOff } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
-import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox } from "../../db";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, getModularOutbox } from "../../db";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_CHAPTERS = 5; // 1: Gatekeeper, 2: Demo Loop, 3: Move Loop, 4: Health Check, 5: Review & Submit
@@ -78,6 +78,8 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [isReviewMode, setIsReviewMode] = useState(false);
     const [savedData, setSavedData] = useState(null);
     const [showDraftModal, setShowDraftModal] = useState(false);
+    const [showOfflineSuccess, setShowOfflineSuccess] = useState(false);
+    const [pendingOutboxId, setPendingOutboxId] = useState(null);
 
     // ── Chapter 1 State (Gatekeeper) ──────────────────────────────────────
     const [selectedGroups, setSelectedGroups] = useState([]); // Array of IDs
@@ -108,111 +110,167 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             setSchoolId(storedId);
 
             try {
+                // 1. GATHER ALL LOCAL SOURCES
+                const outbox = await getModularOutbox().catch(() => []);
+                const pendingUnit1 = outbox.find(e => e.unitId === 1 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const pendingUnit2 = outbox.find(e => e.unitId === 2 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const pendingUnit4 = outbox.find(e => e.unitId === 4 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
                 const draft = await getUnitDraft(4, storedId);
-                const res = await fetch(`/api/ph_schools/${storedId}?t=${Date.now()}`);
+
+                // 2. RECONSTRUCT SCHOOL BASELINE
+                let baseline = { iern: "", total_enrollment: 0, curricular_offering: "" };
+                try {
+                    const res = await fetch(`/api/ph_schools/${storedId}?t=${Date.now()}`);
+                    if (res.ok) {
+                        const saved = await res.json();
+                        if (saved.exists && saved.data) baseline = { ...baseline, ...saved.data };
+                    }
+                } catch (e) {
+                    console.log("📍 [Unit4] Offline: Using local sources for baseline.");
+                }
+
+                // Overlay Unit 1 Sync Center Data
+                if (pendingUnit1) baseline.curricular_offering = pendingUnit1.payload?.curricular_offering || baseline.curricular_offering;
                 
-                if (res.ok) {
-                    const saved = await res.json();
-                    let d = (saved.exists && saved.data) ? saved.data : {};
-                    if (d.iern) setIern(d.iern);
-                    setSavedData(d);
+                // Overlay Unit 2 Sync Center Data
+                if (pendingUnit2) {
+                    baseline.unit2_simplified_enrollment = pendingUnit2.payload?.unit2_simplified_enrollment;
+                    baseline.total_enrollment = pendingUnit2.payload?.total_enrollment || baseline.total_enrollment;
+                }
 
-                    // 1. Determine Allowed Grades
-                    const qp = JSON.parse(localStorage.getItem('quest_progress') || '{}');
-                    const co = (propReadOnly ? d.curricular_offering : (qp.curricular_offering || d.curricular_offering)) || "";
-                    let offeringAllowed = [];
-                    if (co.includes("kinder")) offeringAllowed.push("kinder");
-                    if (co.includes("elementary") || co.includes("primary")) {
-                        offeringAllowed.push("kinder", "g1", "g2", "g3", "g4", "g5", "g6");
-                    }
-                    if (co.includes("junior high") || co.includes("jhs")) {
-                        offeringAllowed.push("g7", "g8", "g9", "g10");
-                    }
-                    if (co.includes("senior high") || co.includes("shs")) {
-                        offeringAllowed.push("g11", "g12");
-                    }
-                    if (offeringAllowed.length === 0) offeringAllowed = ALL_GRADES_REF.map(g => g.id);
+                if (baseline.iern) setIern(baseline.iern);
+                setSavedData(baseline);
 
-                    // 2. Process Unit 2 Data
-                    let filteredGrades = [];
-                    if (d.unit2_simplified_enrollment) {
-                        try {
-                            const u2 = typeof d.unit2_simplified_enrollment === 'string' 
-                                ? JSON.parse(d.unit2_simplified_enrollment) 
-                                : d.unit2_simplified_enrollment;
-                            const q = u2.questionnaire || {};
-                            let processedActiveIds = new Set();
-                            let processedTotals = {};
+                // 3. DETERMINE ALLOWED GRADES
+                const qp = JSON.parse(localStorage.getItem('quest_progress') || '{}');
+                const co = (propReadOnly ? baseline.curricular_offering : (qp.curricular_offering || baseline.curricular_offering || localStorage.getItem("schoolOffering"))) || "";
+                let offeringAllowed = [];
+                const coLower = co.toLowerCase();
+                if (coLower.includes("kinder")) offeringAllowed.push("kinder");
+                if (coLower.includes("elementary") || coLower.includes("primary") || coLower.includes("purely elementary")) {
+                    offeringAllowed.push("kinder", "g1", "g2", "g3", "g4", "g5", "g6");
+                }
+                if (coLower.includes("junior high") || coLower.includes("jhs")) {
+                    offeringAllowed.push("g7", "g8", "g9", "g10");
+                }
+                if (coLower.includes("senior high") || coLower.includes("shs")) {
+                    offeringAllowed.push("g11", "g12");
+                }
+                if (offeringAllowed.length === 0) offeringAllowed = ALL_GRADES_REF.map(g => g.id);
 
-                            ALL_GRADES_REF.forEach(g => {
-                                const gid = g.id;
-                                if (!offeringAllowed.includes(gid)) return;
-                                if (q.gradeAvailability?.[gid] !== false && (q.gradeTotals?.[gid] !== undefined || (gid === 'kinder' && q.kinderEnrollment !== undefined))) {
-                                    processedActiveIds.add(gid);
-                                    processedTotals[gid] = parseInt(q.gradeTotals?.[gid]) || (gid === 'kinder' ? parseInt(q.kinderEnrollment) : 0) || 0;
-                                }
-                            });
+                // 4. PROCESS UNIT 2 DATA
+                let filteredGrades = [];
+                if (baseline.unit2_simplified_enrollment) {
+                    try {
+                        const u2 = typeof baseline.unit2_simplified_enrollment === 'string' 
+                            ? JSON.parse(baseline.unit2_simplified_enrollment) 
+                            : baseline.unit2_simplified_enrollment;
+                        const q = u2.questionnaire || {};
+                        let processedActiveIds = new Set();
+                        let processedTotals = {};
 
-                            (q.mgCombinations || []).forEach(combo => {
-                                const comboTot = parseInt(combo.enrollment) || 0;
-                                (combo.grades || []).forEach(gid => { if (offeringAllowed.includes(gid)) { processedActiveIds.add(gid); processedTotals[gid] = comboTot; } });
-                            });
+                        ALL_GRADES_REF.forEach(g => {
+                            const gid = g.id;
+                            if (!offeringAllowed.includes(gid)) return;
+                            if (q.gradeAvailability?.[gid] !== false && (q.gradeTotals?.[gid] !== undefined || (gid === 'kinder' && q.kinderEnrollment !== undefined))) {
+                                processedActiveIds.add(gid);
+                                processedTotals[gid] = parseInt(q.gradeTotals?.[gid]) || (gid === 'kinder' ? parseInt(q.kinderEnrollment) : 0) || 0;
+                            }
+                        });
 
-                            let u2Array = Array.isArray(u2) ? u2 : (u2.array || []);
-                            u2Array.forEach(item => {
-                                const gid = item.grade_level;
-                                if (gid && offeringAllowed.includes(gid)) {
-                                    if (q.gradeAvailability?.[gid] === false || item.is_active === false) { processedActiveIds.delete(gid); } 
-                                    else { processedActiveIds.add(gid); if (!processedTotals[gid]) processedTotals[gid] = parseInt(item.total) || (parseInt(item.male||0) + parseInt(item.female||0)) || 0; }
-                                }
-                            });
+                        (q.mgCombinations || []).forEach(combo => {
+                            const comboTot = parseInt(combo.enrollment) || 0;
+                            (combo.grades || []).forEach(gid => { if (offeringAllowed.includes(gid)) { processedActiveIds.add(gid); processedTotals[gid] = comboTot; } });
+                        });
 
-                            filteredGrades = ALL_GRADES_REF.filter(g => processedActiveIds.has(g.id));
-                            setDynamicGrades(filteredGrades);
-                            setGradeTotalsMap(processedTotals);
-                            setEnrollmentTotal(parseInt(q.grandTotal) || parseInt(d.total_enrollment) || 0);
-                        } catch (e) { console.warn("Unit 2 Parse error", e); }
-                    } else {
-                        filteredGrades = ALL_GRADES_REF.filter(g => offeringAllowed.includes(g.id));
+                        let u2Array = Array.isArray(u2) ? u2 : (u2.array || []);
+                        u2Array.forEach(item => {
+                            const gid = item.grade_level;
+                            if (gid && offeringAllowed.includes(gid)) {
+                                if (q.gradeAvailability?.[gid] === false || item.is_active === false) { processedActiveIds.delete(gid); } 
+                                else { processedActiveIds.add(gid); if (!processedTotals[gid]) processedTotals[gid] = parseInt(item.total) || (parseInt(item.male||0) + parseInt(item.female||0)) || 0; }
+                            }
+                        });
+
+                        filteredGrades = ALL_GRADES_REF.filter(g => processedActiveIds.has(g.id));
                         setDynamicGrades(filteredGrades);
-                        setEnrollmentTotal(parseInt(d.total_enrollment) || 0);
-                    }
+                        setGradeTotalsMap(processedTotals);
+                        setEnrollmentTotal(parseInt(q.grandTotal) || parseInt(baseline.total_enrollment) || 0);
+                    } catch (e) { console.warn("Unit 2 Parse error", e); }
+                } else {
+                    filteredGrades = ALL_GRADES_REF.filter(g => offeringAllowed.includes(g.id));
+                    setDynamicGrades(filteredGrades);
+                    setEnrollmentTotal(parseInt(baseline.total_enrollment) || 0);
+                }
 
-                    // MASTER PRECEDENCE: Draft > Database
-                    if (draft) {
-                        setCurrentChapter(draft.currentChapter || 1);
-                        setSelectedGroups(draft.selectedGroups || []);
-                        setCatIdx(draft.catIdx || 0);
-                        setDemographicsData(draft.demographicsData || {});
-                        setHasMovement(draft.hasMovement);
-                        setMovementIdx(draft.movementIdx || 0);
-                        setMovementData(draft.movementData || {});
-                        setBmiData(draft.bmiData || { severely_wasted: "", wasted: "", overweight_obese: "" });
-                        setIsReviewMode(false);
-                        setShowWelcomeBack(true);
-                        setTimeout(() => setShowWelcomeBack(false), 3000);
-                    } else if (d.unit4_completed || propReadOnly) {
-                        if (Array.isArray(d.selected_learner_groups)) setSelectedGroups(d.selected_learner_groups);
-                        const demoObj = {};
-                        const moveObj = {};
-                        let hasAnyMove = false;
+                // 5. MASTER PRECEDENCE: SYNC CENTER > DRAFT > DATABASE
+                if (pendingUnit4) {
+                    const p = pendingUnit4.payload;
+                    setSelectedGroups(p.selected_learner_groups || []);
+                    setDemographicsData(p.demographicsData || {});
+                    setMovementData(p.movementData || {});
+                    setBmiData({ 
+                        severely_wasted: p.bmi_severely_wasted, 
+                        wasted: p.bmi_wasted, 
+                        overweight_obese: p.bmi_overweight_obese 
+                    });
+                    setHasMovement(p.hasMovement);
+                    setPendingOutboxId(pendingUnit4.id);
 
-                        DEMOGRAPHIC_CARDS.forEach(c => {
-                            if (c.id === 'als') { if (d.als_total !== undefined && d.als_total !== null) demoObj['als_total'] = d.als_total.toString(); } 
-                            else { filteredGrades.forEach(g => { const key = `${c.id}_${g.id}`; if (d[key] !== undefined && d[key] !== null) demoObj[key] = d[key].toString(); }); }
+                    // Peeling back the baseline for the SUMMARY CARDS
+                    setSavedData({ ...baseline, ...p });
+                    setIsReviewMode(true);
+
+                } else if (draft) {
+                    setCurrentChapter(draft.currentChapter || 1);
+                    setSelectedGroups(draft.selectedGroups || []);
+                    setCatIdx(draft.catIdx || 0);
+                    setDemographicsData(draft.demographicsData || {});
+                    setHasMovement(draft.hasMovement);
+                    setMovementIdx(draft.movementIdx || 0);
+                    setMovementData(draft.movementData || {});
+                    setBmiData(draft.bmiData || { severely_wasted: "", wasted: "", overweight_obese: "" });
+                    setIsReviewMode(false);
+                    setShowWelcomeBack(true);
+                    setTimeout(() => setShowWelcomeBack(false), 3000);
+
+                } else if (baseline.unit4_completed || propReadOnly) {
+                    if (Array.isArray(baseline.selected_learner_groups)) setSelectedGroups(baseline.selected_learner_groups);
+                    const demoObj = {};
+                    const moveObj = {};
+                    let hasAnyMove = false;
+
+                    DEMOGRAPHIC_CARDS.forEach(c => {
+                        if (c.id === 'als') { 
+                            if (baseline.als_total !== undefined && baseline.als_total !== null) demoObj['als_total'] = baseline.als_total.toString(); 
+                        } else { 
+                            filteredGrades.forEach(g => { 
+                                const key = `${c.id}_${g.id}`; 
+                                if (baseline[key] !== undefined && baseline[key] !== null) demoObj[key] = baseline[key].toString(); 
+                            }); 
+                        }
+                    });
+                    
+                    MOVEMENT_TYPES.forEach(m => {
+                        filteredGrades.forEach(g => { 
+                            const key = `${m.id}_${g.id}`; 
+                            if (baseline[key] !== undefined && baseline[key] !== null) { 
+                                moveObj[key] = baseline[key].toString(); 
+                                if (parseInt(baseline[key]) > 0) hasAnyMove = true; 
+                            } 
                         });
-                        
-                        MOVEMENT_TYPES.forEach(m => {
-                            filteredGrades.forEach(g => { const key = `${m.id}_${g.id}`; if (d[key] !== undefined && d[key] !== null) { moveObj[key] = d[key].toString(); if (d[key] > 0) hasAnyMove = true; } });
-                        });
+                    });
 
-                        setBmiData({ severely_wasted: d.bmi_severely_wasted?.toString() || "", wasted: d.bmi_wasted?.toString() || "", overweight_obese: d.bmi_overweight_obese?.toString() || "" });
-                        setDemographicsData(demoObj);
-                        setMovementData(moveObj);
-                        if (hasAnyMove) setHasMovement(true);
-                        else if (d.updated_at) setHasMovement(false);
-                        setIsReviewMode(true);
-                    }
+                    setBmiData({ 
+                        severely_wasted: baseline.bmi_severely_wasted?.toString() || "", 
+                        wasted: baseline.bmi_wasted?.toString() || "", 
+                        overweight_obese: baseline.bmi_overweight_obese?.toString() || "" 
+                    });
+                    setDemographicsData(demoObj);
+                    setMovementData(moveObj);
+                    if (hasAnyMove) setHasMovement(true);
+                    else if (baseline.updated_at) setHasMovement(false);
+                    setIsReviewMode(true);
                 }
             } catch (e) {
                 console.warn("Could not fetch Unit 4 data", e);
@@ -386,6 +444,11 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             payload.bmi_overweight_obese = parseInt(bmiData.overweight_obese) || 0;
             payload.bmi_normal = normalBmiCount;
 
+            // Sync Center Reconstruction Metadata
+            payload.demographicsData = demographicsData;
+            payload.movementData = movementData;
+            payload.hasMovement = hasMovement;
+
             console.log("UNIT 4 PAYLOAD BEFORE SUBMISSION:", payload);
 
             if (!navigator.onLine) {
@@ -399,8 +462,17 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     schoolId: schoolId
                 });
                 await clearUnitDraft(4, schoolId);
-                alert("Working Offline: Unit 4 has been saved to your Sync Center.");
-                navigate("/modular-dashboard");
+
+                // Update local visual progress
+                const stored = localStorage.getItem("quest_progress");
+                let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+                if (!progress.completedUnits.includes(4)) {
+                    progress.completedUnits.push(4);
+                    progress.xp += 250;
+                    localStorage.setItem("quest_progress", JSON.stringify(progress));
+                }
+
+                setShowOfflineSuccess(true);
                 return;
             }
 
@@ -453,8 +525,7 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     schoolId: schoolId
                 });
                 await clearUnitDraft(4, schoolId);
-                alert("Connection Interrupted: Unit 4 saved to Sync Center.");
-                navigate("/modular-dashboard");
+                setShowOfflineSuccess(true);
             } else {
                 alert("Failed to save data. " + err.message);
             }
@@ -1312,6 +1383,30 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     className="py-5 rounded-[2rem] bg-blue-600 text-white font-black text-lg shadow-xl shadow-blue-100 active:scale-95 transition-all outline-none">
                                     Save & Exit
                                 </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {showOfflineSuccess && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full rounded-t-[3rem] p-10 pb-12 shadow-2xl relative max-w-md">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-amber-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-amber-200 mb-6 font-bold text-white">
+                                <FiWifiOff />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight px-4">Local Secure: Unit 4 Saved!</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-6">Your Learner Profile statistics have been saved locally. We will automatically update your school's official records once your internet is restored.</p>
+                            
+                            <div className="mt-10">
+                                <button onClick={() => navigate("/modular-dashboard")}
+                                    className="w-full py-5 rounded-[2rem] bg-amber-600 text-white font-black text-lg shadow-xl shadow-amber-100 active:scale-95 transition-all outline-none">
+                                    Return to Modules Dashboard
+                                </button>
+                                <p className="text-[10px] text-amber-500 font-bold uppercase text-center mt-6 tracking-widest leading-loose">✓ Offline Mode • Auto-Sync Enabled ✓</p>
                             </div>
                         </motion.div>
                     </div>
