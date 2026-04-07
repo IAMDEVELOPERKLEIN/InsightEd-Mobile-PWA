@@ -854,10 +854,10 @@ app.get('/api/schools/:schoolId/activity', async (req, res) => {
   const { schoolId } = req.params;
   try {
     const schoolRes = await pool.query(
-      `SELECT 
-        unit1, unit2, unit3, unit4, unit5, unit7, unit8, unit9,
+      `SELECT
+        unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit9,
         unit1_completed, unit2_completed, unit3_completed, unit4_completed,
-        unit5_completed, unit7_completed, unit8_completed, unit9_completed,
+        unit5_completed, unit6_completed, unit7_completed, unit9_completed,
         unit_completion, region, division
        FROM ph_schools WHERE school_id = $1`,
       [schoolId]
@@ -869,8 +869,8 @@ app.get('/api/schools/:schoolId/activity', async (req, res) => {
     let completedUnitsCount = 0;
     let completedFlags = {};
 
-    // Unit 6 (Teaching Personnel) has been removed; map old units 7,8,9 to new IDs 6,7,8
-    const unitMapping = [1, 2, 3, 4, 5, 7, 8, 9]; // old DB column -> new display ID
+    // Maps DB column index to display unit ID (unit6=Resources, unit7=Facilities, unit9=Terrain)
+    const unitMapping = [1, 2, 3, 4, 5, 6, 7, 9]; // DB column -> new display ID
     for (let i = 0; i < unitMapping.length; i++) {
       const dbIdx = unitMapping[i];
       const displayId = i + 1;
@@ -953,12 +953,12 @@ async function updateSchoolTotalCompletion(iern) {
 
     const row = res.rows[0];
     let completedCount = 0;
-    // Check Unit 1 to 10
-    for (let i = 1; i <= 10; i++) {
+    // Check Unit 1 to 8 (the 8 school-head data collection units)
+    for (let i = 1; i <= 8; i++) {
         if (row[`unit${i}_completion`] === true) completedCount++;
     }
 
-    const totalStats = 10;
+    const totalStats = 8;
     const percentage = parseFloat(((completedCount / totalStats) * 100).toFixed(2));
 
     await pool.query(
@@ -1275,6 +1275,93 @@ const runAutoMigrations = async () => {
       await markMigrationDone('iern_migration_v2');
     } else {
       console.log("   [Auto-Migrate] Skipped IERN Migration (Already Run)");
+    }
+
+    // --- school_location_profiles: Schema Hardening ---
+    // Ensures all columns required by schoolLocationSchema exist. ON CONFLICT (school_id) requires
+    // a UNIQUE constraint on school_id — add idempotently.
+    console.log("   [Auto-Migrate] Hardening school_location_profiles schema...");
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS school_location_profiles (
+        id SERIAL PRIMARY KEY,
+        school_id TEXT,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `).catch(() => {});
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'school_location_profiles_school_id_unique'
+        ) THEN
+          ALTER TABLE school_location_profiles ADD CONSTRAINT school_location_profiles_school_id_unique UNIQUE (school_id);
+        END IF;
+      END $$;
+    `).catch(e => console.warn('[Auto-Migrate] school_location_profiles school_id constraint:', e.message));
+
+    const slpCols = [
+      ['iern',                           'TEXT'],
+      ['transportation_modes',           'JSONB'],
+      ['road_paved_pct',                 'NUMERIC'],
+      ['road_unpaved_pct',               'NUMERIC'],
+      ['road_lighting_pct',              'NUMERIC'],
+      ['public_transpo_availability',    'NUMERIC'],
+      ['water_proximity',                'JSONB'],
+      ['near_cliff_ravine',              'BOOLEAN'],
+      ['road_cliff_pct',                 'NUMERIC'],
+      ['near_water',                     'BOOLEAN'],
+      ['natural_calamities',             'JSONB'],
+      ['hazards_experienced',            'JSONB'],
+      ['has_insurgency_threats',         'BOOLEAN'],
+      ['insurgency_threats_6mo',         'NUMERIC'],
+      ['road_passable_public_transpo_pct','NUMERIC'],
+      ['river_crossing_on_foot',         'BOOLEAN'],
+      ['river_crossing_count',           'NUMERIC'],
+      ['emergency_response_mins',        'NUMERIC'],
+      ['proximity_hospital_km',          'NUMERIC'],
+      ['proximity_brgy_hall_mins',       'NUMERIC'],
+      ['proximity_brgy_hall_km',         'NUMERIC'],
+      ['proximity_muni_hall_mins',       'NUMERIC'],
+      ['proximity_muni_hall_km',         'NUMERIC'],
+      ['proximity_sdo_mins',             'NUMERIC'],
+      ['proximity_sdo_km',               'NUMERIC'],
+      ['proximity_clinic_mins',          'NUMERIC'],
+      ['proximity_clinic_km',            'NUMERIC'],
+      ['proximity_terminal_mins',        'NUMERIC'],
+      ['proximity_terminal_km',          'NUMERIC'],
+      ['proximity_highway_mins',         'NUMERIC'],
+      ['proximity_highway_km',           'NUMERIC'],
+      ['cellular_coverage',              'TEXT'],
+      ['weather_isolation',              'BOOLEAN'],
+      ['anthropogenic_threats',          'JSONB'],
+      ['risk_index',                     'NUMERIC'],
+    ];
+    for (const [col, type] of slpCols) {
+      await checkAndAddColumn('school_location_profiles', col, type, pool).catch(
+        e => console.warn(`[Auto-Migrate] school_location_profiles.${col}:`, e.message)
+      );
+    }
+
+    // --- school_location_profiles: Coerce TEXT[] → JSONB (idempotent) ---
+    // transportation_modes and hazards_experienced may have been created as TEXT[].
+    // The POST route now sends JSON strings; TEXT[] columns reject them with error 22P02.
+    // This block is safe to run repeatedly — it is a no-op if the column is already JSONB.
+    for (const col of ['transportation_modes', 'hazards_experienced']) {
+      await pool.query(`
+        DO $$
+        DECLARE col_type TEXT;
+        BEGIN
+          SELECT data_type INTO col_type
+          FROM information_schema.columns
+          WHERE table_name = 'school_location_profiles' AND column_name = '${col}';
+
+          IF col_type IS NOT NULL AND col_type != 'jsonb' THEN
+            ALTER TABLE school_location_profiles
+              ALTER COLUMN ${col} TYPE JSONB USING to_jsonb(${col});
+            RAISE NOTICE '[Auto-Migrate] Converted school_location_profiles.${col} to JSONB';
+          END IF;
+        END $$;
+      `).catch(e => console.warn(`[Auto-Migrate] JSONB coerce ${col}:`, e.message));
     }
 
     console.log("   [Auto-Migrate] Finished.");
@@ -12604,12 +12691,12 @@ app.get('/api/super-user/export-summary', async (req, res) => {
         COALESCE(SUM(CASE WHEN p.unit2_completed = TRUE THEN 1 ELSE 0 END), 0) as organizedclasses,
         COALESCE(SUM(CASE WHEN p.unit3_completed = TRUE THEN 1 ELSE 0 END), 0) as personnel,
         COALESCE(SUM(CASE WHEN p.unit3_completed = TRUE THEN 1 ELSE 0 END), 0) as specialization,
-        COALESCE(SUM(CASE WHEN p.unit7_completed = TRUE THEN 1 ELSE 0 END), 0) as resources,
-        COALESCE(SUM(CASE WHEN p.unit8_completed = TRUE THEN 1 ELSE 0 END), 0) as facilities,
+        COALESCE(SUM(CASE WHEN p.unit6_completed = TRUE THEN 1 ELSE 0 END), 0) as resources,
+        COALESCE(SUM(CASE WHEN p.unit7_completed = TRUE THEN 1 ELSE 0 END), 0) as facilities,
         COALESCE(SUM(CASE WHEN p.unit4_completed = TRUE THEN 1 ELSE 0 END), 0) as shifting,
         COALESCE(SUM(CASE WHEN p.unit5_completed = TRUE THEN 1 ELSE 0 END), 0) as learner_stats,
-        COALESCE(COUNT(CASE WHEN p.unit1_completed = TRUE AND p.unit2_completed = TRUE AND p.unit3_completed = TRUE AND p.unit7_completed = TRUE AND p.unit8_completed = TRUE THEN 1 END), 0) as completed_schools,
-        COALESCE(COUNT(CASE WHEN p.unit1_completed = TRUE AND p.unit2_completed = TRUE AND p.unit3_completed = TRUE AND p.unit7_completed = TRUE AND p.unit8_completed = TRUE THEN 1 END), 0) as validated_schools
+        COALESCE(COUNT(CASE WHEN p.unit1_completed = TRUE AND p.unit2_completed = TRUE AND p.unit3_completed = TRUE AND p.unit6_completed = TRUE AND p.unit7_completed = TRUE THEN 1 END), 0) as completed_schools,
+        COALESCE(COUNT(CASE WHEN p.unit1_completed = TRUE AND p.unit2_completed = TRUE AND p.unit3_completed = TRUE AND p.unit6_completed = TRUE AND p.unit7_completed = TRUE THEN 1 END), 0) as validated_schools
       FROM ph_schools p
     `;
     let schoolParams = [];
@@ -16340,11 +16427,11 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
 
 
 
-      // ── Unit 6: School Resources (Old Unit 7) ──────────────────────────
-      if (row.unit7_completed) { completedUnits.push(6); xp += 400; } else if (row.unit7 === 2) { incompleteUnits.push(6); }
+      // ── Unit 6: School Resources ──────────────────────────────────────────
+      if (row.unit6_completed) { completedUnits.push(6); xp += 400; } else if (row.unit6 === 2) { incompleteUnits.push(6); }
 
-      // ── Unit 7: Physical Facilities (Old Unit 8) ────────────────────────
-      if (row.unit8_completed) { completedUnits.push(7); xp += 450; } else if (row.unit8 === 2) { incompleteUnits.push(7); }
+      // ── Unit 7: Physical Facilities ────────────────────────────────────────
+      if (row.unit7_completed) { completedUnits.push(7); xp += 450; } else if (row.unit7 === 2) { incompleteUnits.push(7); }
 
       // ── Unit 8: School Terrain (Old Unit 9) ─────────────────────────────
       let u9 = row.unit9_completed;
@@ -17558,8 +17645,8 @@ app.post('/api/ph_schools/unit7/:schoolId', async (req, res) => {
       });
     }
 
-    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE;`);
-    await pool.query('UPDATE ph_schools SET unit7_completed = TRUE, unit7 = 1, unit7_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1', [schoolId]);
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6_completed BOOLEAN DEFAULT FALSE;`);
+    await pool.query('UPDATE ph_schools SET unit6_completed = TRUE, unit6 = 1, unit6_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1', [schoolId]);
 
     // --- SYNC COMPLETION (UI Unit 6 Resources -> unit6_completion) ---
     const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
@@ -17831,24 +17918,15 @@ app.get('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
 
     const inventory = Object.values(buildingsMap);
 
-    // Check completion status from ph_schools
+    // Check completion status from ph_schools (explicit flag only — no auto-complete inference)
     let completed = false;
     try {
-      const schRes = await pool.query('SELECT unit8_completed, unit10_completed FROM ph_schools WHERE school_id = $1', [schoolId]);
+      const schRes = await pool.query('SELECT unit7_completed, unit10_completed FROM ph_schools WHERE school_id = $1', [schoolId]);
       if (schRes.rows.length > 0) {
-        completed = schRes.rows[0].unit8_completed === true || schRes.rows[0].unit10_completed === true;
-      }
-
-      // Auto-mark as completed if records exist but flag is missing
-      if (!completed) {
-        if (invRes.rows.length > 0 || repRes.rows.length > 0 || demRes.rows.length > 0) {
-          completed = true;
-          // Best effort: sync flag in background
-          pool.query('UPDATE ph_schools SET unit8_completed = TRUE, unit8 = 1, unit8_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1', [schoolId]).catch(e => { });
-        }
+        completed = schRes.rows[0].unit7_completed === true || schRes.rows[0].unit10_completed === true;
       }
     } catch (e) {
-      console.warn(`Could not check unit8_completed/unit10_completed for ${schoolId}:`, e.message);
+      console.warn(`Could not check unit7_completed/unit10_completed for ${schoolId}:`, e.message);
     }
 
     res.json({
@@ -18078,42 +18156,42 @@ app.post('/api/school-location', async (req, res) => {
     `;
 
     const values = [
-      validatedData.school_id,
-      req.body.iern || null,
-      validatedData.transportation_modes,
-      validatedData.road_paved_pct,
-      validatedData.road_unpaved_pct,
-      validatedData.road_lighting_pct,
-      validatedData.public_transpo_availability,
-      validatedData.water_proximity ? JSON.stringify(validatedData.water_proximity) : null,
-      validatedData.near_cliff_ravine,
-      validatedData.road_cliff_pct,
-      validatedData.near_water,
-      validatedData.natural_calamities ? JSON.stringify(validatedData.natural_calamities) : null,
-      validatedData.hazards_experienced,
-      validatedData.has_insurgency_threats,
-      validatedData.insurgency_threats_6mo,
-      validatedData.road_passable_public_transpo_pct,
-      validatedData.river_crossing_on_foot,
-      validatedData.river_crossing_count,
-      validatedData.emergency_response_mins,
-      validatedData.proximity_hospital_km,
-      validatedData.proximity_brgy_hall_mins,
-      validatedData.proximity_brgy_hall_km,
-      validatedData.proximity_muni_hall_mins,
-      validatedData.proximity_muni_hall_km,
-      validatedData.proximity_sdo_mins,
-      validatedData.proximity_sdo_km,
-      validatedData.proximity_clinic_mins,
-      validatedData.proximity_clinic_km,
-      validatedData.proximity_terminal_mins,
-      validatedData.proximity_terminal_km,
-      validatedData.proximity_highway_mins,
-      validatedData.proximity_highway_km,
-      validatedData.cellular_coverage,
-      validatedData.weather_isolation,
-      JSON.stringify(validatedData.anthropogenic_threats || []),
-      riskIndex
+      validatedData.school_id,                                                                  // $1
+      validatedData.iern || null,                                                               // $2
+      validatedData.transportation_modes ? JSON.stringify(validatedData.transportation_modes) : null, // $3
+      validatedData.road_paved_pct,                                                             // $4
+      validatedData.road_unpaved_pct,                                                           // $5
+      validatedData.road_lighting_pct ?? null,                                                  // $6
+      validatedData.public_transpo_availability ?? null,                                        // $7
+      validatedData.water_proximity ? JSON.stringify(validatedData.water_proximity) : null,     // $8
+      validatedData.near_cliff_ravine ?? null,                                                  // $9
+      validatedData.road_cliff_pct ?? null,                                                     // $10
+      validatedData.near_water ?? null,                                                         // $11
+      validatedData.natural_calamities ? JSON.stringify(validatedData.natural_calamities) : null, // $12
+      validatedData.hazards_experienced ? JSON.stringify(validatedData.hazards_experienced) : null, // $13
+      validatedData.has_insurgency_threats ?? null,                                             // $14
+      validatedData.insurgency_threats_6mo ?? null,                                           // $15
+      validatedData.road_passable_public_transpo_pct ?? null,                                  // $16
+      validatedData.river_crossing_on_foot ?? null,                                            // $17
+      validatedData.river_crossing_count ?? null,                                              // $18
+      validatedData.emergency_response_mins ?? null,                                           // $19
+      validatedData.proximity_hospital_km ?? null,                                             // $20
+      validatedData.proximity_brgy_hall_mins ?? null,                                          // $21
+      validatedData.proximity_brgy_hall_km ?? null,                                            // $22
+      validatedData.proximity_muni_hall_mins ?? null,                                          // $23
+      validatedData.proximity_muni_hall_km ?? null,                                            // $24
+      validatedData.proximity_sdo_mins ?? null,                                                // $25
+      validatedData.proximity_sdo_km ?? null,                                                  // $26
+      validatedData.proximity_clinic_mins ?? null,                                             // $27
+      validatedData.proximity_clinic_km ?? null,                                               // $28
+      validatedData.proximity_terminal_mins ?? null,                                           // $29
+      validatedData.proximity_terminal_km ?? null,                                             // $30
+      validatedData.proximity_highway_mins ?? null,                                            // $31
+      validatedData.proximity_highway_km ?? null,                                              // $32
+      validatedData.cellular_coverage ?? null,                                                 // $33
+      validatedData.weather_isolation ?? null,                                                 // $34
+      JSON.stringify(validatedData.anthropogenic_threats || []),                               // $35
+      riskIndex                                                                                // $36
     ];
 
     const result = await pool.query(query, values);
@@ -18135,13 +18213,13 @@ app.post('/api/school-location', async (req, res) => {
       const sumProx = proxFields.reduce((acc, field) => acc + (parseFloat(validatedData[field]) || 0), 0);
       const isUnit8Completed = sumProx > 0;
 
-      // 1. Ph_Schools (Quest)
+      // 1. Ph_Schools (Quest) — Dashboard Unit 8 = School Terrain = DB column unit9
       await pool.query(
-        'UPDATE ph_schools SET unit8_completed = $2, unit8 = $3, unit8_updated_at = CASE WHEN $2 = TRUE THEN CURRENT_TIMESTAMP ELSE unit8_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1',
+        'UPDATE ph_schools SET unit9_completed = $2, unit9 = $3, unit9_updated_at = CASE WHEN $2 = TRUE THEN CURRENT_TIMESTAMP ELSE unit9_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1',
         [schoolId, isUnit8Completed, isUnit8Completed ? 1 : 0]
       );
 
-      console.log(`[Dashboard Integration] Unit 8 Flags updated for school ${schoolId}`);
+      console.log(`[Dashboard Integration] Unit 8 (Terrain) Flags updated for school ${schoolId}`);
     } catch (flagErr) {
       console.warn("[Dashboard Integration] Failed to update flags:", flagErr.message);
     }
