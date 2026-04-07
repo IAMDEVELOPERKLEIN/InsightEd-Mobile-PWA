@@ -82,6 +82,8 @@ const SchoolManagement = () => {
     const [searchLoading, setSearchLoading] = useState(false);
     const [isConverting, setIsConverting] = useState(false);
     const [documentPayload, setDocumentPayload] = useState(null); // Stores Base64 string
+    const [compressionData, setCompressionData] = useState(null); // { original, compressed, hydra }
+    const [isOptimizing, setIsOptimizing] = useState(false);
 
     // Confirmation Modal State
     const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -105,12 +107,13 @@ const SchoolManagement = () => {
     const [locationCoordinates, setLocationCoordinates] = useState([]); // Array of { municipality, barangay, lat, lng }
 
     const curricularOfferingOptions = [
-        'Purely ES',
-        'ES with SHS',
-        'Purely JHS',
-        'JHS with SHS',
-        'Purely SHS',
-        'K-12 (ES, JHS, SHS)'
+        'Purely Elementary',
+        'Elementary School and Junior High School (K-10)',
+        'Junior High and Senior High',
+        'All Offering (K to 12)',
+        'Purely Junior High School',
+        'Purely Senior High School',
+        'Elementary School and Senior High School'
     ];
 
     useEffect(() => {
@@ -375,7 +378,7 @@ const SchoolManagement = () => {
 
                 const params = new URLSearchParams({
                     region: userData.region,
-                    division: userData.division,
+                    division: userData.division.replace(/^SDO\s+/i, '').trim(),
                     province: filters.province || '',
                     municipality: filters.municipality || '',
                     district: filters.district || '',
@@ -413,29 +416,50 @@ const SchoolManagement = () => {
             return;
         }
 
-        if (file.size > 5 * 1024 * 1024) { // 5MB limit
-            alert('File size exceeds 5MB limit.');
+        if (file.size > 25 * 1024 * 1024) { // Increased to 25MB as the backend now handles optimization
+            alert('File size exceeds 25MB limit.');
             e.target.value = '';
             return;
         }
 
-        setUploading(true);
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const base64String = reader.result;
-            setDocumentPayload(base64String);
+        // Store the raw File object for binary upload later
+        setDocumentPayload(file);
+        setCompressionData(null); // Reset preview
 
-            // Just set a dummy URL so validation passes and UI shows "uploaded"
-            setFormData(prev => ({ ...prev, special_order: 'base64_ready' }));
-            setUploading(false);
-        };
-        reader.onerror = () => {
-            console.error("Failed to read file");
-            alert("Failed to process file locally.");
-            setUploading(false);
-            e.target.value = '';
-        };
-        reader.readAsDataURL(file);
+        // Set a dummy value so validation passes
+        setFormData(prev => ({ ...prev, special_order: file.name }));
+        console.log(`📎 [SDO] Prepared file for binary upload: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+    };
+
+    const handleOptimizePreview = async () => {
+        if (!documentPayload) {
+            alert("Please select a PDF file first.");
+            return;
+        }
+
+        setIsOptimizing(true);
+        try {
+            const formDataUpload = new FormData();
+            formDataUpload.append('file', documentPayload);
+
+            const res = await fetch('/api/sdo/preview-compression', {
+                method: 'POST',
+                body: formDataUpload
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setCompressionData(data);
+                console.log("✅ [SDO] Compression preview received:", data);
+            } else {
+                console.error("Compression preview failed");
+                alert("Could not calculate compression savings. Standard storage will be used.");
+            }
+        } catch (err) {
+            console.error("Preview error:", err);
+        } finally {
+            setIsOptimizing(false);
+        }
     };
 
     const handleInitialSubmit = (e) => {
@@ -493,26 +517,32 @@ const SchoolManagement = () => {
             const data = await res.json();
 
             if (res.ok) {
-                // SEQUENTIAL UPLOAD FOR DOCUMENT
-                if (documentPayload && data.pending_id) {
+                // SEQUENTIAL UPLOAD FOR DOCUMENT (Optimized Binary Pipeline)
+                if (documentPayload instanceof File && data.pending_id) {
+                    setUploading(true); // Show optimization progress
                     try {
+                        const formDataUpload = new FormData();
+                        formDataUpload.append('file', documentPayload);
+                        formDataUpload.append('pending_id', data.pending_id);
+                        formDataUpload.append('school_id', formData.school_id);
+                        formDataUpload.append('type', 'SPECIAL_ORDER');
+
                         const docRes = await fetch('/api/sdo/upload-document', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                pending_id: data.pending_id,
-                                school_id: formData.school_id, // Important for conversion that might bypass pending
-                                type: 'SPECIAL_ORDER',
-                                base64: documentPayload
-                            })
+                            body: formDataUpload
                         });
+
                         if (!docRes.ok) {
                             console.error("Document upload failed after school creation");
                             alert("School was submitted, but the Special Order document failed to upload.");
+                        } else {
+                            console.log("✅ [SDO] Document optimized and secured successfully.");
                         }
                     } catch (docErr) {
                         console.error("Document upload exception:", docErr);
                         alert("School was submitted, but an error occurred uploading the Special Order document.");
+                    } finally {
+                        setUploading(false);
                     }
                 }
 
@@ -554,47 +584,38 @@ const SchoolManagement = () => {
             alert('Please upload a PDF file.');
             return;
         }
-        if (file.size > 5 * 1024 * 1024) { // 5MB limit
-            alert('File size exceeds 5MB limit.');
+        if (file.size > 25 * 1024 * 1024) { 
+            alert('File size exceeds 25MB limit.');
             return;
         }
 
         setUploading(true);
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-            const base64String = reader.result;
-            
-            try {
-                const res = await fetch(`/api/sdo/resubmit-document/${pendingId}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        school_id: schoolId,
-                        type: 'SPECIAL_ORDER',
-                        base64: base64String
-                    })
-                });
+        console.log(`🔄 [SDO] Resubmitting file: ${file.name}`);
+        
+        try {
+            const formDataUpload = new FormData();
+            formDataUpload.append('file', file);
+            formDataUpload.append('school_id', schoolId);
+            formDataUpload.append('type', 'SPECIAL_ORDER');
 
-                if (res.ok) {
-                    alert("✅ Document re-uploaded successfully!");
-                    fetchPendingSchools();
-                } else {
-                    const data = await res.json();
-                    alert("❌ Failed to re-upload: " + data.error);
-                }
-            } catch (err) {
-                console.error("Resubmit error:", err);
-                alert("❌ An error occurred while resubmitting.");
-            } finally {
-                setUploading(false);
+            const res = await fetch(`/api/sdo/resubmit-document/${pendingId}`, {
+                method: 'POST',
+                body: formDataUpload
+            });
+
+            if (res.ok) {
+                alert("✅ Document re-uploaded and optimized successfully!");
+                fetchPendingSchools();
+            } else {
+                const data = await res.json();
+                alert("❌ Failed to re-upload: " + data.error);
             }
-        };
-        reader.onerror = () => {
-            console.error("Failed to read file");
-            alert("Failed to read file locally.");
+        } catch (err) {
+            console.error("Resubmit error:", err);
+            alert("❌ An error occurred while resubmitting.");
+        } finally {
             setUploading(false);
-        };
-        reader.readAsDataURL(file);
+        }
     };
 
     if (loading) {
@@ -920,14 +941,14 @@ const SchoolManagement = () => {
                             {/* Special Order Upload */}
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
-                                    Special Order (PDF) * <span className="text-xs text-slate-500">(Max 5MB)</span>
+                                    Special Order (PDF) * <span className="text-xs text-slate-500">(Max 25MB - Compressed on Upload)</span>
                                 </label>
                                 <div className="flex items-center gap-4">
                                     <input
                                         type="file"
                                         accept="application/pdf"
                                         onChange={handleFileUpload}
-                                        disabled={uploading}
+                                        disabled={uploading || submitting}
                                         className="block w-full text-sm text-slate-500
                                             file:mr-4 file:py-2.5 file:px-4
                                             file:rounded-xl file:border-0
@@ -937,8 +958,63 @@ const SchoolManagement = () => {
                                             dark:file:bg-slate-700 dark:file:text-slate-300
                                         "
                                     />
-                                    {uploading && <div className="animate-spin h-5 w-5 border-2 border-blue-500 rounded-full border-t-transparent"></div>}
-                                    {formData.special_order && !uploading && <span className="text-emerald-600 font-bold text-sm">✓ Uploaded</span>}
+                                    {uploading && (
+                                        <div className="flex items-center gap-2 text-blue-600 animate-pulse">
+                                            <div className="animate-spin h-5 w-5 border-2 border-blue-500 rounded-full border-t-transparent"></div>
+                                            <span className="text-xs font-bold">Optimizing & Securing Document...</span>
+                                        </div>
+                                    )}
+                                    {formData.special_order && !uploading && (
+                                        <div className="flex flex-col gap-2">
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-emerald-600 font-bold text-sm flex items-center gap-1"><FiCheck /> {formData.special_order}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleOptimizePreview}
+                                                    disabled={isOptimizing}
+                                                    className="px-3 py-1 bg-slate-100 hover:bg-blue-600 hover:text-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-black transition-all flex items-center gap-1 uppercase tracking-tighter shadow-sm"
+                                                >
+                                                    {isOptimizing ? <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div> : <FiSave size={12} />}
+                                                    {compressionData ? 'Re-Check' : 'Check Optimization'}
+                                                </button>
+                                            </div>
+                                            
+                                            {compressionData && (
+                                                <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between animate-in slide-in-from-top-1 duration-300">
+                                                    <div className="space-y-0.5">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Storage Status</span>
+                                                            {compressionData.hydra_triggered && (
+                                                                <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 px-1.5 py-0.5 rounded text-[9px] font-black uppercase">Hydra Active</span>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-sm font-black text-slate-700 dark:text-slate-200">
+                                                                {(compressionData.compressed_size / 1024 / 1024).toFixed(2)} MB
+                                                            </span>
+                                                            <span className="text-xs text-slate-400 line-through">
+                                                                {(compressionData.original_size / 1024 / 1024).toFixed(2)} MB
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    {compressionData.compressed_size < compressionData.original_size && (
+                                                        <div className="bg-emerald-500 text-white px-3 py-1 rounded-lg shadow-sm flex flex-col items-center">
+                                                            <span className="text-[10px] font-bold uppercase leading-none">Saved</span>
+                                                            <span className="text-sm font-black leading-tight">
+                                                                {Math.round((1 - compressionData.compressed_size / compressionData.original_size) * 100)}%
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    {compressionData.compressed_size >= compressionData.original_size && (
+                                                        <div className="text-right">
+                                                            <span className="text-[10px] font-bold text-slate-400 uppercase block">Optimized</span>
+                                                            <span className="text-xs font-bold text-slate-500">Already Lean</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 

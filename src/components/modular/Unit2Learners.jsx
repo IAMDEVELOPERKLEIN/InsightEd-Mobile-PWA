@@ -846,8 +846,14 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
     // --- Internal Summary Component ---
     const Unit2Summary = () => {
-        const maleTotal = Object.values(gradeGenderMap).reduce((s, g) => s + (parseInt(g.male) || 0), 0);
-        const femaleTotal = Object.values(gradeGenderMap).reduce((s, g) => s + (parseInt(g.female) || 0), 0);
+        const maleTotal = Object.entries(gradeGenderMap).reduce((s, [key, g]) => {
+            if (key === 'sned' && snedProgramType !== 'Self-Contained') return s;
+            return s + (parseInt(g.male) || 0);
+        }, 0);
+        const femaleTotal = Object.entries(gradeGenderMap).reduce((s, [key, g]) => {
+            if (key === 'sned' && snedProgramType !== 'Self-Contained') return s;
+            return s + (parseInt(g.female) || 0);
+        }, 0);
 
         return (
             <div className="max-w-md mx-auto pb-32 mt-4 space-y-8 px-2">
@@ -2078,7 +2084,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                         gradeGenderMap['kinder']?.male || 0,
                                                         ...mgCombinations.map(c => gradeGenderMap[c.id]?.male || 0),
                                                         ...activeMonogrades.map(g => gradeGenderMap[g.id]?.male || 0),
-                                                        hasSNED === true ? (gradeGenderMap['sned']?.male || 0) : 0
+                                                        (hasSNED === true && snedProgramType === 'Self-Contained') ? (gradeGenderMap['sned']?.male || 0) : 0
                                                     ].reduce((a, b) => parseInt(a) + parseInt(b), 0)}
                                                 </td>
                                                 <td className="px-6 py-6 text-center text-xl font-black text-rose-300">
@@ -2086,7 +2092,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                         gradeGenderMap['kinder']?.female || 0,
                                                         ...mgCombinations.map(c => gradeGenderMap[c.id]?.female || 0),
                                                         ...activeMonogrades.map(g => gradeGenderMap[g.id]?.female || 0),
-                                                        hasSNED === true ? (gradeGenderMap['sned']?.female || 0) : 0
+                                                        (hasSNED === true && snedProgramType === 'Self-Contained') ? (gradeGenderMap['sned']?.female || 0) : 0
                                                     ].reduce((a, b) => parseInt(a) + parseInt(b), 0)}
                                                 </td>
                                                 <td className="px-6 py-6 text-center text-3xl font-black text-indigo-400">
