@@ -96,11 +96,16 @@ const UserProfile = () => {
     const [formData, setFormData] = useState({
         firstName: '',
         lastName: '',
-        region: '',
-        province: '',
-        city: '',
-        barangay: ''
+        email: ''
     });
+
+    const [securityData, setSecurityData] = useState({
+        password: '',
+        passcode: '',
+        confirmText: ''
+    });
+    const [showSecurityModal, setShowSecurityModal] = useState(false);
+    const [emailChangeStatus, setEmailChangeStatus] = useState(null); // 'idle', 'verifying', 'success', 'error'
 
     // Feedback State
     const [feedbackRatings, setFeedbackRatings] = useState({
@@ -158,10 +163,7 @@ const UserProfile = () => {
                 setFormData({
                     firstName: mappedUser.firstName,
                     lastName: mappedUser.lastName,
-                    region: user.region || '',
-                    province: user.province || '',
-                    city: user.city || '',
-                    barangay: user.barangay || ''
+                    email: mappedUser.email
                 });
                 setHomeRoute(getDashboardPath(mappedUser.role));
 
@@ -204,11 +206,33 @@ const UserProfile = () => {
         auth?.confirmLogout();
     };
 
-    const handleSaveProfile = async () => {
+    const handleSaveProfile = async (bypassSecurity = false) => {
+        // Handle domain restriction
+        const currentEmail = userData.email || '';
+        const currentDomain = currentEmail.split('@')[1];
+        const newDomain = formData.email.split('@')[1];
+
+        if (currentDomain && newDomain && currentDomain.toLowerCase() !== newDomain.toLowerCase()) {
+            alert(`Domain restricted: You can only change the part before the @ symbol. Your email must end with @${currentDomain}`);
+            return;
+        }
+
+        // If email is changed and we haven't verified security, show modal
+        if (!bypassSecurity && formData.email.toLowerCase() !== currentEmail.toLowerCase()) {
+            setShowSecurityModal(true);
+            return;
+        }
+
         setLoading(true);
         try {
             const uid = localStorage.getItem('uid');
             if (!uid) return;
+
+            const payload = {
+                ...formData,
+                currentPassword: securityData.password,
+                currentPasscode: securityData.passcode
+            };
 
             const response = await fetch('/api/users/update', {
                 method: 'PUT',
@@ -216,18 +240,29 @@ const UserProfile = () => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
-                body: JSON.stringify(formData)
+                body: JSON.stringify(payload)
             });
 
-            if (!response.ok) throw new Error("Update failed");
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || "Update failed");
 
-            // Update local state to reflect changes immediately without refetching
-            setUserData(prev => ({ ...prev, ...formData }));
+            // Update local and global state
+            const updatedUser = { ...userData, ...formData };
+            setUserData(updatedUser);
+            if (auth?.setUser) auth.setUser(updatedUser);
+
             setIsEditing(false);
+            setShowSecurityModal(false);
+            setSecurityData({ password: '', passcode: '', confirmText: '' });
             alert("Profile updated successfully!");
+            
+            if (result.emailChanged) {
+                // If email changed, we might want to update stored email
+                localStorage.setItem('userEmail', formData.email);
+            }
         } catch (error) {
             console.error("Error updating profile:", error);
-            alert("Failed to update profile.");
+            alert(error.message || "Failed to update profile.");
         } finally {
             setLoading(false);
         }
@@ -342,209 +377,220 @@ const UserProfile = () => {
     };
 
 
-    // --- SUB-VIEWS RENDERERS ---
-
-    // 1. EDIT PROFILE VIEW
+    // --- SUB-VIEWS RENDERERS ---    // 1. REDESIGNED PROFILE EDIT VIEW
     const renderProfileEdit = () => (
-        <div className="p-5 animate-in fade-in slide-in-from-right-4 duration-300">
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm">
-                <div className="flex justify-between items-center mb-5">
-                    <h3 className="text-base text-[#004A99] dark:text-blue-300 font-bold m-0">Personal Information</h3>
-                    {!isEditing ? (
-                        <button onClick={() => setIsEditing(true)} className="p-1 bg-transparent border-0 cursor-pointer">
-                            <FiEdit3 size={18} className="text-[#004A99] dark:text-blue-300" />
-                        </button>
-                    ) : (
-                        <button onClick={handleSaveProfile} className="bg-[#004A99] text-white border-0 rounded px-3 py-1.5 cursor-pointer disabled:opacity-50" disabled={loading}>
-                            {loading ? "..." : <FiSave size={18} />}
-                        </button>
+        <div className="p-4 sm:p-6 animate-in fade-in slide-in-from-right-4 duration-500 pb-24">
+            {/* --- PROFILE HEADER CARD --- */}
+            <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] p-8 mb-6 shadow-xl shadow-blue-900/5 dark:shadow-none border border-transparent dark:border-slate-700/50 text-center relative overflow-hidden group">
+                {/* Subtle background decoration */}
+                <div className="absolute -top-10 -right-10 w-32 h-32 bg-blue-50 dark:bg-blue-900/10 rounded-full blur-3xl group-hover:scale-110 transition-transform duration-700"></div>
+                <div className="absolute -bottom-10 -left-10 w-24 h-24 bg-indigo-50 dark:bg-indigo-900/10 rounded-full blur-2xl group-hover:scale-110 transition-transform duration-700"></div>
+
+                <div className="relative z-10">
+                    <div className="w-24 h-24 bg-gradient-to-br from-[#004A99] to-indigo-600 dark:from-blue-600 dark:to-indigo-500 text-white rounded-[2rem] flex justify-center items-center text-3xl font-black mx-auto mb-4 shadow-xl shadow-blue-500/30 rotate-3 group-hover:rotate-0 transition-transform duration-500">
+                        {userData?.firstName ? getInitials(formData.firstName || userData.firstName, formData.lastName || userData.lastName) : "..."}
+                    </div>
+                    <h3 className="text-xl font-black text-slate-800 dark:text-white m-0">
+                        {formData.firstName ? `${formData.firstName} ${formData.lastName}` : (userData?.firstName ? `${userData.firstName} ${userData.lastName}` : "Authenticated User")}
+                    </h3>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 dark:bg-blue-900/30 rounded-full mt-2">
+                        <FiShield size={12} className="text-[#004A99] dark:text-blue-400" />
+                        <span className="text-[10px] font-bold text-[#004A99] dark:text-blue-300 uppercase tracking-wider">{userData?.role || "Resident User"}</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* --- IDENTITY SECTION --- */}
+            <h4 className="px-2 text-[10px] uppercase tracking-[0.2em] font-black text-slate-400 dark:text-slate-500 mb-3 flex items-center justify-between">
+                <span>Personal Identity</span>
+                {!isEditing && (
+                    <button onClick={() => setIsEditing(true)} className="flex items-center gap-1 text-[#004A99] dark:text-blue-400 bg-transparent border-0 cursor-pointer p-0 normal-case tracking-normal">
+                        <FiEdit3 size={14} /> <span className="text-xs font-bold">Edit</span>
+                    </button>
+                )}
+            </h4>
+
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 mb-6 shadow-sm border border-transparent dark:border-slate-700/50 space-y-4">
+                <div className="grid grid-cols-1 gap-4">
+                    <div>
+                        <label className="block text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 mb-1.5 ml-1">First Name</label>
+                        <input
+                            className={`w-full p-4 rounded-2xl text-[15px] font-medium outline-none transition-all ${isEditing
+                                ? "border-2 border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
+                                : "border-2 border-transparent bg-slate-50 dark:bg-slate-700/30 text-slate-700 dark:text-slate-300"
+                                }`}
+                            name="firstName"
+                            value={formData.firstName}
+                            onChange={handleInputChange}
+                            disabled={!isEditing}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 mb-1.5 ml-1">Last Name</label>
+                        <input
+                            className={`w-full p-4 rounded-2xl text-[15px] font-medium outline-none transition-all ${isEditing
+                                ? "border-2 border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
+                                : "border-2 border-transparent bg-slate-50 dark:bg-slate-700/30 text-slate-700 dark:text-slate-300"
+                                }`}
+                            name="lastName"
+                            value={formData.lastName}
+                            onChange={handleInputChange}
+                            disabled={!isEditing}
+                        />
+                    </div>
+                </div>
+
+                {/* Email (Special Verification logic) */}
+                <div className="pt-2">
+                    <label className="block text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 mb-1.5 ml-1">Registered Email</label>
+                    <div className="relative group">
+                        <input
+                            className={`w-full p-4 rounded-2xl text-[15px] font-medium outline-none transition-all pr-12 ${isEditing
+                                ? "border-2 border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
+                                : "border-2 border-transparent bg-slate-50 dark:bg-slate-700/30 text-slate-700 dark:text-slate-300"
+                                }`}
+                            name="email"
+                            value={formData.email}
+                            onChange={handleInputChange}
+                            disabled={!isEditing}
+                        />
+                        {isEditing && (
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
+                                <FiLock size={16} title="Secure Field" />
+                            </div>
+                        )}
+                    </div>
+                    {isEditing && (
+                        <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800/50">
+                            <p className="text-[11px] text-blue-600 dark:text-blue-300 leading-relaxed m-0 flex gap-2 font-medium">
+                                <FiInfo className="shrink-0 mt-0.5" size={14} />
+                                <span>Domain restriction: You can only change the part before <strong>@{userData?.email?.split('@')[1]}</strong>. Security verification required on save.</span>
+                            </p>
+                        </div>
                     )}
                 </div>
-
-                {/* --- READ ONLY FIELDS (Cannot be edited) --- */}
-                <div className="bg-slate-50 dark:bg-slate-700 p-4 rounded-xl mb-4">
-                    <div className="flex justify-between mb-2 text-sm last:mb-0">
-                        <span className="text-gray-500 dark:text-gray-300 font-medium">Role</span>
-                        <span className="text-gray-800 dark:text-gray-100 font-bold">{userData?.role}</span>
-                    </div>
-                    <div className="flex justify-between mb-2 text-sm last:mb-0">
-                        <span className="text-gray-500 dark:text-gray-300 font-medium">Email</span>
-                        <span className="text-gray-800 dark:text-gray-100 font-bold">{userData?.email}</span>
-                    </div>
-                    <div className="flex justify-between mb-2 text-sm last:mb-0">
-                        <span className="text-gray-500 dark:text-gray-300 font-medium">School ID</span>
-                        <span className={`font-bold ${schoolId ? 'text-[#004A99] dark:text-blue-300' : 'text-gray-400'}`}>
-                            {schoolId || "Not Assigned"}
-                        </span>
-                    </div>
-                    <div className="flex justify-between mb-2 text-sm last:mb-0">
-                        <span className="text-gray-500 dark:text-gray-300 font-medium">IERN</span>
-                        <span className={`font-bold ${iern ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}`}>
-                            {iern || "Not Generated"}
-                        </span>
-                    </div>
-                </div>
-
-                <div className="h-px bg-gray-100 dark:bg-slate-600 my-5"></div>
-
-                {/* --- EDITABLE FIELDS --- */}
-
-                {/* NAME SECTION */}
-                <h4 className="text-xs text-gray-400 uppercase font-bold mt-2.5 mb-2.5">Identity</h4>
-                <div className="mb-4">
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">First Name</label>
-                    <input
-                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
-                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
-                            : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
-                            }`}
-                        name="firstName"
-                        value={formData.firstName}
-                        onChange={handleInputChange}
-                        disabled={!isEditing}
-                    />
-                </div>
-                <div className="mb-4">
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Last Name</label>
-                    <input
-                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
-                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
-                            : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
-                            }`}
-                        name="lastName"
-                        value={formData.lastName}
-                        onChange={handleInputChange}
-                        disabled={!isEditing}
-                    />
-                </div>
-
-                <div className="h-px bg-gray-100 dark:bg-slate-600 my-5"></div>
-
-                {/* ADDRESS SECTION */}
-                <h4 className="text-xs text-gray-400 uppercase font-bold mt-2.5 mb-2.5">Address</h4>
-                <div className="mb-4">
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Region</label>
-                    <input
-                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
-                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
-                            : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
-                            }`}
-                        name="region"
-                        value={formData.region}
-                        onChange={handleInputChange}
-                        disabled={!isEditing}
-                    />
-                </div>
-                <div className="mb-4">
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Province</label>
-                    <input
-                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
-                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
-                            : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
-                            }`}
-                        name="province"
-                        value={formData.province}
-                        onChange={handleInputChange}
-                        disabled={!isEditing}
-                    />
-                </div>
-                <div className="mb-4">
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">City/Municipality</label>
-                    <input
-                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
-                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
-                            : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
-                            }`}
-                        name="city"
-                        value={formData.city}
-                        onChange={handleInputChange}
-                        disabled={!isEditing}
-                    />
-                </div>
-                <div className="mb-4">
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Barangay</label>
-                    <input
-                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
-                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
-                            : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
-                            }`}
-                        name="barangay"
-                        value={formData.barangay}
-                        onChange={handleInputChange}
-                        disabled={!isEditing}
-                    />
-                </div>
-
-
-                <div className="h-px bg-gray-100 dark:bg-slate-600 my-5"></div>
-
-                {/* PASSWORD SECTION */}
-                <h4 className="text-xs text-gray-400 uppercase font-bold mt-2.5 mb-2.5">Security</h4>
-
-                {passwordError && (
-                    <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2">
-                        <TbAlertTriangle /> {passwordError}
-                    </div>
-                )}
-
-                <div className="mb-4">
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Current Password</label>
-                    <input
-                        type="password"
-                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
-                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
-                            : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
-                            }`}
-                        placeholder={isEditing ? "Enter current password" : "••••••••"}
-                        value={passwordData.currentPassword}
-                        onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                        disabled={!isEditing}
-                    />
-                </div>
-
-                <div className="mb-4">
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">New Password</label>
-                    <input
-                        type="password"
-                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
-                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
-                            : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
-                            }`}
-                        placeholder={isEditing ? "Enter new password" : "••••••••"}
-                        value={passwordData.newPassword}
-                        onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                        disabled={!isEditing}
-                    />
-                </div>
-
-                <div className="mb-4">
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Confirm New Password</label>
-                    <input
-                        type="password"
-                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
-                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
-                            : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
-                            }`}
-                        placeholder={isEditing ? "Confirm new password" : "••••••••"}
-                        value={passwordData.confirmPassword}
-                        onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                        disabled={!isEditing}
-                    />
-                </div>
-
-                {isEditing && (
-                    <div className="mt-4">
-                        <button
-                            onClick={handlePasswordUpdate}
-                            className="w-full py-2.5 bg-[#004A99] text-white rounded-xl font-bold hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20"
-                            disabled={loading}
-                        >
-                            {loading ? "Updating Credentials..." : "Update Password"}
-                        </button>
-                    </div>
-                )}
             </div>
-        </div >
+
+            {/* --- CAMPUS / OFFICE SECTION --- */}
+            <h4 className="px-2 text-[10px] uppercase tracking-[0.2em] font-black text-slate-400 dark:text-slate-500 mb-3 flex items-center gap-2">
+                <FiTool size={12} /> <span>Official Credentials</span>
+            </h4>
+
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 mb-6 shadow-sm border border-transparent dark:border-slate-700/50 flex flex-wrap gap-3">
+                {/* READ ONLY MASTER CREDENTIALS */}
+                <div className="px-4 py-3 bg-slate-50 dark:bg-slate-700/50 rounded-2xl border border-slate-100 dark:border-slate-700 flex flex-col flex-1 min-w-[140px]">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 mb-1">School ID</span>
+                    <span className="text-sm font-black text-[#004A99] dark:text-blue-300">{userData?.school_id || "DEPED-ADMIN"}</span>
+                </div>
+                <div className="px-4 py-3 bg-slate-50 dark:bg-slate-700/50 rounded-2xl border border-slate-100 dark:border-slate-700 flex flex-col flex-1 min-w-[140px]">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 mb-1">IERN</span>
+                    <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">{userData?.iern || "NOT-GEN-SYS"}</span>
+                </div>
+            </div>
+
+            {/* --- SECURITY SECTION --- */}
+            <h4 className="px-2 text-[10px] uppercase tracking-[0.2em] font-black text-slate-400 dark:text-slate-500 mb-3 flex items-center gap-2">
+                <FiLock size={12} /> <span>Account Security</span>
+            </h4>
+
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 mb-8 shadow-sm border border-transparent dark:border-slate-700/50">
+                <div className="flex flex-col gap-4">
+                    {isEditing ? (
+                        /* PASSWORD FIELDS (Only when editing) */
+                        <>
+                            {passwordError && (
+                                <div className="mb-2 p-3 bg-red-50 text-red-600 text-xs rounded-xl flex items-center gap-2 border border-red-100">
+                                    <TbAlertTriangle /> {passwordError}
+                                </div>
+                            )}
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 mb-1.5 ml-1">Current Password</label>
+                                <input
+                                    type="password"
+                                    className="w-full p-3.5 rounded-2xl text-[14px] font-medium bg-slate-50 dark:bg-slate-700/30 border border-transparent focus:border-[#004A99] focus:bg-white dark:text-white transition-all outline-none"
+                                    placeholder="Confirm existing password"
+                                    value={passwordData.currentPassword}
+                                    onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                                />
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 mb-1.5 ml-1">New Password</label>
+                                    <input
+                                        type="password"
+                                        className="w-full p-3.5 rounded-2xl text-[14px] font-medium bg-slate-50 dark:bg-slate-700/30 border border-transparent focus:border-[#004A99] focus:bg-white dark:text-white transition-all outline-none"
+                                        placeholder="Min 6 chars"
+                                        value={passwordData.newPassword}
+                                        onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 mb-1.5 ml-1">Confirm New</label>
+                                    <input
+                                        type="password"
+                                        className="w-full p-3.5 rounded-2xl text-[14px] font-medium bg-slate-50 dark:bg-slate-700/30 border border-transparent focus:border-[#004A99] focus:bg-white dark:text-white transition-all outline-none"
+                                        placeholder="Repeat new password"
+                                        value={passwordData.confirmPassword}
+                                        onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                            <button
+                                onClick={handlePasswordUpdate}
+                                className="w-full py-3.5 bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-200 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors border-0 cursor-pointer"
+                                disabled={loading}
+                            >
+                                {loading ? "Updating..." : "Process Credentials Update"}
+                            </button>
+                        </>
+                    ) : (
+                        /* QUICK ACTIONS WHEN NOT EDITING */
+                        <div className="flex flex-col gap-3">
+                            <div className="flex justify-between items-center p-3.5 bg-slate-50 dark:bg-slate-700/30 rounded-2xl border border-transparent">
+                                <div>
+                                    <p className="m-0 text-[10px] uppercase font-bold text-slate-400">Password</p>
+                                    <p className="m-0 text-sm font-medium text-slate-700 dark:text-slate-200 tracking-widest mt-0.5">••••••••</p>
+                                </div>
+                                <button
+                                    onClick={() => setIsEditing(true)}
+                                    className="p-2.5 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 text-[#004A99] dark:text-blue-400 cursor-pointer"
+                                >
+                                    <FiEdit3 size={18} />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* --- FLOAT SAVE BUTTON (Only when editing) --- */}
+            {isEditing && (
+                <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-[90%] max-w-md z-[60] flex gap-3 animate-in fade-in slide-in-from-bottom-10 duration-500">
+                    <button
+                        onClick={() => {
+                            setIsEditing(false);
+                            // Reset form data from userData
+                            setFormData({
+                                firstName: userData.firstName,
+                                lastName: userData.lastName,
+                                email: userData.email
+                            });
+                        }}
+                        className="flex-1 py-4 bg-white dark:bg-slate-800 text-slate-500 rounded-[1.8rem] font-bold shadow-2xl border border-slate-100 dark:border-slate-700 cursor-pointer active:scale-95 transition-all"
+                    >
+                        Discard
+                    </button>
+                    <button
+                        onClick={() => handleSaveProfile()}
+                        className="flex-[2] py-4 bg-gradient-to-br from-[#004A99] to-indigo-700 dark:from-blue-600 dark:to-indigo-500 text-white rounded-[1.8rem] font-black shadow-2xl shadow-blue-500/40 cursor-pointer active:scale-95 transition-all flex justify-center items-center gap-2"
+                        disabled={loading}
+                    >
+                        {loading ? <FiRefreshCw className="animate-spin" /> : <FiSave size={18} />}
+                        Save Changes
+                    </button>
+                </div>
+            )}
+        </div>
     );
 
     // 2. ABOUT VIEW
@@ -690,6 +736,96 @@ const UserProfile = () => {
                             </>
                         )}
                     </button>
+                </div>
+            </div>
+        );
+    };
+
+
+    // 6. SECURITY CONFIRMATION MODAL (For Email Changes)
+    const renderSecurityModal = () => {
+        if (!showSecurityModal) return null;
+
+        return (
+            <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl p-6 pb-10 sm:pb-6 animate-in slide-in-from-bottom-10 duration-500">
+                    <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-6 sm:hidden"></div>
+                    
+                    <div className="flex items-center gap-4 mb-6">
+                        <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/40 rounded-2xl flex items-center justify-center text-orange-600 dark:text-orange-400">
+                            <FiShield size={24} />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-800 dark:text-white m-0">Security Verification</h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 m-0">Confirm your identity to change your email.</p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-4 mb-8">
+                        <div>
+                            <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500 mb-1.5">New Email Address</label>
+                            <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-100 dark:border-slate-700 text-sm font-bold text-slate-700 dark:text-slate-200">
+                                {formData.email}
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500 mb-1.5">Login Password</label>
+                            <input
+                                type="password"
+                                placeholder="Enter your current password"
+                                className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white transition-all"
+                                value={securityData.password}
+                                onChange={(e) => setSecurityData({ ...securityData, password: e.target.value })}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500 mb-1.5">6-Digit Passcode</label>
+                            <input
+                                type="password"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                maxLength="6"
+                                placeholder="••••••"
+                                className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-sm text-center tracking-[1em] font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white transition-all"
+                                value={securityData.passcode}
+                                onChange={(e) => setSecurityData({ ...securityData, passcode: e.target.value.replace(/\D/g, '') })}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500 mb-1.5 text-center">Type <span className="text-blue-600 dark:text-blue-400">CONFIRM</span> to proceed</label>
+                            <input
+                                type="text"
+                                placeholder="CONFIRM"
+                                className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-sm text-center font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white transition-all uppercase"
+                                value={securityData.confirmText}
+                                onChange={(e) => setSecurityData({ ...securityData, confirmText: e.target.value })}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                        <button
+                            onClick={() => handleSaveProfile(true)}
+                            disabled={loading || !securityData.password || securityData.passcode.length < 6 || securityData.confirmText !== 'CONFIRM'}
+                            className="w-full py-4 bg-[#004A99] hover:bg-blue-800 text-white rounded-2xl font-bold shadow-lg shadow-blue-900/20 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale disabled:scale-100 flex justify-center items-center gap-2"
+                        >
+                            {loading ? <FiRefreshCw className="animate-spin" /> : <FiCheckCircle />}
+                            Confirm & Update
+                        </button>
+                        
+                        <button
+                            onClick={() => {
+                                setShowSecurityModal(false);
+                                setSecurityData({ password: '', passcode: '', confirmText: '' });
+                            }}
+                            className="w-full py-4 bg-transparent text-slate-500 dark:text-slate-400 font-bold hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                    </div>
                 </div>
             </div>
         );
@@ -923,6 +1059,9 @@ const UserProfile = () => {
                 </div>
 
                 <BottomNav homeRoute={homeRoute} userRole={userData?.role || user?.account_category || user?.role || localStorage.getItem('userRole')} />
+                
+                {/* Security Verification Modal */}
+                {renderSecurityModal()}
             </div>
         </PageTransition>
     );

@@ -7581,22 +7581,72 @@ app.post('/api/auth/setup-passcode', authMiddleware, async (req, res) => {
 // --- UPDATE USER PROFILE (PROTECTED) ---
 app.put('/api/users/update', authMiddleware, async (req, res) => {
   const { uid } = req.user;
-  const { firstName, lastName, region, province, city, barangay } = req.body;
+  const { firstName, lastName, region, province, city, barangay, email, currentPassword, currentPasscode } = req.body;
 
   try {
+    // 1. Fetch current user data for comparison and validation
+    const userRes = await pool.query('SELECT email, password_hash, passcode FROM users WHERE uid = $1', [uid]);
+    if (userRes.rowCount === 0) return res.status(404).json({ error: "User not found" });
+
+    const currentUser = userRes.rows[0];
+    let updateEmail = currentUser.email;
+
+    // 2. Handle Email Change Security Checks
+    if (email && email.toLowerCase() !== currentUser.email?.toLowerCase()) {
+      // a. Check if Password and Passcode are provided
+      if (!currentPassword || !currentPasscode) {
+        return res.status(400).json({ error: "Password and Passcode are required to change email." });
+      }
+
+      // b. Verify Password
+      const isPasswordValid = await bcrypt.compare(currentPassword, currentUser.password_hash);
+      if (!isPasswordValid) {
+        return res.status(401).json({ error: "Incorrect password confirmation." });
+      }
+
+      // c. Verify Passcode
+      if (currentPasscode !== currentUser.passcode) {
+        return res.status(401).json({ error: "Incorrect passcode confirmation." });
+      }
+
+      // d. Verify Domain remains the same
+      const currentDomain = currentUser.email?.split('@')[1];
+      const newDomain = email.split('@')[1];
+      if (currentDomain && newDomain && currentDomain.toLowerCase() !== newDomain.toLowerCase()) {
+        return res.status(400).json({ error: `You are only allowed to change the local part of your email. The domain (@${currentDomain}) must remain the same.` });
+      }
+
+      // e. Check for duplicate email
+      const dupRes = await pool.query('SELECT uid FROM users WHERE LOWER(email) = LOWER($1) AND uid != $2', [email, uid]);
+      if (dupRes.rowCount > 0) {
+        return res.status(409).json({ error: "This email is already registered to another account." });
+      }
+
+      updateEmail = email.toLowerCase();
+      console.log(`[Auth] User ${uid} changing email to ${updateEmail}`);
+    }
+
+    // 3. Perform the Update
     await pool.query(
       `UPDATE users SET 
                 first_name = $1, last_name = $2, 
-                region = $3, province = $4, city = $5, barangay = $6 
-             WHERE uid = $7`,
-      [firstName, lastName, region, province, city, barangay, uid]
+                region = $3, province = $4, city = $5, barangay = $6,
+                email = $7
+             WHERE uid = $8`,
+      [firstName, lastName, region, province, city, barangay, updateEmail, uid]
     );
-    res.json({ success: true, message: "Profile updated successfully." });
+
+    res.json({ 
+      success: true, 
+      message: "Profile updated successfully.",
+      emailChanged: updateEmail !== currentUser.email
+    });
   } catch (err) {
     console.error("Update Profile Error:", err);
     res.status(500).json({ success: false, error: "Database error" });
   }
 });
+
 
 // --- CHANGE PASSWORD (PROTECTED) ---
 app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
