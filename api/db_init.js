@@ -728,7 +728,39 @@ const runMigrations = async (client, dbLabel) => {
         console.error(`❌ [${dbLabel}] Failed to create pending_schools table:`, migErr.message);
     }
 
-    // --- 15. FACILITY REPAIRS TABLE ---
+    // --- 15. SCHOOL DOCUMENTS TABLE (SDO PDF Submissions) ---
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS school_documents (
+                id SERIAL PRIMARY KEY,
+                pending_id INTEGER,
+                school_id TEXT,
+                doc_type TEXT NOT NULL,
+                file_data TEXT, -- Base64 fallback
+                binary_id UUID, -- Postgres Binary reference
+                file_path TEXT, -- Virtual path or Data URI
+                file_name TEXT, -- Original Filename
+                file_size BIGINT,
+                original_size BIGINT,
+                hydra_manifest JSONB,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        // Idempotent migrations for existing tables
+        await client.query('ALTER TABLE school_documents ADD COLUMN IF NOT EXISTS pending_id INTEGER;').catch(() => {});
+        await client.query('ALTER TABLE school_documents ADD COLUMN IF NOT EXISTS file_name TEXT;').catch(() => {});
+        await client.query('ALTER TABLE school_documents ADD COLUMN IF NOT EXISTS binary_id UUID;').catch(() => {});
+        await client.query('ALTER TABLE school_documents ADD COLUMN IF NOT EXISTS hydra_manifest JSONB;').catch(() => {});
+        
+        await client.query('CREATE INDEX IF NOT EXISTS idx_school_docs_pending ON school_documents(pending_id);');
+        await client.query('CREATE INDEX IF NOT EXISTS idx_school_docs_school ON school_documents(school_id);');
+        
+        console.log(`✅ [${dbLabel}] School Documents Table Initialized`);
+    } catch (migErr) {
+        console.error(`❌ [${dbLabel}] Failed to init school_documents table:`, migErr.message);
+    }
+
+    // --- 16. FACILITY REPAIRS TABLE ---
     try {
         await client.query(`
             CREATE TABLE IF NOT EXISTS facility_repairs (

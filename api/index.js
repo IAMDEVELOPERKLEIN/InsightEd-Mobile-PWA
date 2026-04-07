@@ -5687,8 +5687,8 @@ app.post('/api/sdo/upload-document', memoryUpload.single('file'), async (req, re
 
     // 2. Save to database
     const query = `
-      INSERT INTO school_documents (pending_id, school_id, doc_type, file_data, binary_id, file_path, file_size, original_size, hydra_manifest)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO school_documents (pending_id, school_id, doc_type, file_data, binary_id, file_path, file_name, file_size, original_size, hydra_manifest)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     `;
     await pool.query(query, [
         pending_id || null, 
@@ -5697,6 +5697,7 @@ app.post('/api/sdo/upload-document', memoryUpload.single('file'), async (req, re
         (finalBinaryId ? null : finalDocValue), // Only store Base64 in file_data if binary_id is null
         finalBinaryId, 
         finalDocValue, 
+        req.file.originalname || null,
         storedSize, 
         originalSizeFound, 
         finalHydraManifest ? JSON.stringify(finalHydraManifest) : null
@@ -5734,6 +5735,8 @@ app.get('/api/sdo/document/:id/:type', async (req, res) => {
     }
 
     const { file_data, binary_id, file_path, file_name, hydra_manifest } = docRes.rows[0];
+
+    console.log(`📂 [SDORetrieve] Found document: ${file_name || 'unnamed'} for ${id}/${type}`);
 
     // Case A: Postgres Binary (Preferred)
     if (binary_id) {
@@ -6095,29 +6098,70 @@ app.post('/api/admin/approve-school/:pending_id', async (req, res) => {
 
     const school = pendingResult.rows[0];
 
-    // 2. Insert into schools table
+    // 2. Generate new IERN (Sequential Suffix with Current Year Prefix)
+    // Rule: Exclude test schools (SchoolID 999%) AND non-standard IERNs (like SDO-*)
+    const lastIernRes = await pool.query(`
+      SELECT iern FROM "schools_IERN" 
+      WHERE "SchoolID" NOT LIKE '999%' 
+      AND iern IS NOT NULL 
+      AND iern ~ '^[0-9]{4}-[0-9]+$'
+      ORDER BY iern DESC LIMIT 1
+    `);
+
+    let lastSuffix = 45998; // Default fallback if no valid IERN exists
+    if (lastIernRes.rows.length > 0) {
+      const parts = lastIernRes.rows[0].iern.split('-');
+      if (parts.length === 2) {
+        const parsedSuffix = parseInt(parts[1], 10);
+        if (!isNaN(parsedSuffix)) lastSuffix = parsedSuffix;
+      }
+    }
+
+    const currentYear = new Date().getFullYear();
+    const nextSuffix = lastSuffix + 1;
+    const newIern = `${currentYear}-${nextSuffix}`;
+
+    console.log(`🆕 [Approval] Generating IERN: ${newIern} (Last Suffix: ${lastSuffix}) for ${school.school_name}`);
+
+    // 3. Insert into schools_IERN table (Master Table)
+    // Note: Column names are quoted to match the existing schema (likely from legacy imports)
     await pool.query(`
-      INSERT INTO schools (
-        school_id, school_name, region, division, district, province, municipality, leg_district,
-        barangay, street_address, mother_school_id, curricular_offering, latitude, longitude, special_order
+      INSERT INTO "schools_IERN" (
+        "iern", "SchoolID", "School_Name", "Region", "Division", "District", "Province", 
+        "Municipality", "Legislative_District", "Barangay", "Street_Address", 
+        "Mother_School_ID", "Curricular_Offering", "Latitude", "Longitude"
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-      ON CONFLICT (school_id) DO NOTHING
+      ON CONFLICT ("SchoolID") DO UPDATE SET
+        "iern" = EXCLUDED."iern",
+        "School_Name" = EXCLUDED."School_Name",
+        "Region" = EXCLUDED."Region",
+        "Division" = EXCLUDED."Division",
+        "District" = EXCLUDED."District",
+        "Province" = EXCLUDED."Province",
+        "Municipality" = EXCLUDED."Municipality",
+        "Legislative_District" = EXCLUDED."Legislative_District",
+        "Barangay" = EXCLUDED."Barangay",
+        "Street_Address" = EXCLUDED."Street_Address",
+        "Mother_School_ID" = EXCLUDED."Mother_School_ID",
+        "Curricular_Offering" = EXCLUDED."Curricular_Offering",
+        "Latitude" = EXCLUDED."Latitude",
+        "Longitude" = EXCLUDED."Longitude"
     `, [
-      school.school_id, school.school_name, school.region, school.division, school.district,
-      school.province, school.municipality, school.leg_district, school.barangay,
-      school.street_address, school.mother_school_id, school.curricular_offering,
-      school.latitude, school.longitude, school.special_order
+      newIern, school.school_id, school.school_name, school.region, school.division, 
+      school.district, school.province, school.municipality, school.leg_district, 
+      school.barangay, school.street_address, school.mother_school_id, 
+      school.curricular_offering, school.latitude, school.longitude
     ]);
 
-    // 3. Update pending_schools status
+    // 4. Update pending_schools status
     await pool.query(`
       UPDATE pending_schools
       SET status = 'approved', reviewed_by = $1, reviewed_by_name = $2, reviewed_at = CURRENT_TIMESTAMP
       WHERE pending_id = $3
     `, [reviewed_by, reviewed_by_name, pending_id]);
 
-    // 4. Log Activity
+    // 5. Log Activity
     if (reviewed_by) {
       await logActivity(
         reviewed_by,
@@ -6125,14 +6169,14 @@ app.post('/api/admin/approve-school/:pending_id', async (req, res) => {
         'admin',
         'APPROVE_SCHOOL',
         school.school_name,
-        `Approved school submission: ${school.school_name} (${school.school_id})`
+        `Approved school submission: ${school.school_name} (SchoolID: ${school.school_id}, IERN: ${newIern})`
       );
     }
 
-    console.log(`… School approved: ${school.school_name}`);
-    res.json({ success: true });
+    console.log(`✅ [Approval] School approved and IERN issued: ${school.school_name} (${newIern})`);
+    res.json({ success: true, iern: newIern });
   } catch (err) {
-    console.error("Approve School Error:", err);
+    console.error("❌ Approve School Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -6265,16 +6309,17 @@ app.post('/api/sdo/resubmit-document/:pending_id', memoryUpload.single('file'), 
 
     // 2. Save to database
     const query = `
-      INSERT INTO school_documents (pending_id, school_id, doc_type, file_data, binary_id, file_path, file_size, original_size, hydra_manifest)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO school_documents (pending_id, school_id, doc_type, file_data, binary_id, file_path, file_name, file_size, original_size, hydra_manifest)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     `;
     await pool.query(query, [
         pending_id || null, 
         school_id || null, 
-        type, 
+        type || 'SPECIAL_ORDER', 
         (finalBinaryId ? null : finalDocValue), 
         finalBinaryId, 
         finalDocValue, 
+        req.file.originalname || null,
         storedSize, 
         originalSizeFound, 
         finalHydraManifest ? JSON.stringify(finalHydraManifest) : null
