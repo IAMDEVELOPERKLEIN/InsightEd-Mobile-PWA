@@ -82,7 +82,7 @@ const EFDHome = () => {
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState(null);
-    const [activeTab, setActiveTab] = useState('summary'); 
+    const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem('efd_activeTab') || 'summary');
     const [viewMode, setViewMode] = useState('card'); 
     const [engineers, setEngineers] = useState([]);
     const [selectedProjectForAssignment, setSelectedProjectForAssignment] = useState(null);
@@ -106,8 +106,32 @@ const EFDHome = () => {
     const cameraInputRef = useRef(null);
     
     useEffect(() => {
-        // No longer needed to sync activeTab to sessionStorage for dual-view
+        sessionStorage.setItem('efd_activeTab', activeTab);
     }, [activeTab]);
+
+    // Restore scroll position after the first data load completes
+    const scrollRestored = useRef(false);
+    useEffect(() => {
+        if (!loading && !scrollRestored.current) {
+            const savedY = sessionStorage.getItem('efd_scrollY');
+            if (savedY) {
+                scrollRestored.current = true;
+                const y = parseInt(savedY, 10);
+                // Triple rAF + small timeout for maximum stability
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            setTimeout(() => {
+                                window.scrollTo(0, y);
+                                // Cleanup AFTER scroll
+                                sessionStorage.removeItem('efd_scrollY');
+                            }, 50);
+                        });
+                    });
+                });
+            }
+        }
+    }, [loading]);
 
     const [selectedRegions, setSelectedRegions] = useState(() => JSON.parse(localStorage.getItem('efd_selectedRegions') || '[]'));
     const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -116,14 +140,20 @@ const EFDHome = () => {
     const [selectedMunicipality, setSelectedMunicipality] = useState(() => localStorage.getItem('efd_selectedMunicipality') || '');
     const [selectedDistrict, setSelectedDistrict] = useState(() => localStorage.getItem('efd_selectedDistrict') || '');
     const [selectedCategories, setSelectedCategories] = useState(() => JSON.parse(localStorage.getItem('efd_selectedCategories') || '[]'));
-    const [selectedYears, setSelectedYears] = useState([]);
+    const [selectedYears, setSelectedYears] = useState(() => JSON.parse(localStorage.getItem('efd_selectedYears') || '[]'));
+    const [selectedBatches, setSelectedBatches] = useState(() => JSON.parse(localStorage.getItem('efd_selectedBatches') || '[]'));
     const [selectedSource, setSelectedSource] = useState('All'); 
-    const [currentPage, setCurrentPage] = useState(1);
+    const [currentPage, setCurrentPage] = useState(() => {
+        const saved = sessionStorage.getItem('efd_currentPage');
+        return saved ? parseInt(saved, 10) : 1;
+    });
     const [selectedDonated, setSelectedDonated] = useState('All'); 
     const [selectedDocStatus, setSelectedDocStatus] = useState('All'); 
     const [fundingYears, setFundingYears] = useState([]);
+    const [allBatches, setAllBatches] = useState([]);
     const [searchQuery, setSearchQuery] = useState(() => localStorage.getItem('efd_searchQuery') || '');
     const [localSearchQuery, setLocalSearchQuery] = useState(() => localStorage.getItem('efd_searchQuery') || '');
+    const [globalTotal, setGlobalTotal] = useState(0); // fixed total inventory, never filtered
     const [efdLocations, setEfdLocations] = useState([]);
     const [isBeffMode, setIsBeffMode] = useState(() => window.location.pathname.toLowerCase().includes('beff'));
     const [chartMetric, setChartMetric] = useState('count'); // 'count' or 'abc'
@@ -142,14 +172,22 @@ const EFDHome = () => {
         localStorage.setItem('efd_selectedMunicipality', selectedMunicipality);
         localStorage.setItem('efd_selectedDistrict', selectedDistrict);
         localStorage.setItem('efd_selectedCategories', JSON.stringify(selectedCategories));
+        localStorage.setItem('efd_selectedYears', JSON.stringify(selectedYears));
+        localStorage.setItem('efd_selectedBatches', JSON.stringify(selectedBatches));
         localStorage.setItem('efd_searchQuery', searchQuery);
-    }, [selectedRegions, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict, selectedCategories, searchQuery]);
+    }, [selectedRegions, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict, selectedCategories, selectedYears, selectedBatches, searchQuery]);
+
+    // Persistent Pagination Sync
+    useEffect(() => {
+        sessionStorage.setItem('efd_currentPage', currentPage.toString());
+    }, [currentPage]);
 
     // Debounce: update shared searchQuery 400ms after user stops typing
     useEffect(() => {
         const timer = setTimeout(() => {
             if (localSearchQuery !== searchQuery) {
                 setSearchQuery(localSearchQuery);
+                setCurrentPage(1); // reset pagination on new search
             }
         }, 400);
         return () => clearTimeout(timer);
@@ -201,6 +239,7 @@ const EFDHome = () => {
         setSelectedDonated('All');
         setSelectedDocStatus('All');
         setSearchQuery('');
+        setCurrentPage(1);
 
         // Clear persistence to ensure sync
         localStorage.removeItem('efd_selectedRegions');
@@ -209,8 +248,28 @@ const EFDHome = () => {
         localStorage.removeItem('efd_selectedMunicipality');
         localStorage.removeItem('efd_selectedDistrict');
         localStorage.removeItem('efd_selectedCategories');
+        localStorage.removeItem('efd_selectedYears');
+        localStorage.removeItem('efd_selectedBatches');
         localStorage.removeItem('efd_searchQuery');
+        sessionStorage.removeItem('efd_currentPage');
     };
+
+    const handleNavigateToProject = useCallback((id) => {
+        sessionStorage.setItem('efd_scrollY', window.scrollY.toString());
+        navigate(`/project-details/${id}`);
+    }, [navigate]);
+
+    const handleFilterApply = useCallback(({ regions, divisions, categories, years, province, municipality, district, batches }) => {
+        setSelectedRegions(regions || []);
+        setSelectedDivision(divisions?.[0] || '');
+        setSelectedProvince(province || '');
+        setSelectedMunicipality(municipality || '');
+        setSelectedDistrict(district || '');
+        setSelectedCategories(categories || []);
+        setSelectedYears(years || []);
+        setSelectedBatches(batches || []);
+        setCurrentPage(1);
+    }, []);
 
     const allCategories = [
         "New Construction",
@@ -273,11 +332,15 @@ const EFDHome = () => {
             const params = new URLSearchParams({
                 engineer_id: user.uid,
                 is_donated: selectedDonated,
-                region: selectedRegions[0] || '', // Summary currently supports one region for simplicity, or we can expand it
+                region: selectedRegions[0] || '',
                 division: selectedDivision,
+                province: selectedProvince,
+                municipality: selectedMunicipality,
+                district: selectedDistrict,
                 search: searchQuery,
                 category: selectedCategories[0] || '',
-                year: selectedYears[0] || ''
+                year: selectedYears[0] || '',
+                batch: selectedBatches[0] || ''
             });
             const res = await fetch(`/api/dashboard/efd-summary?${params.toString()}`);
             if (res.ok) {
@@ -287,7 +350,7 @@ const EFDHome = () => {
         } catch (error) {
             console.error("Error fetching summary:", error);
         }
-    }, [user, selectedDonated, selectedRegions, selectedDivision, searchQuery, selectedCategories, selectedYears]);
+    }, [user, selectedDonated, selectedRegions, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict, searchQuery, selectedCategories, selectedYears, selectedBatches]);
 
     const fetchProjectsPaged = useCallback(async (p = 1) => {
         if (!user) return;
@@ -298,7 +361,13 @@ const EFDHome = () => {
                 is_donated: selectedDonated,
                 region: selectedRegions[0] || '',
                 division: selectedDivision,
+                province: selectedProvince,
+                municipality: selectedMunicipality,
+                district: selectedDistrict,
                 search: searchQuery,
+                category: selectedCategories[0] || '',
+                year: selectedYears[0] || '',
+                batch: selectedBatches[0] || '',
                 page: p,
                 limit: 15
             });
@@ -313,7 +382,7 @@ const EFDHome = () => {
         } finally {
             setLoading(false);
         }
-    }, [user, selectedDonated, selectedRegions, selectedDivision, searchQuery]);
+    }, [user, selectedDonated, selectedRegions, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict, searchQuery, selectedCategories, selectedYears, selectedBatches]);
 
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -321,21 +390,29 @@ const EFDHome = () => {
                 if (!user) return;
                 setUserData(user);
 
-                const [fyRes, locRes, engRes] = await Promise.all([
+                const [fyRes, locRes, engRes, batchRes, globalRes] = await Promise.all([
                     fetch('/api/reference/funding-years'),
                     fetch('/api/reference/efd-locations'),
-                    fetch('/api/engineers')
+                    fetch('/api/engineers'),
+                    fetch('/api/reference/batch-of-funds'),
+                    fetch(`/api/dashboard/efd-summary?engineer_id=${user.uid}`) // global total, no filters
                 ]);
 
-                const [fyData, locData, engData] = await Promise.all([
+                const [fyData, locData, engData, batchData, globalData] = await Promise.all([
                     fyRes.ok ? fyRes.json() : [],
                     locRes.ok ? locRes.json() : [],
-                    engRes.ok ? engRes.json() : []
+                    engRes.ok ? engRes.json() : [],
+                    batchRes.ok ? batchRes.json() : [],
+                    globalRes.ok ? globalRes.json() : null
                 ]);
 
                 setFundingYears(fyData);
                 setEfdLocations(locData);
                 setEngineers(engData);
+                setAllBatches(batchData);
+                if (globalData?.totalStats?.totalProjects != null) {
+                    setGlobalTotal(globalData.totalStats.totalProjects);
+                }
 
             } catch (error) {
                 console.error("Error fetching reference data:", error);
@@ -767,7 +844,7 @@ const EFDHome = () => {
                             <div className="bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/10 sm:col-span-1 min-w-0">
                                 <p className="text-[10px] font-black text-blue-300 uppercase tracking-widest mb-1.5 opacity-80 truncate">Total Projects</p>
                                 <h2 className="text-2xl lg:text-3xl font-black truncate">
-                                    {summaryData?.totalStats?.totalProjects?.toLocaleString() || pagination.total.toLocaleString()}
+                                    {(globalTotal || summaryData?.totalStats?.totalProjects || 0).toLocaleString()}
                                 </h2>
                             </div>
                             <div className="bg-blue-400/20 backdrop-blur-sm p-4 rounded-2xl border border-white/10 sm:col-span-1 min-w-0">
@@ -1223,7 +1300,7 @@ const EFDHome = () => {
                                                 {(Array.isArray(paginatedProjects) ? paginatedProjects : []).map((p) => (
                                                     <tr 
                                                         key={p.id} 
-                                                        onClick={() => navigate(`/project-details/${p.id}`)}
+                                                        onClick={() => handleNavigateToProject(p.id)}
                                                         className="hover:bg-blue-50/30 transition-colors cursor-pointer group"
                                                     >
                                                         <td className="px-6 py-4">
@@ -1354,7 +1431,7 @@ const EFDHome = () => {
                                         const showsProgression = prevProgress !== null && prevProgress !== progress;
                                         
                                         return (
-                                            <div key={p.id} onClick={() => navigate(`/project-details/${p.id}`)} className="group bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl hover:border-blue-200 transition-all duration-500 relative flex flex-col cursor-pointer">
+                                            <div key={p.id} onClick={() => handleNavigateToProject(p.id)} className="group bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl hover:border-blue-200 transition-all duration-500 relative flex flex-col cursor-pointer">
 
                                                 {/* Card Header (Category & Status) */}
                                                 <div className="p-6 pb-0">
@@ -1459,7 +1536,7 @@ const EFDHome = () => {
                                                                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Active Engineer</span>
                                                             </div>
                                                             <button 
-                                                                onClick={(e) => { e.stopPropagation(); navigate(`/project-details/${p.id}`); }}
+                                                                onClick={(e) => { e.stopPropagation(); handleNavigateToProject(p.id); }}
                                                                 className="w-8 h-8 flex items-center justify-center bg-white text-blue-600 rounded-xl border border-slate-100 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
                                                                 title="See Insights"
                                                             >
@@ -1677,25 +1754,19 @@ const EFDHome = () => {
                 onClose={() => setIsLogOpen(false)} 
                 project={logProject} 
             />
-            <FilterDrawer 
+            <FilterDrawer
                 isOpen={isFilterOpen}
                 onClose={() => setIsFilterOpen(false)}
+                onApply={handleFilterApply}
                 projects={projects}
-                regions={allRegions}
-                categories={allCategories}
-                selectedRegions={selectedRegions}
-                setSelectedRegions={setSelectedRegions}
-                selectedCategories={selectedCategories}
-                setSelectedCategories={setSelectedCategories}
-                selectedDivision={selectedDivision}
-                setSelectedDivision={setSelectedDivision}
-                selectedProvince={selectedProvince}
-                setSelectedProvince={setSelectedProvince}
-                selectedMunicipality={selectedMunicipality}
-                setSelectedMunicipality={setSelectedMunicipality}
-                selectedDistrict={selectedDistrict}
-                setSelectedDistrict={setSelectedDistrict}
                 locations={efdLocations}
+                initialRegions={selectedRegions}
+                initialDivisions={selectedDivision ? [selectedDivision] : []}
+                initialCategories={selectedCategories}
+                initialYears={selectedYears}
+                initialBatches={selectedBatches}
+                yearOptions={allYears}
+                batchOptions={allBatches}
             />
         </PageTransition>
     );

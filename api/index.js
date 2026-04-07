@@ -1988,6 +1988,21 @@ app.get('/api/reference/funding-years', async (req, res) => {
   }
 });
 
+app.get('/api/reference/batch-of-funds', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT batch_of_funds
+      FROM engineer_form
+      WHERE batch_of_funds IS NOT NULL AND TRIM(batch_of_funds) != ''
+      ORDER BY batch_of_funds ASC;
+    `);
+    res.json(result.rows.map(row => row.batch_of_funds));
+  } catch (err) {
+    console.error('❌ Error fetching batch of funds:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/reference/functional-divisions', async (req, res) => {
   try {
     const result = await pool.query('SELECT governance_level, functional_division FROM ph_offices ORDER BY functional_division ASC');
@@ -9620,7 +9635,7 @@ app.patch('/api/agency-dashboard/projects/:id/liquidation', async (req, res) => 
 // 1. GET: EFD Dashboard Summary (Aggregated Chart Data)
 app.get('/api/dashboard/efd-summary', async (req, res) => {
   try {
-    const { engineer_id, is_donated, region, division, search, category, year } = req.query;
+    const { engineer_id, is_donated, region, division, search, category, year, province, municipality, district, batch } = req.query;
     let queryParams = [];
     let whereClauses = [];
 
@@ -9660,10 +9675,30 @@ app.get('/api/dashboard/efd-summary', async (req, res) => {
       whereClauses.push(`e.program_type = $${queryParams.length}`);
     }
 
-    if (region) { queryParams.push(region); whereClauses.push(`e.region = $${queryParams.length}`); }
-    if (division) { queryParams.push(division); whereClauses.push(`e.division = $${queryParams.length}`); }
+    if (region) { 
+      queryParams.push(region); 
+      whereClauses.push(`TRIM(e.region) ILIKE TRIM($${queryParams.length})`); 
+    }
+    if (division) { 
+      const normDiv = division.replace(/^(SDO|Division of)\s+/i, '').trim();
+      queryParams.push(normDiv); 
+      whereClauses.push(`regexp_replace(TRIM(e.division), '^(SDO|Division of)\\s+', '', 'i') ILIKE $${queryParams.length}`); 
+    }
+    if (req.query.province) { 
+      queryParams.push(req.query.province); 
+      whereClauses.push(`TRIM(e.province) ILIKE TRIM($${queryParams.length})`); 
+    }
+    if (req.query.municipality) { 
+      queryParams.push(req.query.municipality); 
+      whereClauses.push(`TRIM(e.municipality) ILIKE TRIM($${queryParams.length})`); 
+    }
+    if (req.query.district) { 
+      queryParams.push(req.query.district); 
+      whereClauses.push(`TRIM(e.district) ILIKE TRIM($${queryParams.length})`); 
+    }
     if (category) { queryParams.push(category); whereClauses.push(`e.project_category = $${queryParams.length}`); }
     if (year) { queryParams.push(year); whereClauses.push(`e.funding_year = $${queryParams.length}`); }
+    if (req.query.batch) { queryParams.push(req.query.batch); whereClauses.push(`e.batch_of_funds = $${queryParams.length}`); }
 
     if (search) {
       queryParams.push(`%${search}%`);
@@ -9760,6 +9795,7 @@ app.get('/api/projects', async (req, res) => {
             e.number_of_classrooms, e.number_of_storeys, e.number_of_sites, e.funds_utilized,
             e.is_donated, e.program_type, e.status_design_phase, e.procurement_status, e.actions, e.savings, e.funding_year, e.funding_year_justification, e.approval_status,
             e.sangguniang_resolution_id, e.mother_moa_id, e.supplamental_moa_id,
+            sp.district,
             (NULLIF(d.moa_pdf, '') IS NOT NULL) AS has_moa,
             (NULLIF(d.rta_pdf, '') IS NOT NULL) AS has_rta,
             (NULLIF(d.pow_pdf, '') IS NOT NULL) AS has_pow,
@@ -9833,7 +9869,7 @@ app.get('/api/projects', async (req, res) => {
         p.contract_filename AS "contract_filename",
         p.implementing_agency AS "implementingAgency",
         p.implementing_agency_specific AS "implementingAgencySpecific",
-        p.province, p.city, p.municipality,
+        p.province, p.city, p.municipality, p.district,
         p.tranche_1, p.tranche_2, p.tranche_3,
         p.liquidated_tranche_1, p.liquidated_tranche_2, p.liquidated_tranche_3,
         p.approval_status AS "approvalStatus"
@@ -9890,16 +9926,47 @@ app.get('/api/projects', async (req, res) => {
     }
     if (region) {
       queryParams.push(region);
-      whereClauses.push(`p.region = $${queryParams.length}`);
+      whereClauses.push(`TRIM(p.region) ILIKE TRIM($${queryParams.length})`);
     }
     if (division) {
-      queryParams.push(division);
-      whereClauses.push(`p.division = $${queryParams.length}`);
+      const normDiv = division.replace(/^(SDO|Division of)\s+/i, '').trim();
+      queryParams.push(normDiv);
+      whereClauses.push(`regexp_replace(TRIM(p.division), '^(SDO|Division of)\\s+', '', 'i') ILIKE $${queryParams.length}`);
     }
-    // NEW: Municipality Filter for LGU
+    // NEW: Province Filter
+    if (req.query.province) {
+      queryParams.push(req.query.province);
+      whereClauses.push(`TRIM(p.province) ILIKE TRIM($${queryParams.length})`);
+    }
+    // NEW: Municipality Filter
     if (req.query.municipality) {
       queryParams.push(req.query.municipality);
-      whereClauses.push(`sp.municipality = $${queryParams.length}`);
+      whereClauses.push(`TRIM(p.municipality) ILIKE TRIM($${queryParams.length})`);
+    }
+    // NEW: City Filter
+    if (req.query.city) {
+      queryParams.push(req.query.city);
+      whereClauses.push(`TRIM(p.city) ILIKE TRIM($${queryParams.length})`);
+    }
+    // NEW: District Filter
+    if (req.query.district) {
+      queryParams.push(req.query.district);
+      whereClauses.push(`TRIM(p.district) ILIKE TRIM($${queryParams.length})`);
+    }
+    // NEW: Funding Year Filter
+    if (req.query.year) {
+      queryParams.push(req.query.year);
+      whereClauses.push(`p.funding_year = $${queryParams.length}`);
+    }
+    // NEW: Batch of Funds Filter
+    if (req.query.batch) {
+      queryParams.push(req.query.batch);
+      whereClauses.push(`p.batch_of_funds = $${queryParams.length}`);
+    }
+    // NEW: Category Filter
+    if (req.query.category) {
+      queryParams.push(req.query.category);
+      whereClauses.push(`p.project_category = $${queryParams.length}`);
     }
 
     // NEW: Program Type (Donated/BEFF) Filter
