@@ -195,11 +195,6 @@ const MonitoringDashboard = () => {
     return [...divisionList].sort((a, b) => b.avgPct - a.avgPct)[0];
   }, [divisionList]);
 
-  const leadingDistrict = useMemo(() => {
-    if (districtList.length === 0) return null;
-    return [...districtList].sort((a, b) => b.avgPct - a.avgPct)[0];
-  }, [districtList]);
-
   const districtList = useMemo(() => {
     if (!selectedDivision) return [];
     const divSchools = groupedByDivision[selectedDivision] || [];
@@ -215,6 +210,11 @@ const MonitoringDashboard = () => {
       return { name, count: list.length, avgPct, completed, schools: list };
     }).sort((a, b) => a.name.localeCompare(b.name));
   }, [selectedDivision, groupedByDivision]);
+
+  const leadingDistrict = useMemo(() => {
+    if (districtList.length === 0) return null;
+    return [...districtList].sort((a, b) => b.avgPct - a.avgPct)[0];
+  }, [districtList]);
 
   const schoolList = useMemo(() => {
     if (!selectedDistrict || !selectedDivision) return [];
