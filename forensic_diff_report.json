@@ -1,0 +1,6175 @@
+[
+  {
+    "school": "Malabon ES",
+    "project": "",
+    "collision_count": "16",
+    "affected_rows": 16,
+    "varying_columns": [
+      "project_id",
+      "target_completion_date",
+      "notice_to_proceed",
+      "approved_budget_for_contract",
+      "created_at",
+      "ipc",
+      "project_category",
+      "number_of_classrooms",
+      "contract_amount",
+      "funding_year",
+      "project_category_id"
+    ],
+    "detailed_differences": {
+      "project_id": [
+        {
+          "project_id": 69035,
+          "value": 69035
+        },
+        {
+          "project_id": 72072,
+          "value": 72072
+        },
+        {
+          "project_id": 72117,
+          "value": 72117
+        },
+        {
+          "project_id": 76330,
+          "value": 76330
+        },
+        {
+          "project_id": 82373,
+          "value": 82373
+        },
+        {
+          "project_id": 83928,
+          "value": 83928
+        },
+        {
+          "project_id": 83960,
+          "value": 83960
+        },
+        {
+          "project_id": 89406,
+          "value": 89406
+        },
+        {
+          "project_id": 94070,
+          "value": 94070
+        },
+        {
+          "project_id": 95495,
+          "value": 95495
+        },
+        {
+          "project_id": 95634,
+          "value": 95634
+        },
+        {
+          "project_id": 99347,
+          "value": 99347
+        },
+        {
+          "project_id": 99564,
+          "value": 99564
+        },
+        {
+          "project_id": 99607,
+          "value": 99607
+        },
+        {
+          "project_id": 99753,
+          "value": 99753
+        },
+        {
+          "project_id": 99906,
+          "value": 99906
+        }
+      ],
+      "target_completion_date": [
+        {
+          "project_id": 69035,
+          "value": null
+        },
+        {
+          "project_id": 72072,
+          "value": null
+        },
+        {
+          "project_id": 72117,
+          "value": null
+        },
+        {
+          "project_id": 76330,
+          "value": null
+        },
+        {
+          "project_id": 82373,
+          "value": null
+        },
+        {
+          "project_id": 83928,
+          "value": null
+        },
+        {
+          "project_id": 83960,
+          "value": null
+        },
+        {
+          "project_id": 89406,
+          "value": null
+        },
+        {
+          "project_id": 94070,
+          "value": null
+        },
+        {
+          "project_id": 95495,
+          "value": null
+        },
+        {
+          "project_id": 95634,
+          "value": null
+        },
+        {
+          "project_id": 99347,
+          "value": null
+        },
+        {
+          "project_id": 99564,
+          "value": "2025-02-18T16:00:00.000Z"
+        },
+        {
+          "project_id": 99607,
+          "value": null
+        },
+        {
+          "project_id": 99753,
+          "value": null
+        },
+        {
+          "project_id": 99906,
+          "value": null
+        }
+      ],
+      "notice_to_proceed": [
+        {
+          "project_id": 69035,
+          "value": "2024-07-28T16:00:00.000Z"
+        },
+        {
+          "project_id": 72072,
+          "value": null
+        },
+        {
+          "project_id": 72117,
+          "value": null
+        },
+        {
+          "project_id": 76330,
+          "value": null
+        },
+        {
+          "project_id": 82373,
+          "value": "2024-07-28T16:00:00.000Z"
+        },
+        {
+          "project_id": 83928,
+          "value": null
+        },
+        {
+          "project_id": 83960,
+          "value": null
+        },
+        {
+          "project_id": 89406,
+          "value": null
+        },
+        {
+          "project_id": 94070,
+          "value": "2024-07-28T16:00:00.000Z"
+        },
+        {
+          "project_id": 95495,
+          "value": null
+        },
+        {
+          "project_id": 95634,
+          "value": null
+        },
+        {
+          "project_id": 99347,
+          "value": "2024-07-28T16:00:00.000Z"
+        },
+        {
+          "project_id": 99564,
+          "value": null
+        },
+        {
+          "project_id": 99607,
+          "value": "2024-07-28T16:00:00.000Z"
+        },
+        {
+          "project_id": 99753,
+          "value": "2024-07-28T16:00:00.000Z"
+        },
+        {
+          "project_id": 99906,
+          "value": "2024-07-28T16:00:00.000Z"
+        }
+      ],
+      "approved_budget_for_contract": [
+        {
+          "project_id": 69035,
+          "value": "1.30"
+        },
+        {
+          "project_id": 72072,
+          "value": "7.38"
+        },
+        {
+          "project_id": 72117,
+          "value": "1.92"
+        },
+        {
+          "project_id": 76330,
+          "value": "1.72"
+        },
+        {
+          "project_id": 82373,
+          "value": "1.30"
+        },
+        {
+          "project_id": 83928,
+          "value": "1.92"
+        },
+        {
+          "project_id": 83960,
+          "value": "7.38"
+        },
+        {
+          "project_id": 89406,
+          "value": "1.72"
+        },
+        {
+          "project_id": 94070,
+          "value": "1.30"
+        },
+        {
+          "project_id": 95495,
+          "value": "1.92"
+        },
+        {
+          "project_id": 95634,
+          "value": "7.38"
+        },
+        {
+          "project_id": 99347,
+          "value": "1.30"
+        },
+        {
+          "project_id": 99564,
+          "value": "2.53"
+        },
+        {
+          "project_id": 99607,
+          "value": "1.30"
+        },
+        {
+          "project_id": 99753,
+          "value": "1.30"
+        },
+        {
+          "project_id": 99906,
+          "value": "1.30"
+        }
+      ],
+      "created_at": [
+        {
+          "project_id": 69035,
+          "value": "2026-03-27T19:19:59.851Z"
+        },
+        {
+          "project_id": 72072,
+          "value": "2026-03-27T19:20:13.005Z"
+        },
+        {
+          "project_id": 72117,
+          "value": "2026-03-27T19:20:13.005Z"
+        },
+        {
+          "project_id": 76330,
+          "value": "2026-03-27T19:20:36.985Z"
+        },
+        {
+          "project_id": 82373,
+          "value": "2026-03-27T19:21:11.044Z"
+        },
+        {
+          "project_id": 83928,
+          "value": "2026-03-27T19:21:21.718Z"
+        },
+        {
+          "project_id": 83960,
+          "value": "2026-03-27T19:21:21.718Z"
+        },
+        {
+          "project_id": 89406,
+          "value": "2026-03-27T19:22:02.018Z"
+        },
+        {
+          "project_id": 94070,
+          "value": "2026-03-27T19:22:45.946Z"
+        },
+        {
+          "project_id": 95495,
+          "value": "2026-03-27T19:22:58.952Z"
+        },
+        {
+          "project_id": 95634,
+          "value": "2026-03-27T19:22:59.976Z"
+        },
+        {
+          "project_id": 99347,
+          "value": "2026-03-27T19:23:34.893Z"
+        },
+        {
+          "project_id": 99564,
+          "value": "2026-03-27T19:23:36.737Z"
+        },
+        {
+          "project_id": 99607,
+          "value": "2026-03-28T04:38:59.715Z"
+        },
+        {
+          "project_id": 99753,
+          "value": "2026-03-28T04:42:56.045Z"
+        },
+        {
+          "project_id": 99906,
+          "value": "2026-03-28T05:02:19.476Z"
+        }
+      ],
+      "ipc": [
+        {
+          "project_id": 69035,
+          "value": "INF-10-2024-00094"
+        },
+        {
+          "project_id": 72072,
+          "value": "INF-10-2014-02717"
+        },
+        {
+          "project_id": 72117,
+          "value": "INF-10-2014-02762"
+        },
+        {
+          "project_id": 76330,
+          "value": "INF-10-2015-02955"
+        },
+        {
+          "project_id": 82373,
+          "value": "INF-10-2024-01849"
+        },
+        {
+          "project_id": 83928,
+          "value": "INF-10-2014-05283"
+        },
+        {
+          "project_id": 83960,
+          "value": "INF-10-2014-05315"
+        },
+        {
+          "project_id": 89406,
+          "value": "INF-10-2015-06044"
+        },
+        {
+          "project_id": 94070,
+          "value": "INF-10-2024-02806"
+        },
+        {
+          "project_id": 95495,
+          "value": "INF-10-2014-07133"
+        },
+        {
+          "project_id": 95634,
+          "value": "INF-10-2014-07271"
+        },
+        {
+          "project_id": 99347,
+          "value": "INF-10-2024-03020"
+        },
+        {
+          "project_id": 99564,
+          "value": "INF-10-2024-03148"
+        },
+        {
+          "project_id": 99607,
+          "value": "INF-12-2024-00026"
+        },
+        {
+          "project_id": 99753,
+          "value": "INF-12-2024-00162"
+        },
+        {
+          "project_id": 99906,
+          "value": "INF-12-2024-00298"
+        }
+      ],
+      "project_category": [
+        {
+          "project_id": 69035,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 72072,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 72117,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 76330,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 82373,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 83928,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 83960,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 89406,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 94070,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 95495,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 95634,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 99347,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 99564,
+          "value": "REPAIR"
+        },
+        {
+          "project_id": 99607,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 99753,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 99906,
+          "value": "ELECTRIFICATION"
+        }
+      ],
+      "number_of_classrooms": [
+        {
+          "project_id": 69035,
+          "value": null
+        },
+        {
+          "project_id": 72072,
+          "value": 7
+        },
+        {
+          "project_id": 72117,
+          "value": 9
+        },
+        {
+          "project_id": 76330,
+          "value": null
+        },
+        {
+          "project_id": 82373,
+          "value": null
+        },
+        {
+          "project_id": 83928,
+          "value": 9
+        },
+        {
+          "project_id": 83960,
+          "value": 7
+        },
+        {
+          "project_id": 89406,
+          "value": null
+        },
+        {
+          "project_id": 94070,
+          "value": null
+        },
+        {
+          "project_id": 95495,
+          "value": 9
+        },
+        {
+          "project_id": 95634,
+          "value": 7
+        },
+        {
+          "project_id": 99347,
+          "value": null
+        },
+        {
+          "project_id": 99564,
+          "value": 9
+        },
+        {
+          "project_id": 99607,
+          "value": null
+        },
+        {
+          "project_id": 99753,
+          "value": null
+        },
+        {
+          "project_id": 99906,
+          "value": null
+        }
+      ],
+      "contract_amount": [
+        {
+          "project_id": 69035,
+          "value": "12940519.92"
+        },
+        {
+          "project_id": 72072,
+          "value": null
+        },
+        {
+          "project_id": 72117,
+          "value": null
+        },
+        {
+          "project_id": 76330,
+          "value": null
+        },
+        {
+          "project_id": 82373,
+          "value": "12940519.92"
+        },
+        {
+          "project_id": 83928,
+          "value": null
+        },
+        {
+          "project_id": 83960,
+          "value": null
+        },
+        {
+          "project_id": 89406,
+          "value": null
+        },
+        {
+          "project_id": 94070,
+          "value": "12940519.92"
+        },
+        {
+          "project_id": 95495,
+          "value": null
+        },
+        {
+          "project_id": 95634,
+          "value": null
+        },
+        {
+          "project_id": 99347,
+          "value": "12940519.92"
+        },
+        {
+          "project_id": 99564,
+          "value": "2466707.98"
+        },
+        {
+          "project_id": 99607,
+          "value": "12940519.92"
+        },
+        {
+          "project_id": 99753,
+          "value": "12940519.92"
+        },
+        {
+          "project_id": 99906,
+          "value": "12940519.92"
+        }
+      ],
+      "funding_year": [
+        {
+          "project_id": 69035,
+          "value": 2024
+        },
+        {
+          "project_id": 72072,
+          "value": 2014
+        },
+        {
+          "project_id": 72117,
+          "value": 2014
+        },
+        {
+          "project_id": 76330,
+          "value": 2015
+        },
+        {
+          "project_id": 82373,
+          "value": 2024
+        },
+        {
+          "project_id": 83928,
+          "value": 2014
+        },
+        {
+          "project_id": 83960,
+          "value": 2014
+        },
+        {
+          "project_id": 89406,
+          "value": 2015
+        },
+        {
+          "project_id": 94070,
+          "value": 2024
+        },
+        {
+          "project_id": 95495,
+          "value": 2014
+        },
+        {
+          "project_id": 95634,
+          "value": 2014
+        },
+        {
+          "project_id": 99347,
+          "value": 2024
+        },
+        {
+          "project_id": 99564,
+          "value": 2024
+        },
+        {
+          "project_id": 99607,
+          "value": 2024
+        },
+        {
+          "project_id": 99753,
+          "value": 2024
+        },
+        {
+          "project_id": 99906,
+          "value": 2024
+        }
+      ],
+      "project_category_id": [
+        {
+          "project_id": 69035,
+          "value": "12"
+        },
+        {
+          "project_id": 72072,
+          "value": "01"
+        },
+        {
+          "project_id": 72117,
+          "value": "01"
+        },
+        {
+          "project_id": 76330,
+          "value": "01"
+        },
+        {
+          "project_id": 82373,
+          "value": "12"
+        },
+        {
+          "project_id": 83928,
+          "value": "01"
+        },
+        {
+          "project_id": 83960,
+          "value": "01"
+        },
+        {
+          "project_id": 89406,
+          "value": "01"
+        },
+        {
+          "project_id": 94070,
+          "value": "12"
+        },
+        {
+          "project_id": 95495,
+          "value": "01"
+        },
+        {
+          "project_id": 95634,
+          "value": "01"
+        },
+        {
+          "project_id": 99347,
+          "value": "12"
+        },
+        {
+          "project_id": 99564,
+          "value": "02"
+        },
+        {
+          "project_id": 99607,
+          "value": "12"
+        },
+        {
+          "project_id": 99753,
+          "value": "12"
+        },
+        {
+          "project_id": 99906,
+          "value": "12"
+        }
+      ]
+    }
+  },
+  {
+    "school": "Sapinit ES",
+    "project": "",
+    "collision_count": "15",
+    "affected_rows": 15,
+    "varying_columns": [
+      "project_id",
+      "region",
+      "division",
+      "accomplishment_percentage",
+      "target_completion_date",
+      "notice_to_proceed",
+      "approved_budget_for_contract",
+      "created_at",
+      "ipc",
+      "project_category",
+      "number_of_classrooms",
+      "contract_amount",
+      "funding_year",
+      "project_category_id"
+    ],
+    "detailed_differences": {
+      "project_id": [
+        {
+          "project_id": 69020,
+          "value": 69020
+        },
+        {
+          "project_id": 70333,
+          "value": 70333
+        },
+        {
+          "project_id": 73655,
+          "value": 73655
+        },
+        {
+          "project_id": 79719,
+          "value": 79719
+        },
+        {
+          "project_id": 79840,
+          "value": 79840
+        },
+        {
+          "project_id": 82371,
+          "value": 82371
+        },
+        {
+          "project_id": 83100,
+          "value": 83100
+        },
+        {
+          "project_id": 86856,
+          "value": 86856
+        },
+        {
+          "project_id": 92402,
+          "value": 92402
+        },
+        {
+          "project_id": 92476,
+          "value": 92476
+        },
+        {
+          "project_id": 94142,
+          "value": 94142
+        },
+        {
+          "project_id": 94759,
+          "value": 94759
+        },
+        {
+          "project_id": 99669,
+          "value": 99669
+        },
+        {
+          "project_id": 99815,
+          "value": 99815
+        },
+        {
+          "project_id": 99968,
+          "value": 99968
+        }
+      ],
+      "region": [
+        {
+          "project_id": 69020,
+          "value": "Region IV-A"
+        },
+        {
+          "project_id": 70333,
+          "value": "REGION IV-A"
+        },
+        {
+          "project_id": 73655,
+          "value": "REGION IV-A"
+        },
+        {
+          "project_id": 79719,
+          "value": "Region IV-A"
+        },
+        {
+          "project_id": 79840,
+          "value": "Region IV-A"
+        },
+        {
+          "project_id": 82371,
+          "value": "Region IV-A"
+        },
+        {
+          "project_id": 83100,
+          "value": "REGION IV-A"
+        },
+        {
+          "project_id": 86856,
+          "value": "REGION IV-A"
+        },
+        {
+          "project_id": 92402,
+          "value": "Region IV-A"
+        },
+        {
+          "project_id": 92476,
+          "value": "Region IV-A"
+        },
+        {
+          "project_id": 94142,
+          "value": "Region IV-A"
+        },
+        {
+          "project_id": 94759,
+          "value": "REGION IV-A"
+        },
+        {
+          "project_id": 99669,
+          "value": "Region IV-A"
+        },
+        {
+          "project_id": 99815,
+          "value": "Region IV-A"
+        },
+        {
+          "project_id": 99968,
+          "value": "Region IV-A"
+        }
+      ],
+      "division": [
+        {
+          "project_id": 69020,
+          "value": "Antipolo City"
+        },
+        {
+          "project_id": 70333,
+          "value": "ANTIPOLO CITY"
+        },
+        {
+          "project_id": 73655,
+          "value": "ANTIPOLO CITY"
+        },
+        {
+          "project_id": 79719,
+          "value": "Antipolo City"
+        },
+        {
+          "project_id": 79840,
+          "value": "Antipolo City"
+        },
+        {
+          "project_id": 82371,
+          "value": "Antipolo City"
+        },
+        {
+          "project_id": 83100,
+          "value": "ANTIPOLO CITY"
+        },
+        {
+          "project_id": 86856,
+          "value": "ANTIPOLO CITY"
+        },
+        {
+          "project_id": 92402,
+          "value": "Antipolo City"
+        },
+        {
+          "project_id": 92476,
+          "value": "Antipolo City"
+        },
+        {
+          "project_id": 94142,
+          "value": "Antipolo City"
+        },
+        {
+          "project_id": 94759,
+          "value": "ANTIPOLO CITY"
+        },
+        {
+          "project_id": 99669,
+          "value": "Antipolo City"
+        },
+        {
+          "project_id": 99815,
+          "value": "Antipolo City"
+        },
+        {
+          "project_id": 99968,
+          "value": "Antipolo City"
+        }
+      ],
+      "accomplishment_percentage": [
+        {
+          "project_id": 69020,
+          "value": 0
+        },
+        {
+          "project_id": 70333,
+          "value": 1
+        },
+        {
+          "project_id": 73655,
+          "value": 0
+        },
+        {
+          "project_id": 79719,
+          "value": 0
+        },
+        {
+          "project_id": 79840,
+          "value": 0
+        },
+        {
+          "project_id": 82371,
+          "value": 0
+        },
+        {
+          "project_id": 83100,
+          "value": 1
+        },
+        {
+          "project_id": 86856,
+          "value": 0
+        },
+        {
+          "project_id": 92402,
+          "value": 0
+        },
+        {
+          "project_id": 92476,
+          "value": 0
+        },
+        {
+          "project_id": 94142,
+          "value": 0
+        },
+        {
+          "project_id": 94759,
+          "value": 1
+        },
+        {
+          "project_id": 99669,
+          "value": 0
+        },
+        {
+          "project_id": 99815,
+          "value": 0
+        },
+        {
+          "project_id": 99968,
+          "value": 0
+        }
+      ],
+      "target_completion_date": [
+        {
+          "project_id": 69020,
+          "value": "2025-03-13T16:00:00.000Z"
+        },
+        {
+          "project_id": 70333,
+          "value": null
+        },
+        {
+          "project_id": 73655,
+          "value": null
+        },
+        {
+          "project_id": 79719,
+          "value": "2025-03-13T16:00:00.000Z"
+        },
+        {
+          "project_id": 79840,
+          "value": "2025-03-13T16:00:00.000Z"
+        },
+        {
+          "project_id": 82371,
+          "value": "2025-03-13T16:00:00.000Z"
+        },
+        {
+          "project_id": 83100,
+          "value": null
+        },
+        {
+          "project_id": 86856,
+          "value": null
+        },
+        {
+          "project_id": 92402,
+          "value": "2025-03-13T16:00:00.000Z"
+        },
+        {
+          "project_id": 92476,
+          "value": "2025-03-13T16:00:00.000Z"
+        },
+        {
+          "project_id": 94142,
+          "value": "2025-03-13T16:00:00.000Z"
+        },
+        {
+          "project_id": 94759,
+          "value": null
+        },
+        {
+          "project_id": 99669,
+          "value": "2025-03-13T16:00:00.000Z"
+        },
+        {
+          "project_id": 99815,
+          "value": "2025-03-13T16:00:00.000Z"
+        },
+        {
+          "project_id": 99968,
+          "value": "2025-03-13T16:00:00.000Z"
+        }
+      ],
+      "notice_to_proceed": [
+        {
+          "project_id": 69020,
+          "value": "2024-10-14T16:00:00.000Z"
+        },
+        {
+          "project_id": 70333,
+          "value": null
+        },
+        {
+          "project_id": 73655,
+          "value": null
+        },
+        {
+          "project_id": 79719,
+          "value": "2024-10-14T16:00:00.000Z"
+        },
+        {
+          "project_id": 79840,
+          "value": "2024-10-14T16:00:00.000Z"
+        },
+        {
+          "project_id": 82371,
+          "value": "2024-10-14T16:00:00.000Z"
+        },
+        {
+          "project_id": 83100,
+          "value": null
+        },
+        {
+          "project_id": 86856,
+          "value": null
+        },
+        {
+          "project_id": 92402,
+          "value": "2024-10-14T16:00:00.000Z"
+        },
+        {
+          "project_id": 92476,
+          "value": "2024-10-14T16:00:00.000Z"
+        },
+        {
+          "project_id": 94142,
+          "value": "2024-10-14T16:00:00.000Z"
+        },
+        {
+          "project_id": 94759,
+          "value": null
+        },
+        {
+          "project_id": 99669,
+          "value": "2024-10-14T16:00:00.000Z"
+        },
+        {
+          "project_id": 99815,
+          "value": "2024-10-14T16:00:00.000Z"
+        },
+        {
+          "project_id": 99968,
+          "value": "2024-10-14T16:00:00.000Z"
+        }
+      ],
+      "approved_budget_for_contract": [
+        {
+          "project_id": 69020,
+          "value": "1.40"
+        },
+        {
+          "project_id": 70333,
+          "value": "1.51"
+        },
+        {
+          "project_id": 73655,
+          "value": "1.66"
+        },
+        {
+          "project_id": 79719,
+          "value": "1.40"
+        },
+        {
+          "project_id": 79840,
+          "value": "1.40"
+        },
+        {
+          "project_id": 82371,
+          "value": "1.40"
+        },
+        {
+          "project_id": 83100,
+          "value": "1.51"
+        },
+        {
+          "project_id": 86856,
+          "value": "1.66"
+        },
+        {
+          "project_id": 92402,
+          "value": "1.40"
+        },
+        {
+          "project_id": 92476,
+          "value": "1.40"
+        },
+        {
+          "project_id": 94142,
+          "value": "1.40"
+        },
+        {
+          "project_id": 94759,
+          "value": "1.51"
+        },
+        {
+          "project_id": 99669,
+          "value": "1.40"
+        },
+        {
+          "project_id": 99815,
+          "value": "1.40"
+        },
+        {
+          "project_id": 99968,
+          "value": "1.40"
+        }
+      ],
+      "created_at": [
+        {
+          "project_id": 69020,
+          "value": "2026-03-27T19:19:59.851Z"
+        },
+        {
+          "project_id": 70333,
+          "value": "2026-03-27T19:20:05.278Z"
+        },
+        {
+          "project_id": 73655,
+          "value": "2026-03-27T19:20:20.256Z"
+        },
+        {
+          "project_id": 79719,
+          "value": "2026-03-27T19:20:55.047Z"
+        },
+        {
+          "project_id": 79840,
+          "value": "2026-03-27T19:20:55.560Z"
+        },
+        {
+          "project_id": 82371,
+          "value": "2026-03-27T19:21:11.044Z"
+        },
+        {
+          "project_id": 83100,
+          "value": "2026-03-27T19:21:15.424Z"
+        },
+        {
+          "project_id": 86856,
+          "value": "2026-03-27T19:21:42.563Z"
+        },
+        {
+          "project_id": 92402,
+          "value": "2026-03-27T19:22:28.951Z"
+        },
+        {
+          "project_id": 92476,
+          "value": "2026-03-27T19:22:29.766Z"
+        },
+        {
+          "project_id": 94142,
+          "value": "2026-03-27T19:22:45.946Z"
+        },
+        {
+          "project_id": 94759,
+          "value": "2026-03-27T19:22:51.887Z"
+        },
+        {
+          "project_id": 99669,
+          "value": "2026-03-28T04:39:03.120Z"
+        },
+        {
+          "project_id": 99815,
+          "value": "2026-03-28T04:42:59.318Z"
+        },
+        {
+          "project_id": 99968,
+          "value": "2026-03-28T05:02:22.856Z"
+        }
+      ],
+      "ipc": [
+        {
+          "project_id": 69020,
+          "value": "INF-10-2024-00079"
+        },
+        {
+          "project_id": 70333,
+          "value": "INF-10-2014-00978"
+        },
+        {
+          "project_id": 73655,
+          "value": "INF-10-2015-00311"
+        },
+        {
+          "project_id": 79719,
+          "value": "INF-10-2024-00318"
+        },
+        {
+          "project_id": 79840,
+          "value": "INF-10-2024-00430"
+        },
+        {
+          "project_id": 82371,
+          "value": "INF-10-2024-01848"
+        },
+        {
+          "project_id": 83100,
+          "value": "INF-10-2014-04477"
+        },
+        {
+          "project_id": 86856,
+          "value": "INF-10-2015-03525"
+        },
+        {
+          "project_id": 92402,
+          "value": "INF-10-2024-02026"
+        },
+        {
+          "project_id": 92476,
+          "value": "INF-10-2024-02078"
+        },
+        {
+          "project_id": 94142,
+          "value": "INF-10-2024-02862"
+        },
+        {
+          "project_id": 94759,
+          "value": "INF-10-2014-06405"
+        },
+        {
+          "project_id": 99669,
+          "value": "INF-12-2024-00088"
+        },
+        {
+          "project_id": 99815,
+          "value": "INF-12-2024-00224"
+        },
+        {
+          "project_id": 99968,
+          "value": "INF-12-2024-00360"
+        }
+      ],
+      "project_category": [
+        {
+          "project_id": 69020,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 70333,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 73655,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 79719,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 79840,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 82371,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 83100,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 86856,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 92402,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 92476,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 94142,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 94759,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 99669,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 99815,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 99968,
+          "value": "ELECTRIFICATION"
+        }
+      ],
+      "number_of_classrooms": [
+        {
+          "project_id": 69020,
+          "value": null
+        },
+        {
+          "project_id": 70333,
+          "value": 9
+        },
+        {
+          "project_id": 73655,
+          "value": 9
+        },
+        {
+          "project_id": 79719,
+          "value": null
+        },
+        {
+          "project_id": 79840,
+          "value": null
+        },
+        {
+          "project_id": 82371,
+          "value": null
+        },
+        {
+          "project_id": 83100,
+          "value": 9
+        },
+        {
+          "project_id": 86856,
+          "value": 9
+        },
+        {
+          "project_id": 92402,
+          "value": null
+        },
+        {
+          "project_id": 92476,
+          "value": null
+        },
+        {
+          "project_id": 94142,
+          "value": null
+        },
+        {
+          "project_id": 94759,
+          "value": 9
+        },
+        {
+          "project_id": 99669,
+          "value": null
+        },
+        {
+          "project_id": 99815,
+          "value": null
+        },
+        {
+          "project_id": 99968,
+          "value": null
+        }
+      ],
+      "contract_amount": [
+        {
+          "project_id": 69020,
+          "value": "13970000"
+        },
+        {
+          "project_id": 70333,
+          "value": null
+        },
+        {
+          "project_id": 73655,
+          "value": null
+        },
+        {
+          "project_id": 79719,
+          "value": "13970000"
+        },
+        {
+          "project_id": 79840,
+          "value": "13970000"
+        },
+        {
+          "project_id": 82371,
+          "value": "13970000"
+        },
+        {
+          "project_id": 83100,
+          "value": null
+        },
+        {
+          "project_id": 86856,
+          "value": null
+        },
+        {
+          "project_id": 92402,
+          "value": "13970000"
+        },
+        {
+          "project_id": 92476,
+          "value": "13970000"
+        },
+        {
+          "project_id": 94142,
+          "value": "13970000"
+        },
+        {
+          "project_id": 94759,
+          "value": null
+        },
+        {
+          "project_id": 99669,
+          "value": "13970000"
+        },
+        {
+          "project_id": 99815,
+          "value": "13970000"
+        },
+        {
+          "project_id": 99968,
+          "value": "13970000"
+        }
+      ],
+      "funding_year": [
+        {
+          "project_id": 69020,
+          "value": 2024
+        },
+        {
+          "project_id": 70333,
+          "value": 2014
+        },
+        {
+          "project_id": 73655,
+          "value": 2015
+        },
+        {
+          "project_id": 79719,
+          "value": 2024
+        },
+        {
+          "project_id": 79840,
+          "value": 2024
+        },
+        {
+          "project_id": 82371,
+          "value": 2024
+        },
+        {
+          "project_id": 83100,
+          "value": 2014
+        },
+        {
+          "project_id": 86856,
+          "value": 2015
+        },
+        {
+          "project_id": 92402,
+          "value": 2024
+        },
+        {
+          "project_id": 92476,
+          "value": 2024
+        },
+        {
+          "project_id": 94142,
+          "value": 2024
+        },
+        {
+          "project_id": 94759,
+          "value": 2014
+        },
+        {
+          "project_id": 99669,
+          "value": 2024
+        },
+        {
+          "project_id": 99815,
+          "value": 2024
+        },
+        {
+          "project_id": 99968,
+          "value": 2024
+        }
+      ],
+      "project_category_id": [
+        {
+          "project_id": 69020,
+          "value": "12"
+        },
+        {
+          "project_id": 70333,
+          "value": "01"
+        },
+        {
+          "project_id": 73655,
+          "value": "01"
+        },
+        {
+          "project_id": 79719,
+          "value": "12"
+        },
+        {
+          "project_id": 79840,
+          "value": "12"
+        },
+        {
+          "project_id": 82371,
+          "value": "12"
+        },
+        {
+          "project_id": 83100,
+          "value": "01"
+        },
+        {
+          "project_id": 86856,
+          "value": "01"
+        },
+        {
+          "project_id": 92402,
+          "value": "12"
+        },
+        {
+          "project_id": 92476,
+          "value": "12"
+        },
+        {
+          "project_id": 94142,
+          "value": "12"
+        },
+        {
+          "project_id": 94759,
+          "value": "01"
+        },
+        {
+          "project_id": 99669,
+          "value": "12"
+        },
+        {
+          "project_id": 99815,
+          "value": "12"
+        },
+        {
+          "project_id": 99968,
+          "value": "12"
+        }
+      ]
+    }
+  },
+  {
+    "school": "Tabuk City National High School",
+    "project": "",
+    "collision_count": "15",
+    "affected_rows": 17,
+    "varying_columns": [
+      "project_id",
+      "school_name",
+      "division",
+      "accomplishment_percentage",
+      "approved_budget_for_contract",
+      "created_at",
+      "ipc",
+      "project_category",
+      "number_of_classrooms",
+      "funding_year",
+      "project_category_id"
+    ],
+    "detailed_differences": {
+      "project_id": [
+        {
+          "project_id": 76038,
+          "value": 76038
+        },
+        {
+          "project_id": 76562,
+          "value": 76562
+        },
+        {
+          "project_id": 76566,
+          "value": 76566
+        },
+        {
+          "project_id": 76594,
+          "value": 76594
+        },
+        {
+          "project_id": 76649,
+          "value": 76649
+        },
+        {
+          "project_id": 79182,
+          "value": 79182
+        },
+        {
+          "project_id": 79292,
+          "value": 79292
+        },
+        {
+          "project_id": 79313,
+          "value": 79313
+        },
+        {
+          "project_id": 89118,
+          "value": 89118
+        },
+        {
+          "project_id": 89700,
+          "value": 89700
+        },
+        {
+          "project_id": 89703,
+          "value": 89703
+        },
+        {
+          "project_id": 89704,
+          "value": 89704
+        },
+        {
+          "project_id": 89750,
+          "value": 89750
+        },
+        {
+          "project_id": 91971,
+          "value": 91971
+        },
+        {
+          "project_id": 92055,
+          "value": 92055
+        },
+        {
+          "project_id": 92096,
+          "value": 92096
+        },
+        {
+          "project_id": 97539,
+          "value": 97539
+        }
+      ],
+      "school_name": [
+        {
+          "project_id": 76038,
+          "value": "Tabuk City National High School"
+        },
+        {
+          "project_id": 76562,
+          "value": "Tabuk City National High School"
+        },
+        {
+          "project_id": 76566,
+          "value": "Tabuk City National High School"
+        },
+        {
+          "project_id": 76594,
+          "value": "Tabuk City National High School"
+        },
+        {
+          "project_id": 76649,
+          "value": "Tabuk City National High School"
+        },
+        {
+          "project_id": 79182,
+          "value": "Bangad National High School"
+        },
+        {
+          "project_id": 79292,
+          "value": "Tabuk City National High School"
+        },
+        {
+          "project_id": 79313,
+          "value": "Tabuk City National High School"
+        },
+        {
+          "project_id": 89118,
+          "value": "Tabuk City National High School"
+        },
+        {
+          "project_id": 89700,
+          "value": "Tabuk City National High School"
+        },
+        {
+          "project_id": 89703,
+          "value": "Tabuk City National High School"
+        },
+        {
+          "project_id": 89704,
+          "value": "Tabuk City National High School"
+        },
+        {
+          "project_id": 89750,
+          "value": "Tabuk City National High School"
+        },
+        {
+          "project_id": 91971,
+          "value": "Bangad National High School"
+        },
+        {
+          "project_id": 92055,
+          "value": "Tabuk City National High School"
+        },
+        {
+          "project_id": 92096,
+          "value": "Tabuk City National High School"
+        },
+        {
+          "project_id": 97539,
+          "value": "Tabuk City National High School"
+        }
+      ],
+      "division": [
+        {
+          "project_id": 76038,
+          "value": "Tabuk City"
+        },
+        {
+          "project_id": 76562,
+          "value": "Tabuk City"
+        },
+        {
+          "project_id": 76566,
+          "value": "Tabuk City"
+        },
+        {
+          "project_id": 76594,
+          "value": "Tabuk City"
+        },
+        {
+          "project_id": 76649,
+          "value": "Tabuk City"
+        },
+        {
+          "project_id": 79182,
+          "value": "Kalinga"
+        },
+        {
+          "project_id": 79292,
+          "value": "Tabuk City"
+        },
+        {
+          "project_id": 79313,
+          "value": "Tabuk City"
+        },
+        {
+          "project_id": 89118,
+          "value": "Tabuk City"
+        },
+        {
+          "project_id": 89700,
+          "value": "Tabuk City"
+        },
+        {
+          "project_id": 89703,
+          "value": "Tabuk City"
+        },
+        {
+          "project_id": 89704,
+          "value": "Tabuk City"
+        },
+        {
+          "project_id": 89750,
+          "value": "Tabuk City"
+        },
+        {
+          "project_id": 91971,
+          "value": "Kalinga"
+        },
+        {
+          "project_id": 92055,
+          "value": "Tabuk City"
+        },
+        {
+          "project_id": 92096,
+          "value": "Tabuk City"
+        },
+        {
+          "project_id": 97539,
+          "value": "Tabuk City"
+        }
+      ],
+      "accomplishment_percentage": [
+        {
+          "project_id": 76038,
+          "value": 1
+        },
+        {
+          "project_id": 76562,
+          "value": 1
+        },
+        {
+          "project_id": 76566,
+          "value": 1
+        },
+        {
+          "project_id": 76594,
+          "value": 1
+        },
+        {
+          "project_id": 76649,
+          "value": 1
+        },
+        {
+          "project_id": 79182,
+          "value": 1
+        },
+        {
+          "project_id": 79292,
+          "value": 0
+        },
+        {
+          "project_id": 79313,
+          "value": 1
+        },
+        {
+          "project_id": 89118,
+          "value": 1
+        },
+        {
+          "project_id": 89700,
+          "value": 1
+        },
+        {
+          "project_id": 89703,
+          "value": 1
+        },
+        {
+          "project_id": 89704,
+          "value": 1
+        },
+        {
+          "project_id": 89750,
+          "value": 1
+        },
+        {
+          "project_id": 91971,
+          "value": 1
+        },
+        {
+          "project_id": 92055,
+          "value": 0
+        },
+        {
+          "project_id": 92096,
+          "value": 1
+        },
+        {
+          "project_id": 97539,
+          "value": 1
+        }
+      ],
+      "approved_budget_for_contract": [
+        {
+          "project_id": 76038,
+          "value": "2.43"
+        },
+        {
+          "project_id": 76562,
+          "value": "3.22"
+        },
+        {
+          "project_id": 76566,
+          "value": "1.52"
+        },
+        {
+          "project_id": 76594,
+          "value": "2.72"
+        },
+        {
+          "project_id": 76649,
+          "value": "3.12"
+        },
+        {
+          "project_id": 79182,
+          "value": "4.35"
+        },
+        {
+          "project_id": 79292,
+          "value": "1.14"
+        },
+        {
+          "project_id": 79313,
+          "value": "1.14"
+        },
+        {
+          "project_id": 89118,
+          "value": "2.43"
+        },
+        {
+          "project_id": 89700,
+          "value": "2.72"
+        },
+        {
+          "project_id": 89703,
+          "value": "1.52"
+        },
+        {
+          "project_id": 89704,
+          "value": "3.22"
+        },
+        {
+          "project_id": 89750,
+          "value": "3.12"
+        },
+        {
+          "project_id": 91971,
+          "value": "4.35"
+        },
+        {
+          "project_id": 92055,
+          "value": "1.14"
+        },
+        {
+          "project_id": 92096,
+          "value": "1.14"
+        },
+        {
+          "project_id": 97539,
+          "value": "3.25"
+        }
+      ],
+      "created_at": [
+        {
+          "project_id": 76038,
+          "value": "2026-03-27T19:20:35.281Z"
+        },
+        {
+          "project_id": 76562,
+          "value": "2026-03-27T19:20:38.558Z"
+        },
+        {
+          "project_id": 76566,
+          "value": "2026-03-27T19:20:38.558Z"
+        },
+        {
+          "project_id": 76594,
+          "value": "2026-03-27T19:20:38.558Z"
+        },
+        {
+          "project_id": 76649,
+          "value": "2026-03-27T19:20:38.558Z"
+        },
+        {
+          "project_id": 79182,
+          "value": "2026-03-27T19:20:52.279Z"
+        },
+        {
+          "project_id": 79292,
+          "value": "2026-03-27T19:20:52.730Z"
+        },
+        {
+          "project_id": 79313,
+          "value": "2026-03-27T19:20:52.730Z"
+        },
+        {
+          "project_id": 89118,
+          "value": "2026-03-27T19:21:59.355Z"
+        },
+        {
+          "project_id": 89700,
+          "value": "2026-03-27T19:22:04.619Z"
+        },
+        {
+          "project_id": 89703,
+          "value": "2026-03-27T19:22:04.619Z"
+        },
+        {
+          "project_id": 89704,
+          "value": "2026-03-27T19:22:04.619Z"
+        },
+        {
+          "project_id": 89750,
+          "value": "2026-03-27T19:22:04.619Z"
+        },
+        {
+          "project_id": 91971,
+          "value": "2026-03-27T19:22:24.993Z"
+        },
+        {
+          "project_id": 92055,
+          "value": "2026-03-27T19:22:25.774Z"
+        },
+        {
+          "project_id": 92096,
+          "value": "2026-03-27T19:22:25.774Z"
+        },
+        {
+          "project_id": 97539,
+          "value": "2026-03-27T19:23:17.448Z"
+        }
+      ],
+      "ipc": [
+        {
+          "project_id": 76038,
+          "value": "INF-10-2015-02667"
+        },
+        {
+          "project_id": 76562,
+          "value": "INF-10-2016-00054"
+        },
+        {
+          "project_id": 76566,
+          "value": "INF-10-2016-00058"
+        },
+        {
+          "project_id": 76594,
+          "value": "INF-10-2016-00086"
+        },
+        {
+          "project_id": 76649,
+          "value": "INF-10-2016-00141"
+        },
+        {
+          "project_id": 79182,
+          "value": "INF-10-2017-00029"
+        },
+        {
+          "project_id": 79292,
+          "value": "INF-10-2017-00139"
+        },
+        {
+          "project_id": 79313,
+          "value": "INF-10-2017-00160"
+        },
+        {
+          "project_id": 89118,
+          "value": "INF-10-2015-05756"
+        },
+        {
+          "project_id": 89700,
+          "value": "INF-10-2016-02667"
+        },
+        {
+          "project_id": 89703,
+          "value": "INF-10-2016-02670"
+        },
+        {
+          "project_id": 89704,
+          "value": "INF-10-2016-02671"
+        },
+        {
+          "project_id": 89750,
+          "value": "INF-10-2016-02715"
+        },
+        {
+          "project_id": 91971,
+          "value": "INF-10-2017-00902"
+        },
+        {
+          "project_id": 92055,
+          "value": "INF-10-2017-00980"
+        },
+        {
+          "project_id": 92096,
+          "value": "INF-10-2017-01021"
+        },
+        {
+          "project_id": 97539,
+          "value": "INF-10-2018-01812"
+        }
+      ],
+      "project_category": [
+        {
+          "project_id": 76038,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 76562,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 76566,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 76594,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 76649,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 79182,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 79292,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 79313,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 89118,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 89700,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 89703,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 89704,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 89750,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 91971,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 92055,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 92096,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 97539,
+          "value": "ELECTRIFICATION"
+        }
+      ],
+      "number_of_classrooms": [
+        {
+          "project_id": 76038,
+          "value": 1
+        },
+        {
+          "project_id": 76562,
+          "value": 20
+        },
+        {
+          "project_id": 76566,
+          "value": 8
+        },
+        {
+          "project_id": 76594,
+          "value": 16
+        },
+        {
+          "project_id": 76649,
+          "value": 20
+        },
+        {
+          "project_id": 79182,
+          "value": 1
+        },
+        {
+          "project_id": 79292,
+          "value": 2
+        },
+        {
+          "project_id": 79313,
+          "value": 2
+        },
+        {
+          "project_id": 89118,
+          "value": 1
+        },
+        {
+          "project_id": 89700,
+          "value": 16
+        },
+        {
+          "project_id": 89703,
+          "value": 8
+        },
+        {
+          "project_id": 89704,
+          "value": 20
+        },
+        {
+          "project_id": 89750,
+          "value": 20
+        },
+        {
+          "project_id": 91971,
+          "value": 1
+        },
+        {
+          "project_id": 92055,
+          "value": 2
+        },
+        {
+          "project_id": 92096,
+          "value": 2
+        },
+        {
+          "project_id": 97539,
+          "value": null
+        }
+      ],
+      "funding_year": [
+        {
+          "project_id": 76038,
+          "value": 2015
+        },
+        {
+          "project_id": 76562,
+          "value": 2016
+        },
+        {
+          "project_id": 76566,
+          "value": 2016
+        },
+        {
+          "project_id": 76594,
+          "value": 2016
+        },
+        {
+          "project_id": 76649,
+          "value": 2016
+        },
+        {
+          "project_id": 79182,
+          "value": 2017
+        },
+        {
+          "project_id": 79292,
+          "value": 2017
+        },
+        {
+          "project_id": 79313,
+          "value": 2017
+        },
+        {
+          "project_id": 89118,
+          "value": 2015
+        },
+        {
+          "project_id": 89700,
+          "value": 2016
+        },
+        {
+          "project_id": 89703,
+          "value": 2016
+        },
+        {
+          "project_id": 89704,
+          "value": 2016
+        },
+        {
+          "project_id": 89750,
+          "value": 2016
+        },
+        {
+          "project_id": 91971,
+          "value": 2017
+        },
+        {
+          "project_id": 92055,
+          "value": 2017
+        },
+        {
+          "project_id": 92096,
+          "value": 2017
+        },
+        {
+          "project_id": 97539,
+          "value": 2018
+        }
+      ],
+      "project_category_id": [
+        {
+          "project_id": 76038,
+          "value": "01"
+        },
+        {
+          "project_id": 76562,
+          "value": "01"
+        },
+        {
+          "project_id": 76566,
+          "value": "01"
+        },
+        {
+          "project_id": 76594,
+          "value": "01"
+        },
+        {
+          "project_id": 76649,
+          "value": "01"
+        },
+        {
+          "project_id": 79182,
+          "value": "01"
+        },
+        {
+          "project_id": 79292,
+          "value": "01"
+        },
+        {
+          "project_id": 79313,
+          "value": "01"
+        },
+        {
+          "project_id": 89118,
+          "value": "01"
+        },
+        {
+          "project_id": 89700,
+          "value": "01"
+        },
+        {
+          "project_id": 89703,
+          "value": "01"
+        },
+        {
+          "project_id": 89704,
+          "value": "01"
+        },
+        {
+          "project_id": 89750,
+          "value": "01"
+        },
+        {
+          "project_id": 91971,
+          "value": "01"
+        },
+        {
+          "project_id": 92055,
+          "value": "01"
+        },
+        {
+          "project_id": 92096,
+          "value": "01"
+        },
+        {
+          "project_id": 97539,
+          "value": "12"
+        }
+      ]
+    }
+  },
+  {
+    "school": "Gigaquit Nat'l. Sch. of Home Industries",
+    "project": "",
+    "collision_count": "15",
+    "affected_rows": 15,
+    "varying_columns": [
+      "project_id",
+      "approved_budget_for_contract",
+      "created_at",
+      "ipc",
+      "number_of_classrooms",
+      "funding_year"
+    ],
+    "detailed_differences": {
+      "project_id": [
+        {
+          "project_id": 76188,
+          "value": 76188
+        },
+        {
+          "project_id": 79375,
+          "value": 79375
+        },
+        {
+          "project_id": 79427,
+          "value": 79427
+        },
+        {
+          "project_id": 79430,
+          "value": 79430
+        },
+        {
+          "project_id": 79440,
+          "value": 79440
+        },
+        {
+          "project_id": 79493,
+          "value": 79493
+        },
+        {
+          "project_id": 89353,
+          "value": 89353
+        },
+        {
+          "project_id": 92163,
+          "value": 92163
+        },
+        {
+          "project_id": 92174,
+          "value": 92174
+        },
+        {
+          "project_id": 92198,
+          "value": 92198
+        },
+        {
+          "project_id": 92202,
+          "value": 92202
+        },
+        {
+          "project_id": 92244,
+          "value": 92244
+        },
+        {
+          "project_id": 99180,
+          "value": 99180
+        },
+        {
+          "project_id": 99201,
+          "value": 99201
+        },
+        {
+          "project_id": 99267,
+          "value": 99267
+        }
+      ],
+      "approved_budget_for_contract": [
+        {
+          "project_id": 76188,
+          "value": "8.29"
+        },
+        {
+          "project_id": 79375,
+          "value": "3.18"
+        },
+        {
+          "project_id": 79427,
+          "value": "3.18"
+        },
+        {
+          "project_id": 79430,
+          "value": "3.18"
+        },
+        {
+          "project_id": 79440,
+          "value": "3.43"
+        },
+        {
+          "project_id": 79493,
+          "value": "3.65"
+        },
+        {
+          "project_id": 89353,
+          "value": "8.29"
+        },
+        {
+          "project_id": 92163,
+          "value": "3.18"
+        },
+        {
+          "project_id": 92174,
+          "value": "3.18"
+        },
+        {
+          "project_id": 92198,
+          "value": "3.43"
+        },
+        {
+          "project_id": 92202,
+          "value": "3.18"
+        },
+        {
+          "project_id": 92244,
+          "value": "3.65"
+        },
+        {
+          "project_id": 99180,
+          "value": "3.18"
+        },
+        {
+          "project_id": 99201,
+          "value": "3.18"
+        },
+        {
+          "project_id": 99267,
+          "value": "3.18"
+        }
+      ],
+      "created_at": [
+        {
+          "project_id": 76188,
+          "value": "2026-03-27T19:20:36.510Z"
+        },
+        {
+          "project_id": 79375,
+          "value": "2026-03-27T19:20:53.313Z"
+        },
+        {
+          "project_id": 79427,
+          "value": "2026-03-27T19:20:53.313Z"
+        },
+        {
+          "project_id": 79430,
+          "value": "2026-03-27T19:20:53.313Z"
+        },
+        {
+          "project_id": 79440,
+          "value": "2026-03-27T19:20:53.313Z"
+        },
+        {
+          "project_id": 79493,
+          "value": "2026-03-27T19:20:53.920Z"
+        },
+        {
+          "project_id": 89353,
+          "value": "2026-03-27T19:22:01.098Z"
+        },
+        {
+          "project_id": 92163,
+          "value": "2026-03-27T19:22:26.593Z"
+        },
+        {
+          "project_id": 92174,
+          "value": "2026-03-27T19:22:26.593Z"
+        },
+        {
+          "project_id": 92198,
+          "value": "2026-03-27T19:22:26.593Z"
+        },
+        {
+          "project_id": 92202,
+          "value": "2026-03-27T19:22:26.593Z"
+        },
+        {
+          "project_id": 92244,
+          "value": "2026-03-27T19:22:27.411Z"
+        },
+        {
+          "project_id": 99180,
+          "value": "2026-03-27T19:23:33.767Z"
+        },
+        {
+          "project_id": 99201,
+          "value": "2026-03-27T19:23:33.767Z"
+        },
+        {
+          "project_id": 99267,
+          "value": "2026-03-27T19:23:33.767Z"
+        }
+      ],
+      "ipc": [
+        {
+          "project_id": 76188,
+          "value": "INF-10-2015-02817"
+        },
+        {
+          "project_id": 79375,
+          "value": "INF-10-2017-00221"
+        },
+        {
+          "project_id": 79427,
+          "value": "INF-10-2017-00273"
+        },
+        {
+          "project_id": 79430,
+          "value": "INF-10-2017-00276"
+        },
+        {
+          "project_id": 79440,
+          "value": "INF-10-2017-00286"
+        },
+        {
+          "project_id": 79493,
+          "value": "INF-10-2017-00339"
+        },
+        {
+          "project_id": 89353,
+          "value": "INF-10-2015-05991"
+        },
+        {
+          "project_id": 92163,
+          "value": "INF-10-2017-01087"
+        },
+        {
+          "project_id": 92174,
+          "value": "INF-10-2017-01098"
+        },
+        {
+          "project_id": 92198,
+          "value": "INF-10-2017-01121"
+        },
+        {
+          "project_id": 92202,
+          "value": "INF-10-2017-01125"
+        },
+        {
+          "project_id": 92244,
+          "value": "INF-10-2017-01166"
+        },
+        {
+          "project_id": 99180,
+          "value": "INF-10-2017-01732"
+        },
+        {
+          "project_id": 99201,
+          "value": "INF-10-2017-01751"
+        },
+        {
+          "project_id": 99267,
+          "value": "INF-10-2017-01804"
+        }
+      ],
+      "number_of_classrooms": [
+        {
+          "project_id": 76188,
+          "value": 6
+        },
+        {
+          "project_id": 79375,
+          "value": 1
+        },
+        {
+          "project_id": 79427,
+          "value": 1
+        },
+        {
+          "project_id": 79430,
+          "value": 1
+        },
+        {
+          "project_id": 79440,
+          "value": 1
+        },
+        {
+          "project_id": 79493,
+          "value": 4
+        },
+        {
+          "project_id": 89353,
+          "value": 6
+        },
+        {
+          "project_id": 92163,
+          "value": 1
+        },
+        {
+          "project_id": 92174,
+          "value": 1
+        },
+        {
+          "project_id": 92198,
+          "value": 1
+        },
+        {
+          "project_id": 92202,
+          "value": 1
+        },
+        {
+          "project_id": 92244,
+          "value": 4
+        },
+        {
+          "project_id": 99180,
+          "value": 1
+        },
+        {
+          "project_id": 99201,
+          "value": 1
+        },
+        {
+          "project_id": 99267,
+          "value": 1
+        }
+      ],
+      "funding_year": [
+        {
+          "project_id": 76188,
+          "value": 2015
+        },
+        {
+          "project_id": 79375,
+          "value": 2017
+        },
+        {
+          "project_id": 79427,
+          "value": 2017
+        },
+        {
+          "project_id": 79430,
+          "value": 2017
+        },
+        {
+          "project_id": 79440,
+          "value": 2017
+        },
+        {
+          "project_id": 79493,
+          "value": 2017
+        },
+        {
+          "project_id": 89353,
+          "value": 2015
+        },
+        {
+          "project_id": 92163,
+          "value": 2017
+        },
+        {
+          "project_id": 92174,
+          "value": 2017
+        },
+        {
+          "project_id": 92198,
+          "value": 2017
+        },
+        {
+          "project_id": 92202,
+          "value": 2017
+        },
+        {
+          "project_id": 92244,
+          "value": 2017
+        },
+        {
+          "project_id": 99180,
+          "value": 2017
+        },
+        {
+          "project_id": 99201,
+          "value": 2017
+        },
+        {
+          "project_id": 99267,
+          "value": 2017
+        }
+      ]
+    }
+  },
+  {
+    "school": "Tabaco National High School",
+    "project": "",
+    "collision_count": "14",
+    "affected_rows": 14,
+    "varying_columns": [
+      "project_id",
+      "region",
+      "target_completion_date",
+      "approved_budget_for_contract",
+      "created_at",
+      "ipc",
+      "project_category",
+      "number_of_classrooms",
+      "contract_amount",
+      "funding_year",
+      "project_category_id"
+    ],
+    "detailed_differences": {
+      "project_id": [
+        {
+          "project_id": 68666,
+          "value": 68666
+        },
+        {
+          "project_id": 74282,
+          "value": 74282
+        },
+        {
+          "project_id": 74335,
+          "value": 74335
+        },
+        {
+          "project_id": 77985,
+          "value": 77985
+        },
+        {
+          "project_id": 77988,
+          "value": 77988
+        },
+        {
+          "project_id": 78008,
+          "value": 78008
+        },
+        {
+          "project_id": 80381,
+          "value": 80381
+        },
+        {
+          "project_id": 82187,
+          "value": 82187
+        },
+        {
+          "project_id": 87413,
+          "value": 87413
+        },
+        {
+          "project_id": 87464,
+          "value": 87464
+        },
+        {
+          "project_id": 90930,
+          "value": 90930
+        },
+        {
+          "project_id": 90937,
+          "value": 90937
+        },
+        {
+          "project_id": 90970,
+          "value": 90970
+        },
+        {
+          "project_id": 93929,
+          "value": 93929
+        }
+      ],
+      "region": [
+        {
+          "project_id": 68666,
+          "value": "Region V"
+        },
+        {
+          "project_id": 74282,
+          "value": "REGION V"
+        },
+        {
+          "project_id": 74335,
+          "value": "REGION V"
+        },
+        {
+          "project_id": 77985,
+          "value": "REGION V"
+        },
+        {
+          "project_id": 77988,
+          "value": "REGION V"
+        },
+        {
+          "project_id": 78008,
+          "value": "REGION V"
+        },
+        {
+          "project_id": 80381,
+          "value": "Region V"
+        },
+        {
+          "project_id": 82187,
+          "value": "Region V"
+        },
+        {
+          "project_id": 87413,
+          "value": "REGION V"
+        },
+        {
+          "project_id": 87464,
+          "value": "REGION V"
+        },
+        {
+          "project_id": 90930,
+          "value": "REGION V"
+        },
+        {
+          "project_id": 90937,
+          "value": "REGION V"
+        },
+        {
+          "project_id": 90970,
+          "value": "REGION V"
+        },
+        {
+          "project_id": 93929,
+          "value": "Region V"
+        }
+      ],
+      "target_completion_date": [
+        {
+          "project_id": 68666,
+          "value": "2022-12-22T16:00:00.000Z"
+        },
+        {
+          "project_id": 74282,
+          "value": null
+        },
+        {
+          "project_id": 74335,
+          "value": null
+        },
+        {
+          "project_id": 77985,
+          "value": null
+        },
+        {
+          "project_id": 77988,
+          "value": null
+        },
+        {
+          "project_id": 78008,
+          "value": null
+        },
+        {
+          "project_id": 80381,
+          "value": null
+        },
+        {
+          "project_id": 82187,
+          "value": "2022-12-22T16:00:00.000Z"
+        },
+        {
+          "project_id": 87413,
+          "value": null
+        },
+        {
+          "project_id": 87464,
+          "value": null
+        },
+        {
+          "project_id": 90930,
+          "value": null
+        },
+        {
+          "project_id": 90937,
+          "value": null
+        },
+        {
+          "project_id": 90970,
+          "value": null
+        },
+        {
+          "project_id": 93929,
+          "value": "2022-12-22T16:00:00.000Z"
+        }
+      ],
+      "approved_budget_for_contract": [
+        {
+          "project_id": 68666,
+          "value": "1.82"
+        },
+        {
+          "project_id": 74282,
+          "value": "4.78"
+        },
+        {
+          "project_id": 74335,
+          "value": "2.22"
+        },
+        {
+          "project_id": 77985,
+          "value": "3.42"
+        },
+        {
+          "project_id": 77988,
+          "value": "8.67"
+        },
+        {
+          "project_id": 78008,
+          "value": "2.44"
+        },
+        {
+          "project_id": 80381,
+          "value": "4.00"
+        },
+        {
+          "project_id": 82187,
+          "value": "1.82"
+        },
+        {
+          "project_id": 87413,
+          "value": "2.22"
+        },
+        {
+          "project_id": 87464,
+          "value": "4.78"
+        },
+        {
+          "project_id": 90930,
+          "value": "8.67"
+        },
+        {
+          "project_id": 90937,
+          "value": "3.42"
+        },
+        {
+          "project_id": 90970,
+          "value": "2.44"
+        },
+        {
+          "project_id": 93929,
+          "value": "1.82"
+        }
+      ],
+      "created_at": [
+        {
+          "project_id": 68666,
+          "value": "2026-03-27T19:19:58.621Z"
+        },
+        {
+          "project_id": 74282,
+          "value": "2026-03-27T19:20:24.325Z"
+        },
+        {
+          "project_id": 74335,
+          "value": "2026-03-27T19:20:24.325Z"
+        },
+        {
+          "project_id": 77985,
+          "value": "2026-03-27T19:20:45.318Z"
+        },
+        {
+          "project_id": 77988,
+          "value": "2026-03-27T19:20:45.318Z"
+        },
+        {
+          "project_id": 78008,
+          "value": "2026-03-27T19:20:45.318Z"
+        },
+        {
+          "project_id": 80381,
+          "value": "2026-03-27T19:20:58.936Z"
+        },
+        {
+          "project_id": 82187,
+          "value": "2026-03-27T19:21:09.996Z"
+        },
+        {
+          "project_id": 87413,
+          "value": "2026-03-27T19:21:46.761Z"
+        },
+        {
+          "project_id": 87464,
+          "value": "2026-03-27T19:21:46.761Z"
+        },
+        {
+          "project_id": 90930,
+          "value": "2026-03-27T19:22:15.430Z"
+        },
+        {
+          "project_id": 90937,
+          "value": "2026-03-27T19:22:15.430Z"
+        },
+        {
+          "project_id": 90970,
+          "value": "2026-03-27T19:22:15.430Z"
+        },
+        {
+          "project_id": 93929,
+          "value": "2026-03-27T19:22:44.358Z"
+        }
+      ],
+      "ipc": [
+        {
+          "project_id": 68666,
+          "value": "INF-10-2020-00225"
+        },
+        {
+          "project_id": 74282,
+          "value": "INF-10-2015-00934"
+        },
+        {
+          "project_id": 74335,
+          "value": "INF-10-2015-00987"
+        },
+        {
+          "project_id": 77985,
+          "value": "INF-10-2016-01465"
+        },
+        {
+          "project_id": 77988,
+          "value": "INF-10-2016-01468"
+        },
+        {
+          "project_id": 78008,
+          "value": "INF-10-2016-01488"
+        },
+        {
+          "project_id": 80381,
+          "value": "INF-10-2024-00920"
+        },
+        {
+          "project_id": 82187,
+          "value": "INF-10-2020-00502"
+        },
+        {
+          "project_id": 87413,
+          "value": "INF-10-2015-04078"
+        },
+        {
+          "project_id": 87464,
+          "value": "INF-10-2015-04129"
+        },
+        {
+          "project_id": 90930,
+          "value": "INF-10-2016-03884"
+        },
+        {
+          "project_id": 90937,
+          "value": "INF-10-2016-03891"
+        },
+        {
+          "project_id": 90970,
+          "value": "INF-10-2016-03923"
+        },
+        {
+          "project_id": 93929,
+          "value": "INF-10-2020-00777"
+        }
+      ],
+      "project_category": [
+        {
+          "project_id": 68666,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 74282,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 74335,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 77985,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 77988,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 78008,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 80381,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 82187,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 87413,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 87464,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 90930,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 90937,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 90970,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 93929,
+          "value": "ELECTRIFICATION"
+        }
+      ],
+      "number_of_classrooms": [
+        {
+          "project_id": 68666,
+          "value": null
+        },
+        {
+          "project_id": 74282,
+          "value": 2
+        },
+        {
+          "project_id": 74335,
+          "value": 12
+        },
+        {
+          "project_id": 77985,
+          "value": 20
+        },
+        {
+          "project_id": 77988,
+          "value": 6
+        },
+        {
+          "project_id": 78008,
+          "value": 12
+        },
+        {
+          "project_id": 80381,
+          "value": 2
+        },
+        {
+          "project_id": 82187,
+          "value": null
+        },
+        {
+          "project_id": 87413,
+          "value": 12
+        },
+        {
+          "project_id": 87464,
+          "value": 2
+        },
+        {
+          "project_id": 90930,
+          "value": 6
+        },
+        {
+          "project_id": 90937,
+          "value": 20
+        },
+        {
+          "project_id": 90970,
+          "value": 12
+        },
+        {
+          "project_id": 93929,
+          "value": null
+        }
+      ],
+      "contract_amount": [
+        {
+          "project_id": 68666,
+          "value": "2182000"
+        },
+        {
+          "project_id": 74282,
+          "value": null
+        },
+        {
+          "project_id": 74335,
+          "value": null
+        },
+        {
+          "project_id": 77985,
+          "value": null
+        },
+        {
+          "project_id": 77988,
+          "value": null
+        },
+        {
+          "project_id": 78008,
+          "value": null
+        },
+        {
+          "project_id": 80381,
+          "value": "38605871"
+        },
+        {
+          "project_id": 82187,
+          "value": "2182000"
+        },
+        {
+          "project_id": 87413,
+          "value": null
+        },
+        {
+          "project_id": 87464,
+          "value": null
+        },
+        {
+          "project_id": 90930,
+          "value": null
+        },
+        {
+          "project_id": 90937,
+          "value": null
+        },
+        {
+          "project_id": 90970,
+          "value": null
+        },
+        {
+          "project_id": 93929,
+          "value": "2182000"
+        }
+      ],
+      "funding_year": [
+        {
+          "project_id": 68666,
+          "value": 2020
+        },
+        {
+          "project_id": 74282,
+          "value": 2015
+        },
+        {
+          "project_id": 74335,
+          "value": 2015
+        },
+        {
+          "project_id": 77985,
+          "value": 2016
+        },
+        {
+          "project_id": 77988,
+          "value": 2016
+        },
+        {
+          "project_id": 78008,
+          "value": 2016
+        },
+        {
+          "project_id": 80381,
+          "value": 2024
+        },
+        {
+          "project_id": 82187,
+          "value": 2020
+        },
+        {
+          "project_id": 87413,
+          "value": 2015
+        },
+        {
+          "project_id": 87464,
+          "value": 2015
+        },
+        {
+          "project_id": 90930,
+          "value": 2016
+        },
+        {
+          "project_id": 90937,
+          "value": 2016
+        },
+        {
+          "project_id": 90970,
+          "value": 2016
+        },
+        {
+          "project_id": 93929,
+          "value": 2020
+        }
+      ],
+      "project_category_id": [
+        {
+          "project_id": 68666,
+          "value": "12"
+        },
+        {
+          "project_id": 74282,
+          "value": "01"
+        },
+        {
+          "project_id": 74335,
+          "value": "01"
+        },
+        {
+          "project_id": 77985,
+          "value": "01"
+        },
+        {
+          "project_id": 77988,
+          "value": "01"
+        },
+        {
+          "project_id": 78008,
+          "value": "01"
+        },
+        {
+          "project_id": 80381,
+          "value": "01"
+        },
+        {
+          "project_id": 82187,
+          "value": "12"
+        },
+        {
+          "project_id": 87413,
+          "value": "01"
+        },
+        {
+          "project_id": 87464,
+          "value": "01"
+        },
+        {
+          "project_id": 90930,
+          "value": "01"
+        },
+        {
+          "project_id": 90937,
+          "value": "01"
+        },
+        {
+          "project_id": 90970,
+          "value": "01"
+        },
+        {
+          "project_id": 93929,
+          "value": "12"
+        }
+      ]
+    }
+  },
+  {
+    "school": "Kalinga National High School",
+    "project": "",
+    "collision_count": "14",
+    "affected_rows": 14,
+    "varying_columns": [
+      "project_id",
+      "approved_budget_for_contract",
+      "created_at",
+      "ipc",
+      "project_category",
+      "number_of_classrooms",
+      "funding_year",
+      "project_category_id"
+    ],
+    "detailed_differences": {
+      "project_id": [
+        {
+          "project_id": 75958,
+          "value": 75958
+        },
+        {
+          "project_id": 76619,
+          "value": 76619
+        },
+        {
+          "project_id": 76620,
+          "value": 76620
+        },
+        {
+          "project_id": 76645,
+          "value": 76645
+        },
+        {
+          "project_id": 79162,
+          "value": 79162
+        },
+        {
+          "project_id": 79225,
+          "value": 79225
+        },
+        {
+          "project_id": 79244,
+          "value": 79244
+        },
+        {
+          "project_id": 85680,
+          "value": 85680
+        },
+        {
+          "project_id": 89193,
+          "value": 89193
+        },
+        {
+          "project_id": 89754,
+          "value": 89754
+        },
+        {
+          "project_id": 91949,
+          "value": 91949
+        },
+        {
+          "project_id": 92020,
+          "value": 92020
+        },
+        {
+          "project_id": 92030,
+          "value": 92030
+        },
+        {
+          "project_id": 97293,
+          "value": 97293
+        }
+      ],
+      "approved_budget_for_contract": [
+        {
+          "project_id": 75958,
+          "value": "8.26"
+        },
+        {
+          "project_id": 76619,
+          "value": "3.12"
+        },
+        {
+          "project_id": 76620,
+          "value": "2.70"
+        },
+        {
+          "project_id": 76645,
+          "value": "3.50"
+        },
+        {
+          "project_id": 79162,
+          "value": "1.62"
+        },
+        {
+          "project_id": 79225,
+          "value": "1.62"
+        },
+        {
+          "project_id": 79244,
+          "value": "2.79"
+        },
+        {
+          "project_id": 85680,
+          "value": "2.82"
+        },
+        {
+          "project_id": 89193,
+          "value": "8.26"
+        },
+        {
+          "project_id": 89754,
+          "value": "3.12"
+        },
+        {
+          "project_id": 91949,
+          "value": "1.62"
+        },
+        {
+          "project_id": 92020,
+          "value": "1.62"
+        },
+        {
+          "project_id": 92030,
+          "value": "2.79"
+        },
+        {
+          "project_id": 97293,
+          "value": "2.82"
+        }
+      ],
+      "created_at": [
+        {
+          "project_id": 75958,
+          "value": "2026-03-27T19:20:35.281Z"
+        },
+        {
+          "project_id": 76619,
+          "value": "2026-03-27T19:20:38.558Z"
+        },
+        {
+          "project_id": 76620,
+          "value": "2026-03-27T19:20:38.558Z"
+        },
+        {
+          "project_id": 76645,
+          "value": "2026-03-27T19:20:38.558Z"
+        },
+        {
+          "project_id": 79162,
+          "value": "2026-03-27T19:20:52.279Z"
+        },
+        {
+          "project_id": 79225,
+          "value": "2026-03-27T19:20:52.279Z"
+        },
+        {
+          "project_id": 79244,
+          "value": "2026-03-27T19:20:52.279Z"
+        },
+        {
+          "project_id": 85680,
+          "value": "2026-03-27T19:21:34.470Z"
+        },
+        {
+          "project_id": 89193,
+          "value": "2026-03-27T19:21:59.355Z"
+        },
+        {
+          "project_id": 89754,
+          "value": "2026-03-27T19:22:04.619Z"
+        },
+        {
+          "project_id": 91949,
+          "value": "2026-03-27T19:22:24.993Z"
+        },
+        {
+          "project_id": 92020,
+          "value": "2026-03-27T19:22:24.993Z"
+        },
+        {
+          "project_id": 92030,
+          "value": "2026-03-27T19:22:24.993Z"
+        },
+        {
+          "project_id": 97293,
+          "value": "2026-03-27T19:23:15.847Z"
+        }
+      ],
+      "ipc": [
+        {
+          "project_id": 75958,
+          "value": "INF-10-2015-02587"
+        },
+        {
+          "project_id": 76619,
+          "value": "INF-10-2016-00111"
+        },
+        {
+          "project_id": 76620,
+          "value": "INF-10-2016-00112"
+        },
+        {
+          "project_id": 76645,
+          "value": "INF-10-2016-00137"
+        },
+        {
+          "project_id": 79162,
+          "value": "INF-10-2017-00010"
+        },
+        {
+          "project_id": 79225,
+          "value": "INF-10-2017-00072"
+        },
+        {
+          "project_id": 79244,
+          "value": "INF-10-2017-00091"
+        },
+        {
+          "project_id": 85680,
+          "value": "INF-10-2018-00793"
+        },
+        {
+          "project_id": 89193,
+          "value": "INF-10-2015-05831"
+        },
+        {
+          "project_id": 89754,
+          "value": "INF-10-2016-02719"
+        },
+        {
+          "project_id": 91949,
+          "value": "INF-10-2017-00880"
+        },
+        {
+          "project_id": 92020,
+          "value": "INF-10-2017-00945"
+        },
+        {
+          "project_id": 92030,
+          "value": "INF-10-2017-00955"
+        },
+        {
+          "project_id": 97293,
+          "value": "INF-10-2018-01647"
+        }
+      ],
+      "project_category": [
+        {
+          "project_id": 75958,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 76619,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 76620,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 76645,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 79162,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 79225,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 79244,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 85680,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 89193,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 89754,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 91949,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 92020,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 92030,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 97293,
+          "value": "ELECTRIFICATION"
+        }
+      ],
+      "number_of_classrooms": [
+        {
+          "project_id": 75958,
+          "value": 6
+        },
+        {
+          "project_id": 76619,
+          "value": 20
+        },
+        {
+          "project_id": 76620,
+          "value": 1
+        },
+        {
+          "project_id": 76645,
+          "value": 1
+        },
+        {
+          "project_id": 79162,
+          "value": 2
+        },
+        {
+          "project_id": 79225,
+          "value": 2
+        },
+        {
+          "project_id": 79244,
+          "value": 1
+        },
+        {
+          "project_id": 85680,
+          "value": null
+        },
+        {
+          "project_id": 89193,
+          "value": 6
+        },
+        {
+          "project_id": 89754,
+          "value": 20
+        },
+        {
+          "project_id": 91949,
+          "value": 2
+        },
+        {
+          "project_id": 92020,
+          "value": 2
+        },
+        {
+          "project_id": 92030,
+          "value": 1
+        },
+        {
+          "project_id": 97293,
+          "value": null
+        }
+      ],
+      "funding_year": [
+        {
+          "project_id": 75958,
+          "value": 2015
+        },
+        {
+          "project_id": 76619,
+          "value": 2016
+        },
+        {
+          "project_id": 76620,
+          "value": 2016
+        },
+        {
+          "project_id": 76645,
+          "value": 2016
+        },
+        {
+          "project_id": 79162,
+          "value": 2017
+        },
+        {
+          "project_id": 79225,
+          "value": 2017
+        },
+        {
+          "project_id": 79244,
+          "value": 2017
+        },
+        {
+          "project_id": 85680,
+          "value": 2018
+        },
+        {
+          "project_id": 89193,
+          "value": 2015
+        },
+        {
+          "project_id": 89754,
+          "value": 2016
+        },
+        {
+          "project_id": 91949,
+          "value": 2017
+        },
+        {
+          "project_id": 92020,
+          "value": 2017
+        },
+        {
+          "project_id": 92030,
+          "value": 2017
+        },
+        {
+          "project_id": 97293,
+          "value": 2018
+        }
+      ],
+      "project_category_id": [
+        {
+          "project_id": 75958,
+          "value": "01"
+        },
+        {
+          "project_id": 76619,
+          "value": "01"
+        },
+        {
+          "project_id": 76620,
+          "value": "01"
+        },
+        {
+          "project_id": 76645,
+          "value": "01"
+        },
+        {
+          "project_id": 79162,
+          "value": "01"
+        },
+        {
+          "project_id": 79225,
+          "value": "01"
+        },
+        {
+          "project_id": 79244,
+          "value": "01"
+        },
+        {
+          "project_id": 85680,
+          "value": "12"
+        },
+        {
+          "project_id": 89193,
+          "value": "01"
+        },
+        {
+          "project_id": 89754,
+          "value": "01"
+        },
+        {
+          "project_id": 91949,
+          "value": "01"
+        },
+        {
+          "project_id": 92020,
+          "value": "01"
+        },
+        {
+          "project_id": 92030,
+          "value": "01"
+        },
+        {
+          "project_id": 97293,
+          "value": "12"
+        }
+      ]
+    }
+  },
+  {
+    "school": "Claver NHS",
+    "project": "",
+    "collision_count": "13",
+    "affected_rows": 16,
+    "varying_columns": [
+      "project_id",
+      "school_name",
+      "division",
+      "approved_budget_for_contract",
+      "created_at",
+      "ipc",
+      "number_of_classrooms",
+      "funding_year"
+    ],
+    "detailed_differences": {
+      "project_id": [
+        {
+          "project_id": 71474,
+          "value": 71474
+        },
+        {
+          "project_id": 76208,
+          "value": 76208
+        },
+        {
+          "project_id": 76736,
+          "value": 76736
+        },
+        {
+          "project_id": 79463,
+          "value": 79463
+        },
+        {
+          "project_id": 79514,
+          "value": 79514
+        },
+        {
+          "project_id": 79533,
+          "value": 79533
+        },
+        {
+          "project_id": 79543,
+          "value": 79543
+        },
+        {
+          "project_id": 83693,
+          "value": 83693
+        },
+        {
+          "project_id": 89341,
+          "value": 89341
+        },
+        {
+          "project_id": 89816,
+          "value": 89816
+        },
+        {
+          "project_id": 92222,
+          "value": 92222
+        },
+        {
+          "project_id": 92229,
+          "value": 92229
+        },
+        {
+          "project_id": 92266,
+          "value": 92266
+        },
+        {
+          "project_id": 92272,
+          "value": 92272
+        },
+        {
+          "project_id": 95347,
+          "value": 95347
+        },
+        {
+          "project_id": 98845,
+          "value": 98845
+        }
+      ],
+      "school_name": [
+        {
+          "project_id": 71474,
+          "value": "Claver NHS"
+        },
+        {
+          "project_id": 76208,
+          "value": "Claver NHS"
+        },
+        {
+          "project_id": 76736,
+          "value": "Claver Nhs"
+        },
+        {
+          "project_id": 79463,
+          "value": "Claver NHS"
+        },
+        {
+          "project_id": 79514,
+          "value": "Claver NHS"
+        },
+        {
+          "project_id": 79533,
+          "value": "Claver NHS"
+        },
+        {
+          "project_id": 79543,
+          "value": "Claver NHS"
+        },
+        {
+          "project_id": 83693,
+          "value": "Claver NHS"
+        },
+        {
+          "project_id": 89341,
+          "value": "Claver NHS"
+        },
+        {
+          "project_id": 89816,
+          "value": "Claver Nhs"
+        },
+        {
+          "project_id": 92222,
+          "value": "Claver NHS"
+        },
+        {
+          "project_id": 92229,
+          "value": "Claver NHS"
+        },
+        {
+          "project_id": 92266,
+          "value": "Claver NHS"
+        },
+        {
+          "project_id": 92272,
+          "value": "Claver NHS"
+        },
+        {
+          "project_id": 95347,
+          "value": "Claver NHS"
+        },
+        {
+          "project_id": 98845,
+          "value": "Claver Nhs"
+        }
+      ],
+      "division": [
+        {
+          "project_id": 71474,
+          "value": "Surigao del Norte"
+        },
+        {
+          "project_id": 76208,
+          "value": "Surigao del Norte"
+        },
+        {
+          "project_id": 76736,
+          "value": "Surigao Del Norte"
+        },
+        {
+          "project_id": 79463,
+          "value": "Surigao del Norte"
+        },
+        {
+          "project_id": 79514,
+          "value": "Surigao del Norte"
+        },
+        {
+          "project_id": 79533,
+          "value": "Surigao del Norte"
+        },
+        {
+          "project_id": 79543,
+          "value": "Surigao del Norte"
+        },
+        {
+          "project_id": 83693,
+          "value": "Surigao del Norte"
+        },
+        {
+          "project_id": 89341,
+          "value": "Surigao del Norte"
+        },
+        {
+          "project_id": 89816,
+          "value": "Surigao Del Norte"
+        },
+        {
+          "project_id": 92222,
+          "value": "Surigao del Norte"
+        },
+        {
+          "project_id": 92229,
+          "value": "Surigao del Norte"
+        },
+        {
+          "project_id": 92266,
+          "value": "Surigao del Norte"
+        },
+        {
+          "project_id": 92272,
+          "value": "Surigao del Norte"
+        },
+        {
+          "project_id": 95347,
+          "value": "Surigao del Norte"
+        },
+        {
+          "project_id": 98845,
+          "value": "Surigao Del Norte"
+        }
+      ],
+      "approved_budget_for_contract": [
+        {
+          "project_id": 71474,
+          "value": "1.98"
+        },
+        {
+          "project_id": 76208,
+          "value": "8.29"
+        },
+        {
+          "project_id": 76736,
+          "value": "2.65"
+        },
+        {
+          "project_id": 79463,
+          "value": "3.27"
+        },
+        {
+          "project_id": 79514,
+          "value": "3.27"
+        },
+        {
+          "project_id": 79533,
+          "value": "3.27"
+        },
+        {
+          "project_id": 79543,
+          "value": "3.27"
+        },
+        {
+          "project_id": 83693,
+          "value": "1.98"
+        },
+        {
+          "project_id": 89341,
+          "value": "8.29"
+        },
+        {
+          "project_id": 89816,
+          "value": "2.65"
+        },
+        {
+          "project_id": 92222,
+          "value": "3.27"
+        },
+        {
+          "project_id": 92229,
+          "value": "3.27"
+        },
+        {
+          "project_id": 92266,
+          "value": "3.27"
+        },
+        {
+          "project_id": 92272,
+          "value": "3.27"
+        },
+        {
+          "project_id": 95347,
+          "value": "1.98"
+        },
+        {
+          "project_id": 98845,
+          "value": "4.18"
+        }
+      ],
+      "created_at": [
+        {
+          "project_id": 71474,
+          "value": "2026-03-27T19:20:09.992Z"
+        },
+        {
+          "project_id": 76208,
+          "value": "2026-03-27T19:20:36.510Z"
+        },
+        {
+          "project_id": 76736,
+          "value": "2026-03-27T19:20:38.921Z"
+        },
+        {
+          "project_id": 79463,
+          "value": "2026-03-27T19:20:53.920Z"
+        },
+        {
+          "project_id": 79514,
+          "value": "2026-03-27T19:20:53.920Z"
+        },
+        {
+          "project_id": 79533,
+          "value": "2026-03-27T19:20:53.920Z"
+        },
+        {
+          "project_id": 79543,
+          "value": "2026-03-27T19:20:53.920Z"
+        },
+        {
+          "project_id": 83693,
+          "value": "2026-03-27T19:21:19.572Z"
+        },
+        {
+          "project_id": 89341,
+          "value": "2026-03-27T19:22:01.098Z"
+        },
+        {
+          "project_id": 89816,
+          "value": "2026-03-27T19:22:05.395Z"
+        },
+        {
+          "project_id": 92222,
+          "value": "2026-03-27T19:22:27.411Z"
+        },
+        {
+          "project_id": 92229,
+          "value": "2026-03-27T19:22:27.411Z"
+        },
+        {
+          "project_id": 92266,
+          "value": "2026-03-27T19:22:27.411Z"
+        },
+        {
+          "project_id": 92272,
+          "value": "2026-03-27T19:22:27.411Z"
+        },
+        {
+          "project_id": 95347,
+          "value": "2026-03-27T19:22:57.279Z"
+        },
+        {
+          "project_id": 98845,
+          "value": "2026-03-27T19:23:29.978Z"
+        }
+      ],
+      "ipc": [
+        {
+          "project_id": 71474,
+          "value": "INF-10-2014-02119"
+        },
+        {
+          "project_id": 76208,
+          "value": "INF-10-2015-02837"
+        },
+        {
+          "project_id": 76736,
+          "value": "INF-10-2016-00227"
+        },
+        {
+          "project_id": 79463,
+          "value": "INF-10-2017-00309"
+        },
+        {
+          "project_id": 79514,
+          "value": "INF-10-2017-00360"
+        },
+        {
+          "project_id": 79533,
+          "value": "INF-10-2017-00379"
+        },
+        {
+          "project_id": 79543,
+          "value": "INF-10-2017-00389"
+        },
+        {
+          "project_id": 83693,
+          "value": "INF-10-2014-05050"
+        },
+        {
+          "project_id": 89341,
+          "value": "INF-10-2015-05979"
+        },
+        {
+          "project_id": 89816,
+          "value": "INF-10-2016-02778"
+        },
+        {
+          "project_id": 92222,
+          "value": "INF-10-2017-01144"
+        },
+        {
+          "project_id": 92229,
+          "value": "INF-10-2017-01151"
+        },
+        {
+          "project_id": 92266,
+          "value": "INF-10-2017-01188"
+        },
+        {
+          "project_id": 92272,
+          "value": "INF-10-2017-01194"
+        },
+        {
+          "project_id": 95347,
+          "value": "INF-10-2014-06988"
+        },
+        {
+          "project_id": 98845,
+          "value": "INF-10-2016-04942"
+        }
+      ],
+      "number_of_classrooms": [
+        {
+          "project_id": 71474,
+          "value": 2
+        },
+        {
+          "project_id": 76208,
+          "value": 6
+        },
+        {
+          "project_id": 76736,
+          "value": 1
+        },
+        {
+          "project_id": 79463,
+          "value": 1
+        },
+        {
+          "project_id": 79514,
+          "value": 1
+        },
+        {
+          "project_id": 79533,
+          "value": 1
+        },
+        {
+          "project_id": 79543,
+          "value": 1
+        },
+        {
+          "project_id": 83693,
+          "value": 2
+        },
+        {
+          "project_id": 89341,
+          "value": 6
+        },
+        {
+          "project_id": 89816,
+          "value": 1
+        },
+        {
+          "project_id": 92222,
+          "value": 1
+        },
+        {
+          "project_id": 92229,
+          "value": 1
+        },
+        {
+          "project_id": 92266,
+          "value": 1
+        },
+        {
+          "project_id": 92272,
+          "value": 1
+        },
+        {
+          "project_id": 95347,
+          "value": 2
+        },
+        {
+          "project_id": 98845,
+          "value": 30
+        }
+      ],
+      "funding_year": [
+        {
+          "project_id": 71474,
+          "value": 2014
+        },
+        {
+          "project_id": 76208,
+          "value": 2015
+        },
+        {
+          "project_id": 76736,
+          "value": 2016
+        },
+        {
+          "project_id": 79463,
+          "value": 2017
+        },
+        {
+          "project_id": 79514,
+          "value": 2017
+        },
+        {
+          "project_id": 79533,
+          "value": 2017
+        },
+        {
+          "project_id": 79543,
+          "value": 2017
+        },
+        {
+          "project_id": 83693,
+          "value": 2014
+        },
+        {
+          "project_id": 89341,
+          "value": 2015
+        },
+        {
+          "project_id": 89816,
+          "value": 2016
+        },
+        {
+          "project_id": 92222,
+          "value": 2017
+        },
+        {
+          "project_id": 92229,
+          "value": 2017
+        },
+        {
+          "project_id": 92266,
+          "value": 2017
+        },
+        {
+          "project_id": 92272,
+          "value": 2017
+        },
+        {
+          "project_id": 95347,
+          "value": 2014
+        },
+        {
+          "project_id": 98845,
+          "value": 2016
+        }
+      ]
+    }
+  },
+  {
+    "school": "TUGA NATIONAL HIGH SCHOOL",
+    "project": "",
+    "collision_count": "13",
+    "affected_rows": 15,
+    "varying_columns": [
+      "project_id",
+      "school_name",
+      "approved_budget_for_contract",
+      "created_at",
+      "ipc",
+      "project_category",
+      "number_of_classrooms",
+      "funding_year",
+      "project_category_id"
+    ],
+    "detailed_differences": {
+      "project_id": [
+        {
+          "project_id": 76568,
+          "value": 76568
+        },
+        {
+          "project_id": 79260,
+          "value": 79260
+        },
+        {
+          "project_id": 79274,
+          "value": 79274
+        },
+        {
+          "project_id": 79276,
+          "value": 79276
+        },
+        {
+          "project_id": 79320,
+          "value": 79320
+        },
+        {
+          "project_id": 79333,
+          "value": 79333
+        },
+        {
+          "project_id": 79354,
+          "value": 79354
+        },
+        {
+          "project_id": 85920,
+          "value": 85920
+        },
+        {
+          "project_id": 89736,
+          "value": 89736
+        },
+        {
+          "project_id": 92031,
+          "value": 92031
+        },
+        {
+          "project_id": 92058,
+          "value": 92058
+        },
+        {
+          "project_id": 92081,
+          "value": 92081
+        },
+        {
+          "project_id": 92089,
+          "value": 92089
+        },
+        {
+          "project_id": 92110,
+          "value": 92110
+        },
+        {
+          "project_id": 92206,
+          "value": 92206
+        }
+      ],
+      "school_name": [
+        {
+          "project_id": 76568,
+          "value": "Tuga National High School"
+        },
+        {
+          "project_id": 79260,
+          "value": "TUGA NATIONAL HIGH SCHOOL"
+        },
+        {
+          "project_id": 79274,
+          "value": "TUGA NATIONAL HIGH SCHOOL"
+        },
+        {
+          "project_id": 79276,
+          "value": "TUGA NATIONAL HIGH SCHOOL"
+        },
+        {
+          "project_id": 79320,
+          "value": "TUGA NATIONAL HIGH SCHOOL"
+        },
+        {
+          "project_id": 79333,
+          "value": "TUGA NATIONAL HIGH SCHOOL"
+        },
+        {
+          "project_id": 79354,
+          "value": "TUGA NATIONAL HIGH SCHOOL"
+        },
+        {
+          "project_id": 85920,
+          "value": "TUGA NATIONAL HIGH SCHOOL"
+        },
+        {
+          "project_id": 89736,
+          "value": "Tuga National High School"
+        },
+        {
+          "project_id": 92031,
+          "value": "TUGA NATIONAL HIGH SCHOOL"
+        },
+        {
+          "project_id": 92058,
+          "value": "TUGA NATIONAL HIGH SCHOOL"
+        },
+        {
+          "project_id": 92081,
+          "value": "TUGA NATIONAL HIGH SCHOOL"
+        },
+        {
+          "project_id": 92089,
+          "value": "TUGA NATIONAL HIGH SCHOOL"
+        },
+        {
+          "project_id": 92110,
+          "value": "TUGA NATIONAL HIGH SCHOOL"
+        },
+        {
+          "project_id": 92206,
+          "value": "TUGA NATIONAL HIGH SCHOOL"
+        }
+      ],
+      "approved_budget_for_contract": [
+        {
+          "project_id": 76568,
+          "value": "1.61"
+        },
+        {
+          "project_id": 79260,
+          "value": "1.14"
+        },
+        {
+          "project_id": 79274,
+          "value": "1.14"
+        },
+        {
+          "project_id": 79276,
+          "value": "1.14"
+        },
+        {
+          "project_id": 79320,
+          "value": "1.14"
+        },
+        {
+          "project_id": 79333,
+          "value": "1.14"
+        },
+        {
+          "project_id": 79354,
+          "value": "1.14"
+        },
+        {
+          "project_id": 85920,
+          "value": "1.62"
+        },
+        {
+          "project_id": 89736,
+          "value": "1.61"
+        },
+        {
+          "project_id": 92031,
+          "value": "1.14"
+        },
+        {
+          "project_id": 92058,
+          "value": "1.14"
+        },
+        {
+          "project_id": 92081,
+          "value": "1.14"
+        },
+        {
+          "project_id": 92089,
+          "value": "1.14"
+        },
+        {
+          "project_id": 92110,
+          "value": "1.14"
+        },
+        {
+          "project_id": 92206,
+          "value": "1.14"
+        }
+      ],
+      "created_at": [
+        {
+          "project_id": 76568,
+          "value": "2026-03-27T19:20:38.558Z"
+        },
+        {
+          "project_id": 79260,
+          "value": "2026-03-27T19:20:52.730Z"
+        },
+        {
+          "project_id": 79274,
+          "value": "2026-03-27T19:20:52.730Z"
+        },
+        {
+          "project_id": 79276,
+          "value": "2026-03-27T19:20:52.730Z"
+        },
+        {
+          "project_id": 79320,
+          "value": "2026-03-27T19:20:52.730Z"
+        },
+        {
+          "project_id": 79333,
+          "value": "2026-03-27T19:20:52.730Z"
+        },
+        {
+          "project_id": 79354,
+          "value": "2026-03-27T19:20:52.730Z"
+        },
+        {
+          "project_id": 85920,
+          "value": "2026-03-27T19:21:36.619Z"
+        },
+        {
+          "project_id": 89736,
+          "value": "2026-03-27T19:22:04.619Z"
+        },
+        {
+          "project_id": 92031,
+          "value": "2026-03-27T19:22:25.774Z"
+        },
+        {
+          "project_id": 92058,
+          "value": "2026-03-27T19:22:25.774Z"
+        },
+        {
+          "project_id": 92081,
+          "value": "2026-03-27T19:22:25.774Z"
+        },
+        {
+          "project_id": 92089,
+          "value": "2026-03-27T19:22:25.774Z"
+        },
+        {
+          "project_id": 92110,
+          "value": "2026-03-27T19:22:25.774Z"
+        },
+        {
+          "project_id": 92206,
+          "value": "2026-03-27T19:22:26.593Z"
+        }
+      ],
+      "ipc": [
+        {
+          "project_id": 76568,
+          "value": "INF-10-2016-00060"
+        },
+        {
+          "project_id": 79260,
+          "value": "INF-10-2017-00107"
+        },
+        {
+          "project_id": 79274,
+          "value": "INF-10-2017-00121"
+        },
+        {
+          "project_id": 79276,
+          "value": "INF-10-2017-00123"
+        },
+        {
+          "project_id": 79320,
+          "value": "INF-10-2017-00167"
+        },
+        {
+          "project_id": 79333,
+          "value": "INF-10-2017-00180"
+        },
+        {
+          "project_id": 79354,
+          "value": "INF-10-2017-00201"
+        },
+        {
+          "project_id": 85920,
+          "value": "INF-10-2019-00713"
+        },
+        {
+          "project_id": 89736,
+          "value": "INF-10-2016-02703"
+        },
+        {
+          "project_id": 92031,
+          "value": "INF-10-2017-00956"
+        },
+        {
+          "project_id": 92058,
+          "value": "INF-10-2017-00983"
+        },
+        {
+          "project_id": 92081,
+          "value": "INF-10-2017-01006"
+        },
+        {
+          "project_id": 92089,
+          "value": "INF-10-2017-01014"
+        },
+        {
+          "project_id": 92110,
+          "value": "INF-10-2017-01035"
+        },
+        {
+          "project_id": 92206,
+          "value": "INF-10-2017-01129"
+        }
+      ],
+      "project_category": [
+        {
+          "project_id": 76568,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 79260,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 79274,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 79276,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 79320,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 79333,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 79354,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 85920,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 89736,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 92031,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 92058,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 92081,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 92089,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 92110,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 92206,
+          "value": "NEW CONSTRUCTION"
+        }
+      ],
+      "number_of_classrooms": [
+        {
+          "project_id": 76568,
+          "value": 8
+        },
+        {
+          "project_id": 79260,
+          "value": 2
+        },
+        {
+          "project_id": 79274,
+          "value": 2
+        },
+        {
+          "project_id": 79276,
+          "value": 2
+        },
+        {
+          "project_id": 79320,
+          "value": 2
+        },
+        {
+          "project_id": 79333,
+          "value": 2
+        },
+        {
+          "project_id": 79354,
+          "value": 2
+        },
+        {
+          "project_id": 85920,
+          "value": null
+        },
+        {
+          "project_id": 89736,
+          "value": 8
+        },
+        {
+          "project_id": 92031,
+          "value": 2
+        },
+        {
+          "project_id": 92058,
+          "value": 2
+        },
+        {
+          "project_id": 92081,
+          "value": 2
+        },
+        {
+          "project_id": 92089,
+          "value": 2
+        },
+        {
+          "project_id": 92110,
+          "value": 2
+        },
+        {
+          "project_id": 92206,
+          "value": 2
+        }
+      ],
+      "funding_year": [
+        {
+          "project_id": 76568,
+          "value": 2016
+        },
+        {
+          "project_id": 79260,
+          "value": 2017
+        },
+        {
+          "project_id": 79274,
+          "value": 2017
+        },
+        {
+          "project_id": 79276,
+          "value": 2017
+        },
+        {
+          "project_id": 79320,
+          "value": 2017
+        },
+        {
+          "project_id": 79333,
+          "value": 2017
+        },
+        {
+          "project_id": 79354,
+          "value": 2017
+        },
+        {
+          "project_id": 85920,
+          "value": 2019
+        },
+        {
+          "project_id": 89736,
+          "value": 2016
+        },
+        {
+          "project_id": 92031,
+          "value": 2017
+        },
+        {
+          "project_id": 92058,
+          "value": 2017
+        },
+        {
+          "project_id": 92081,
+          "value": 2017
+        },
+        {
+          "project_id": 92089,
+          "value": 2017
+        },
+        {
+          "project_id": 92110,
+          "value": 2017
+        },
+        {
+          "project_id": 92206,
+          "value": 2017
+        }
+      ],
+      "project_category_id": [
+        {
+          "project_id": 76568,
+          "value": "01"
+        },
+        {
+          "project_id": 79260,
+          "value": "01"
+        },
+        {
+          "project_id": 79274,
+          "value": "01"
+        },
+        {
+          "project_id": 79276,
+          "value": "01"
+        },
+        {
+          "project_id": 79320,
+          "value": "01"
+        },
+        {
+          "project_id": 79333,
+          "value": "01"
+        },
+        {
+          "project_id": 79354,
+          "value": "01"
+        },
+        {
+          "project_id": 85920,
+          "value": "12"
+        },
+        {
+          "project_id": 89736,
+          "value": "01"
+        },
+        {
+          "project_id": 92031,
+          "value": "01"
+        },
+        {
+          "project_id": 92058,
+          "value": "01"
+        },
+        {
+          "project_id": 92081,
+          "value": "01"
+        },
+        {
+          "project_id": 92089,
+          "value": "01"
+        },
+        {
+          "project_id": 92110,
+          "value": "01"
+        },
+        {
+          "project_id": 92206,
+          "value": "01"
+        }
+      ]
+    }
+  },
+  {
+    "school": "Cauayan City NHS",
+    "project": "",
+    "collision_count": "12",
+    "affected_rows": 12,
+    "varying_columns": [
+      "project_id",
+      "region",
+      "approved_budget_for_contract",
+      "created_at",
+      "ipc",
+      "project_category",
+      "number_of_classrooms",
+      "funding_year",
+      "project_category_id"
+    ],
+    "detailed_differences": {
+      "project_id": [
+        {
+          "project_id": 68973,
+          "value": 68973
+        },
+        {
+          "project_id": 73386,
+          "value": 73386
+        },
+        {
+          "project_id": 73402,
+          "value": 73402
+        },
+        {
+          "project_id": 79718,
+          "value": 79718
+        },
+        {
+          "project_id": 79778,
+          "value": 79778
+        },
+        {
+          "project_id": 86573,
+          "value": 86573
+        },
+        {
+          "project_id": 86581,
+          "value": 86581
+        },
+        {
+          "project_id": 92407,
+          "value": 92407
+        },
+        {
+          "project_id": 92551,
+          "value": 92551
+        },
+        {
+          "project_id": 99636,
+          "value": 99636
+        },
+        {
+          "project_id": 99782,
+          "value": 99782
+        },
+        {
+          "project_id": 99935,
+          "value": 99935
+        }
+      ],
+      "region": [
+        {
+          "project_id": 68973,
+          "value": "Region II"
+        },
+        {
+          "project_id": 73386,
+          "value": "REGION II"
+        },
+        {
+          "project_id": 73402,
+          "value": "REGION II"
+        },
+        {
+          "project_id": 79718,
+          "value": "Region II"
+        },
+        {
+          "project_id": 79778,
+          "value": "Region II"
+        },
+        {
+          "project_id": 86573,
+          "value": "REGION II"
+        },
+        {
+          "project_id": 86581,
+          "value": "REGION II"
+        },
+        {
+          "project_id": 92407,
+          "value": "Region II"
+        },
+        {
+          "project_id": 92551,
+          "value": "Region II"
+        },
+        {
+          "project_id": 99636,
+          "value": "Region II"
+        },
+        {
+          "project_id": 99782,
+          "value": "Region II"
+        },
+        {
+          "project_id": 99935,
+          "value": "Region II"
+        }
+      ],
+      "approved_budget_for_contract": [
+        {
+          "project_id": 68973,
+          "value": "3.08"
+        },
+        {
+          "project_id": 73386,
+          "value": "1.09"
+        },
+        {
+          "project_id": 73402,
+          "value": "1.09"
+        },
+        {
+          "project_id": 79718,
+          "value": "3.08"
+        },
+        {
+          "project_id": 79778,
+          "value": "3.08"
+        },
+        {
+          "project_id": 86573,
+          "value": "1.09"
+        },
+        {
+          "project_id": 86581,
+          "value": "1.09"
+        },
+        {
+          "project_id": 92407,
+          "value": "3.08"
+        },
+        {
+          "project_id": 92551,
+          "value": "3.08"
+        },
+        {
+          "project_id": 99636,
+          "value": "3.08"
+        },
+        {
+          "project_id": 99782,
+          "value": "3.08"
+        },
+        {
+          "project_id": 99935,
+          "value": "3.08"
+        }
+      ],
+      "created_at": [
+        {
+          "project_id": 68973,
+          "value": "2026-03-27T19:19:59.851Z"
+        },
+        {
+          "project_id": 73386,
+          "value": "2026-03-27T19:20:19.466Z"
+        },
+        {
+          "project_id": 73402,
+          "value": "2026-03-27T19:20:19.466Z"
+        },
+        {
+          "project_id": 79718,
+          "value": "2026-03-27T19:20:55.047Z"
+        },
+        {
+          "project_id": 79778,
+          "value": "2026-03-27T19:20:55.560Z"
+        },
+        {
+          "project_id": 86573,
+          "value": "2026-03-27T19:21:40.409Z"
+        },
+        {
+          "project_id": 86581,
+          "value": "2026-03-27T19:21:40.409Z"
+        },
+        {
+          "project_id": 92407,
+          "value": "2026-03-27T19:22:28.951Z"
+        },
+        {
+          "project_id": 92551,
+          "value": "2026-03-27T19:22:29.766Z"
+        },
+        {
+          "project_id": 99636,
+          "value": "2026-03-28T04:39:01.215Z"
+        },
+        {
+          "project_id": 99782,
+          "value": "2026-03-28T04:42:57.439Z"
+        },
+        {
+          "project_id": 99935,
+          "value": "2026-03-28T05:02:20.872Z"
+        }
+      ],
+      "ipc": [
+        {
+          "project_id": 68973,
+          "value": "INF-10-2024-00040"
+        },
+        {
+          "project_id": 73386,
+          "value": "INF-10-2015-00049"
+        },
+        {
+          "project_id": 73402,
+          "value": "INF-10-2015-00064"
+        },
+        {
+          "project_id": 79718,
+          "value": "INF-10-2024-00317"
+        },
+        {
+          "project_id": 79778,
+          "value": "INF-10-2024-00368"
+        },
+        {
+          "project_id": 86573,
+          "value": "INF-10-2015-03249"
+        },
+        {
+          "project_id": 86581,
+          "value": "INF-10-2015-03257"
+        },
+        {
+          "project_id": 92407,
+          "value": "INF-10-2024-02030"
+        },
+        {
+          "project_id": 92551,
+          "value": "INF-10-2024-02152"
+        },
+        {
+          "project_id": 99636,
+          "value": "INF-12-2024-00055"
+        },
+        {
+          "project_id": 99782,
+          "value": "INF-12-2024-00191"
+        },
+        {
+          "project_id": 99935,
+          "value": "INF-12-2024-00327"
+        }
+      ],
+      "project_category": [
+        {
+          "project_id": 68973,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 73386,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 73402,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 79718,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 79778,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 86573,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 86581,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 92407,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 92551,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 99636,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 99782,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 99935,
+          "value": "ELECTRIFICATION"
+        }
+      ],
+      "number_of_classrooms": [
+        {
+          "project_id": 68973,
+          "value": null
+        },
+        {
+          "project_id": 73386,
+          "value": 8
+        },
+        {
+          "project_id": 73402,
+          "value": 8
+        },
+        {
+          "project_id": 79718,
+          "value": null
+        },
+        {
+          "project_id": 79778,
+          "value": null
+        },
+        {
+          "project_id": 86573,
+          "value": 8
+        },
+        {
+          "project_id": 86581,
+          "value": 8
+        },
+        {
+          "project_id": 92407,
+          "value": null
+        },
+        {
+          "project_id": 92551,
+          "value": null
+        },
+        {
+          "project_id": 99636,
+          "value": null
+        },
+        {
+          "project_id": 99782,
+          "value": null
+        },
+        {
+          "project_id": 99935,
+          "value": null
+        }
+      ],
+      "funding_year": [
+        {
+          "project_id": 68973,
+          "value": 2024
+        },
+        {
+          "project_id": 73386,
+          "value": 2015
+        },
+        {
+          "project_id": 73402,
+          "value": 2015
+        },
+        {
+          "project_id": 79718,
+          "value": 2024
+        },
+        {
+          "project_id": 79778,
+          "value": 2024
+        },
+        {
+          "project_id": 86573,
+          "value": 2015
+        },
+        {
+          "project_id": 86581,
+          "value": 2015
+        },
+        {
+          "project_id": 92407,
+          "value": 2024
+        },
+        {
+          "project_id": 92551,
+          "value": 2024
+        },
+        {
+          "project_id": 99636,
+          "value": 2024
+        },
+        {
+          "project_id": 99782,
+          "value": 2024
+        },
+        {
+          "project_id": 99935,
+          "value": 2024
+        }
+      ],
+      "project_category_id": [
+        {
+          "project_id": 68973,
+          "value": "12"
+        },
+        {
+          "project_id": 73386,
+          "value": "01"
+        },
+        {
+          "project_id": 73402,
+          "value": "01"
+        },
+        {
+          "project_id": 79718,
+          "value": "12"
+        },
+        {
+          "project_id": 79778,
+          "value": "12"
+        },
+        {
+          "project_id": 86573,
+          "value": "01"
+        },
+        {
+          "project_id": 86581,
+          "value": "01"
+        },
+        {
+          "project_id": 92407,
+          "value": "12"
+        },
+        {
+          "project_id": 92551,
+          "value": "12"
+        },
+        {
+          "project_id": 99636,
+          "value": "12"
+        },
+        {
+          "project_id": 99782,
+          "value": "12"
+        },
+        {
+          "project_id": 99935,
+          "value": "12"
+        }
+      ]
+    }
+  },
+  {
+    "school": "Sta. Ana Fishery National High School",
+    "project": "",
+    "collision_count": "12",
+    "affected_rows": 12,
+    "varying_columns": [
+      "project_id",
+      "region",
+      "target_completion_date",
+      "notice_to_proceed",
+      "approved_budget_for_contract",
+      "created_at",
+      "ipc",
+      "project_category",
+      "number_of_classrooms",
+      "contract_amount",
+      "funding_year",
+      "project_category_id"
+    ],
+    "detailed_differences": {
+      "project_id": [
+        {
+          "project_id": 69861,
+          "value": 69861
+        },
+        {
+          "project_id": 76986,
+          "value": 76986
+        },
+        {
+          "project_id": 77046,
+          "value": 77046
+        },
+        {
+          "project_id": 79740,
+          "value": 79740
+        },
+        {
+          "project_id": 81863,
+          "value": 81863
+        },
+        {
+          "project_id": 84924,
+          "value": 84924
+        },
+        {
+          "project_id": 92375,
+          "value": 92375
+        },
+        {
+          "project_id": 93581,
+          "value": 93581
+        },
+        {
+          "project_id": 96503,
+          "value": 96503
+        },
+        {
+          "project_id": 99633,
+          "value": 99633
+        },
+        {
+          "project_id": 99779,
+          "value": 99779
+        },
+        {
+          "project_id": 99932,
+          "value": 99932
+        }
+      ],
+      "region": [
+        {
+          "project_id": 69861,
+          "value": "REGION II"
+        },
+        {
+          "project_id": 76986,
+          "value": "REGION II"
+        },
+        {
+          "project_id": 77046,
+          "value": "REGION II"
+        },
+        {
+          "project_id": 79740,
+          "value": "Region II"
+        },
+        {
+          "project_id": 81863,
+          "value": "Region II"
+        },
+        {
+          "project_id": 84924,
+          "value": "Region II"
+        },
+        {
+          "project_id": 92375,
+          "value": "Region II"
+        },
+        {
+          "project_id": 93581,
+          "value": "Region II"
+        },
+        {
+          "project_id": 96503,
+          "value": "Region II"
+        },
+        {
+          "project_id": 99633,
+          "value": "Region II"
+        },
+        {
+          "project_id": 99779,
+          "value": "Region II"
+        },
+        {
+          "project_id": 99932,
+          "value": "Region II"
+        }
+      ],
+      "target_completion_date": [
+        {
+          "project_id": 69861,
+          "value": null
+        },
+        {
+          "project_id": 76986,
+          "value": null
+        },
+        {
+          "project_id": 77046,
+          "value": null
+        },
+        {
+          "project_id": 79740,
+          "value": "2024-09-24T16:00:00.000Z"
+        },
+        {
+          "project_id": 81863,
+          "value": "2024-09-13T16:00:00.000Z"
+        },
+        {
+          "project_id": 84924,
+          "value": null
+        },
+        {
+          "project_id": 92375,
+          "value": "2024-09-24T16:00:00.000Z"
+        },
+        {
+          "project_id": 93581,
+          "value": "2024-09-13T16:00:00.000Z"
+        },
+        {
+          "project_id": 96503,
+          "value": null
+        },
+        {
+          "project_id": 99633,
+          "value": "2024-09-24T16:00:00.000Z"
+        },
+        {
+          "project_id": 99779,
+          "value": "2024-09-24T16:00:00.000Z"
+        },
+        {
+          "project_id": 99932,
+          "value": "2024-09-24T16:00:00.000Z"
+        }
+      ],
+      "notice_to_proceed": [
+        {
+          "project_id": 69861,
+          "value": null
+        },
+        {
+          "project_id": 76986,
+          "value": null
+        },
+        {
+          "project_id": 77046,
+          "value": null
+        },
+        {
+          "project_id": 79740,
+          "value": "2024-05-28T16:00:00.000Z"
+        },
+        {
+          "project_id": 81863,
+          "value": "2024-05-16T16:00:00.000Z"
+        },
+        {
+          "project_id": 84924,
+          "value": null
+        },
+        {
+          "project_id": 92375,
+          "value": "2024-05-28T16:00:00.000Z"
+        },
+        {
+          "project_id": 93581,
+          "value": "2024-05-16T16:00:00.000Z"
+        },
+        {
+          "project_id": 96503,
+          "value": null
+        },
+        {
+          "project_id": 99633,
+          "value": "2024-05-28T16:00:00.000Z"
+        },
+        {
+          "project_id": 99779,
+          "value": "2024-05-28T16:00:00.000Z"
+        },
+        {
+          "project_id": 99932,
+          "value": "2024-05-28T16:00:00.000Z"
+        }
+      ],
+      "approved_budget_for_contract": [
+        {
+          "project_id": 69861,
+          "value": "8.21"
+        },
+        {
+          "project_id": 76986,
+          "value": "4.98"
+        },
+        {
+          "project_id": 77046,
+          "value": "2.23"
+        },
+        {
+          "project_id": 79740,
+          "value": "3.08"
+        },
+        {
+          "project_id": 81863,
+          "value": "4.98"
+        },
+        {
+          "project_id": 84924,
+          "value": "841324.40"
+        },
+        {
+          "project_id": 92375,
+          "value": "3.08"
+        },
+        {
+          "project_id": 93581,
+          "value": "4.98"
+        },
+        {
+          "project_id": 96503,
+          "value": "841324.40"
+        },
+        {
+          "project_id": 99633,
+          "value": "3.08"
+        },
+        {
+          "project_id": 99779,
+          "value": "3.08"
+        },
+        {
+          "project_id": 99932,
+          "value": "3.08"
+        }
+      ],
+      "created_at": [
+        {
+          "project_id": 69861,
+          "value": "2026-03-27T19:20:03.539Z"
+        },
+        {
+          "project_id": 76986,
+          "value": "2026-03-27T19:20:40.287Z"
+        },
+        {
+          "project_id": 77046,
+          "value": "2026-03-27T19:20:40.287Z"
+        },
+        {
+          "project_id": 79740,
+          "value": "2026-03-27T19:20:55.047Z"
+        },
+        {
+          "project_id": 81863,
+          "value": "2026-03-27T19:21:08.052Z"
+        },
+        {
+          "project_id": 84924,
+          "value": "2026-03-27T19:21:29.147Z"
+        },
+        {
+          "project_id": 92375,
+          "value": "2026-03-27T19:22:28.951Z"
+        },
+        {
+          "project_id": 93581,
+          "value": "2026-03-27T19:22:41.952Z"
+        },
+        {
+          "project_id": 96503,
+          "value": "2026-03-27T19:23:08.529Z"
+        },
+        {
+          "project_id": 99633,
+          "value": "2026-03-28T04:39:01.215Z"
+        },
+        {
+          "project_id": 99779,
+          "value": "2026-03-28T04:42:57.439Z"
+        },
+        {
+          "project_id": 99932,
+          "value": "2026-03-28T05:02:20.872Z"
+        }
+      ],
+      "ipc": [
+        {
+          "project_id": 69861,
+          "value": "INF-10-2014-00509"
+        },
+        {
+          "project_id": 76986,
+          "value": "INF-10-2016-00477"
+        },
+        {
+          "project_id": 77046,
+          "value": "INF-10-2016-00537"
+        },
+        {
+          "project_id": 79740,
+          "value": "INF-10-2024-00334"
+        },
+        {
+          "project_id": 81863,
+          "value": "INF-10-2024-01743"
+        },
+        {
+          "project_id": 84924,
+          "value": "INF-10-2018-00062"
+        },
+        {
+          "project_id": 92375,
+          "value": "INF-10-2024-02003"
+        },
+        {
+          "project_id": 93581,
+          "value": "INF-10-2024-02712"
+        },
+        {
+          "project_id": 96503,
+          "value": "INF-10-2018-00925"
+        },
+        {
+          "project_id": 99633,
+          "value": "INF-12-2024-00052"
+        },
+        {
+          "project_id": 99779,
+          "value": "INF-12-2024-00188"
+        },
+        {
+          "project_id": 99932,
+          "value": "INF-12-2024-00324"
+        }
+      ],
+      "project_category": [
+        {
+          "project_id": 69861,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 76986,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 77046,
+          "value": "NEW CONSTRUCTION"
+        },
+        {
+          "project_id": 79740,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 81863,
+          "value": "SCHOOL HEALTH FACILITIES"
+        },
+        {
+          "project_id": 84924,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 92375,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 93581,
+          "value": "SCHOOL HEALTH FACILITIES"
+        },
+        {
+          "project_id": 96503,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 99633,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 99779,
+          "value": "ELECTRIFICATION"
+        },
+        {
+          "project_id": 99932,
+          "value": "ELECTRIFICATION"
+        }
+      ],
+      "number_of_classrooms": [
+        {
+          "project_id": 69861,
+          "value": 6
+        },
+        {
+          "project_id": 76986,
+          "value": 2
+        },
+        {
+          "project_id": 77046,
+          "value": 16
+        },
+        {
+          "project_id": 79740,
+          "value": null
+        },
+        {
+          "project_id": 81863,
+          "value": null
+        },
+        {
+          "project_id": 84924,
+          "value": null
+        },
+        {
+          "project_id": 92375,
+          "value": null
+        },
+        {
+          "project_id": 93581,
+          "value": null
+        },
+        {
+          "project_id": 96503,
+          "value": null
+        },
+        {
+          "project_id": 99633,
+          "value": null
+        },
+        {
+          "project_id": 99779,
+          "value": null
+        },
+        {
+          "project_id": 99932,
+          "value": null
+        }
+      ],
+      "contract_amount": [
+        {
+          "project_id": 69861,
+          "value": null
+        },
+        {
+          "project_id": 76986,
+          "value": null
+        },
+        {
+          "project_id": 77046,
+          "value": null
+        },
+        {
+          "project_id": 79740,
+          "value": "2336832.19"
+        },
+        {
+          "project_id": 81863,
+          "value": "3864853.37"
+        },
+        {
+          "project_id": 84924,
+          "value": null
+        },
+        {
+          "project_id": 92375,
+          "value": "2336832.19"
+        },
+        {
+          "project_id": 93581,
+          "value": "3864853.37"
+        },
+        {
+          "project_id": 96503,
+          "value": null
+        },
+        {
+          "project_id": 99633,
+          "value": "2336832.19"
+        },
+        {
+          "project_id": 99779,
+          "value": "2336832.19"
+        },
+        {
+          "project_id": 99932,
+          "value": "2336832.19"
+        }
+      ],
+      "funding_year": [
+        {
+          "project_id": 69861,
+          "value": 2014
+        },
+        {
+          "project_id": 76986,
+          "value": 2016
+        },
+        {
+          "project_id": 77046,
+          "value": 2016
+        },
+        {
+          "project_id": 79740,
+          "value": 2024
+        },
+        {
+          "project_id": 81863,
+          "value": 2024
+        },
+        {
+          "project_id": 84924,
+          "value": 2018
+        },
+        {
+          "project_id": 92375,
+          "value": 2024
+        },
+        {
+          "project_id": 93581,
+          "value": 2024
+        },
+        {
+          "project_id": 96503,
+          "value": 2018
+        },
+        {
+          "project_id": 99633,
+          "value": 2024
+        },
+        {
+          "project_id": 99779,
+          "value": 2024
+        },
+        {
+          "project_id": 99932,
+          "value": 2024
+        }
+      ],
+      "project_category_id": [
+        {
+          "project_id": 69861,
+          "value": "01"
+        },
+        {
+          "project_id": 76986,
+          "value": "01"
+        },
+        {
+          "project_id": 77046,
+          "value": "01"
+        },
+        {
+          "project_id": 79740,
+          "value": "12"
+        },
+        {
+          "project_id": 81863,
+          "value": "04"
+        },
+        {
+          "project_id": 84924,
+          "value": "12"
+        },
+        {
+          "project_id": 92375,
+          "value": "12"
+        },
+        {
+          "project_id": 93581,
+          "value": "04"
+        },
+        {
+          "project_id": 96503,
+          "value": "12"
+        },
+        {
+          "project_id": 99633,
+          "value": "12"
+        },
+        {
+          "project_id": 99779,
+          "value": "12"
+        },
+        {
+          "project_id": 99932,
+          "value": "12"
+        }
+      ]
+    }
+  }
+]
