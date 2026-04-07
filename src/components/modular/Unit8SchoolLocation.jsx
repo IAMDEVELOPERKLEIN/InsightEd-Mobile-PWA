@@ -21,6 +21,8 @@ const Unit8SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [isCertified, setIsCertified] = React.useState(false);
     const [isReadOnly, setIsReadOnly] = React.useState(propReadOnly || false);
     const [loading, setLoading] = React.useState(true);
+    const [showOfflineSuccess, setShowOfflineSuccess] = React.useState(false);
+    const [pendingUnit8, setPendingUnit8] = React.useState(null);
 
     const { user, authLoading } = useAuth();
     const schoolId = targetSchoolId || user?.school_id || localStorage.getItem('schoolId');
