@@ -123,7 +123,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         }
 
         return sum;
-    }, [kinderEnrollment, gradeTotals, activeMonogrades, mgCombinations, hasSNED, snedTotalCount, snedProgramType, gradeGenderMap]);
+    }, [kinderEnrollment, gradeTotals, activeMonogrades, mgCombinations, hasSNED, snedProgramType, gradeGenderMap]);
 
     const genderSum = useMemo(() => {
         // We sum up the final mapping that will actually be saved
@@ -829,7 +829,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     label: "Unit 2: Learner Profile",
                     url: `/api/ph_schools/unit2/${storedId}`,
                     method: 'PUT',
-                    payload: { iern, unit2_simplified_enrollment: payload, has_sned: hasSNED, sned_total_count: parseInt(snedTotalCount) || 0, sned_program_type: snedProgramType, sned_organized_class_count: parseInt(snedOrganizedClassCount) || 0, multigrade_groupings_1: mg_1, multigrade_groupings_2: mg_2, multigrade_groupings_3: mg_3, multigrade_enrollment_1: mg_1_enrollment, multigrade_enrollment_2: mg_2_enrollment, multigrade_enrollment_3: mg_3_enrollment, gradeGenderMap },
+                    payload: { iern, unit2_simplified_enrollment: payload, has_sned: hasSNED, sned_total_count: parseInt(snedSelfContainedCount) || 0, sned_program_type: snedProgramType, sned_organized_class_count: parseInt(snedOrganizedClassCount) || 0, multigrade_groupings_1: mg_1, multigrade_groupings_2: mg_2, multigrade_groupings_3: mg_3, multigrade_enrollment_1: mg_1_enrollment, multigrade_enrollment_2: mg_2_enrollment, multigrade_enrollment_3: mg_3_enrollment, gradeGenderMap },
                     schoolId: storedId
                 });
                 await clearUnitDraft(2, storedId);
@@ -1129,7 +1129,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         if (currentStep === 5) {
             if (hasSNED === false) return true;
             if (hasSNED === true) {
-                if (!snedTotalCount) return false;
+                if (!snedMainstreamedCount && !snedSelfContainedCount) return false;
                 if (!snedProgramType) return false;
                 if (snedProgramType === 'Self-Contained' && !snedOrganizedClassCount) return false;
                 const hasGender = gradeGenderMap['sned']?.male !== undefined && gradeGenderMap['sned']?.male !== "";
