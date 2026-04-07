@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { FiX, FiCheckCircle, FiEdit2, FiUsers, FiChevronRight, FiChevronLeft, FiAlertTriangle, FiCheck, FiActivity, FiUnlock, FiSave, FiArrowLeft } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
-import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox } from "../../db";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_CHAPTERS = 5; // 1: Gatekeeper, 2: Demo Loop, 3: Move Loop, 4: Health Check, 5: Review & Submit
@@ -388,6 +388,22 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
             console.log("UNIT 4 PAYLOAD BEFORE SUBMISSION:", payload);
 
+            if (!navigator.onLine) {
+                // OFFLINE SAVE
+                await addModularToOutbox({
+                    unitId: 4,
+                    label: "Unit 4: Learner Profile Stats",
+                    url: `/api/ph_schools/unit4/${schoolId}`,
+                    method: 'PUT',
+                    payload: payload,
+                    schoolId: schoolId
+                });
+                await clearUnitDraft(4, schoolId);
+                alert("Working Offline: Unit 4 has been saved to your Sync Center.");
+                navigate("/modular-dashboard");
+                return;
+            }
+
             let res;
             try {
                 res = await fetch(`/api/ph_schools/unit4/${schoolId}`, {
@@ -427,7 +443,21 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             setShowSuccess(true);
         } catch (err) {
             console.error("UNIT 4 BOTTLENECK CATCH:", err);
-            alert("Failed to save data. " + err.message);
+            if (!navigator.onLine || err.message.includes('fetch') || err.message.includes('Network error')) {
+                await addModularToOutbox({
+                    unitId: 4,
+                    label: "Unit 4: Learner Profile Stats",
+                    url: `/api/ph_schools/unit4/${schoolId}`,
+                    method: 'PUT',
+                    payload: payload,
+                    schoolId: schoolId
+                });
+                await clearUnitDraft(4, schoolId);
+                alert("Connection Interrupted: Unit 4 saved to Sync Center.");
+                navigate("/modular-dashboard");
+            } else {
+                alert("Failed to save data. " + err.message);
+            }
         } finally {
             setLoading(false);
         }

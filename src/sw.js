@@ -39,12 +39,72 @@ self.addEventListener('sync', (event) => {
         console.log('[ServiceWorker] Sync event fired: sync-facility-repairs');
         event.waitUntil(syncFacilityRepairs());
     }
+    if (event.tag === 'sync-modular-outbox') {
+        console.log('[ServiceWorker] Sync event fired: sync-modular-outbox');
+        event.waitUntil(syncModularOutbox());
+    }
 });
 
 // 5. Facility Repairs Background Sync
 const REPAIR_DB_NAME = 'InsightEd_Outbox';
 const REPAIR_DB_VERSION = 10;
 const REPAIR_STORE_NAME = 'facility_repairs';
+const MODULAR_STORE_NAME = 'modular_outbox';
+
+async function syncModularOutbox() {
+    console.log('[ServiceWorker] Starting modular outbox sync...');
+    try {
+        const items = await getAllModularFromDB();
+        if (!items || items.length === 0) {
+            console.log('[ServiceWorker] No modular items to sync.');
+            return;
+        }
+        console.log(`[ServiceWorker] Found ${items.length} modular items to sync.`);
+
+        for (const item of items) {
+            try {
+                const response = await fetch(item.url, {
+                    method: item.method || 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(item.payload),
+                });
+                if (response.ok) {
+                    console.log(`[ServiceWorker] Successfully synced modular unit=${item.unitId} id=${item.id}`);
+                    await deleteModularFromDB(item.id);
+                } else {
+                    console.error(`[ServiceWorker] Server error for modular id=${item.id}. Status: ${response.status}`);
+                }
+            } catch (err) {
+                console.error(`[ServiceWorker] Failed to sync modular item:`, err);
+            }
+        }
+        console.log('[ServiceWorker] Modular outbox sync complete.');
+    } catch (err) {
+        console.error('[ServiceWorker] Error during modular outbox sync:', err);
+    }
+}
+
+async function getAllModularFromDB() {
+    const db = await openRepairDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([MODULAR_STORE_NAME], 'readonly');
+        const store = transaction.objectStore(MODULAR_STORE_NAME);
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = (event) => reject(event.target.error);
+    });
+}
+
+async function deleteModularFromDB(id) {
+    const db = await openRepairDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([MODULAR_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(MODULAR_STORE_NAME);
+        const request = store.delete(id);
+        request.onsuccess = () => resolve();
+        request.onerror = (event) => reject(event.target.error);
+    });
+}
 
 async function syncFacilityRepairs() {
     console.log('[ServiceWorker] Starting facility repairs sync...');
@@ -95,6 +155,9 @@ function openRepairDB() {
             if (!db.objectStoreNames.contains(REPAIR_STORE_NAME)) {
                 const store = db.createObjectStore(REPAIR_STORE_NAME, { keyPath: 'local_id', autoIncrement: true });
                 store.createIndex('iern', 'iern', { unique: false });
+            }
+            if (!db.objectStoreNames.contains(MODULAR_STORE_NAME)) {
+                db.createObjectStore(MODULAR_STORE_NAME, { keyPath: 'id', autoIncrement: true });
             }
         };
     });

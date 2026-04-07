@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { FiX, FiCheckCircle, FiCheck, FiChevronRight, FiChevronLeft, FiLayers, FiUsers, FiUnlock, FiSave, FiArrowLeft, FiAlertTriangle } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
-import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox } from "../../db";
+import { useAuth } from "../../context/AuthContext";
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const chunkyInput = "w-full p-4 mt-2 bg-gray-50 border-2 border-slate-200 rounded-2xl text-xl font-black text-slate-700 text-center focus:outline-none focus:border-indigo-500 focus:bg-indigo-50 hover:border-slate-300 transition-colors shadow-sm disabled:opacity-50 disabled:bg-slate-100";
@@ -105,6 +106,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     const [currentStep, setCurrentStep] = useState(0);
     const [mgSubStep, setMgSubStep] = useState('overview'); // 'overview' | 'distribution' — for multigrade grade steps
 
+    const { user, authLoading } = useAuth();
     // Form State
     const [sectionData, setSectionData] = useState({});
 
@@ -271,10 +273,11 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
 
     useEffect(() => {
         const init = async () => {
+            if (authLoading) return;
             setIsFetching(true);
             setFetchError(null);
             
-            const storedId = targetSchoolId || localStorage.getItem("schoolId");
+            const storedId = targetSchoolId || user?.school_id || localStorage.getItem("schoolId");
             if (!storedId) {
                 setFetchError("School ID not found. Please re-login.");
                 setIsFetching(false);
@@ -366,7 +369,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             }
         };
         init();
-    }, []);
+    }, [targetSchoolId, user?.school_id, authLoading]);
 
     const handleChange = (gradeId, field, value) => {
         let val = value;
@@ -484,6 +487,22 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 }
             });
 
+            if (!navigator.onLine) {
+                // OFFLINE SAVE
+                await addModularToOutbox({
+                    unitId: 3,
+                    label: "Unit 3: Section Organization",
+                    url: `/api/ph_schools/unit3/${schoolId}`,
+                    method: 'PUT',
+                    payload: payload,
+                    schoolId: schoolId
+                });
+                await clearUnitDraft(3, schoolId);
+                alert("Working Offline: Unit 3 section data saved to your Sync Center.");
+                navigate("/modular-dashboard");
+                return;
+            }
+
             const res = await fetch(`/api/ph_schools/unit3/${schoolId}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -513,7 +532,22 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             await clearUnitDraft(3, schoolId);
             setShowSuccess(true);
         } catch (err) {
-            alert(err.message);
+            console.error("Unit 3 Submit error:", err);
+            if (!navigator.onLine || err.message.includes('fetch')) {
+                await addModularToOutbox({
+                    unitId: 3,
+                    label: "Unit 3: Section Organization",
+                    url: `/api/ph_schools/unit3/${schoolId}`,
+                    method: 'PUT',
+                    payload: payload,
+                    schoolId: schoolId
+                });
+                await clearUnitDraft(3, schoolId);
+                alert("Network Interrupted: Progress saved to Sync Center.");
+                navigate("/modular-dashboard");
+            } else {
+                alert(err.message);
+            }
         }
         setLoading(false);
     };

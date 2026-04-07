@@ -4,7 +4,7 @@ import { FiX, FiCheckCircle, FiEdit2, FiCheck, FiArrowRight, FiArrowLeft, FiChev
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import BottomNav from "../../modules/BottomNav";
-import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox } from "../../db";
 import { MapContainer, TileLayer, Marker, Popup, Rectangle, Polygon, useMapEvents, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -725,7 +725,6 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
     };
 
     const handleMasterSubmit = async () => {
-        // Phase 2 Step 3 & 4 Validation: Ensure "Repair" rooms have assessments
         const repairRooms = roomsData.filter(r => r.condition === 'Repair');
         const unassessedRooms = repairRooms.filter(room => {
             const building = buildings.find(b => b.id === room.building_local_id);
@@ -738,23 +737,16 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
         if (unassessedRooms.length > 0) {
             alert(`Validation Error: Please provide repair details for "${unassessedRooms[0].room_name}" in Step 4 before finalizing.`);
-            setCurrentPage(4); // Take them to Step 4
+            setCurrentPage(4);
             return;
         }
 
         const confirmSubmit = window.confirm("Are you sure you want to finalize and save this entire Unit 7 Audit?");
         if (!confirmSubmit) return;
 
+        setLoading(true);
         try {
-            setLoading(true);
-
-            // Phase 2 Step 1 & 2: Building Inventory
             const inventoryPayload = buildings;
-
-            // Phase 2 Step 3: Granular Room Setup
-            // roomsData is already flat
-
-            // Phase 2 Step 4: Repair Assessments
             const repairPayload = repairAssessments.map(a => ({
                 building_no: a.building_name,
                 room_no: a.room_name,
@@ -767,9 +759,6 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 remarks: a.remarks
             }));
 
-            // Phase 3: Demolitions
-
-            // Summary counts for school profile
             const build_classrooms_total = roomsData.length;
             const build_classrooms_new = roomsData.filter(r => buildings.find(b => b.id === r.building_local_id)?.status === "Newly Built").length;
             const build_classrooms_good = roomsData.filter(r => buildings.find(b => b.id === r.building_local_id)?.status === "Good Condition").length;
@@ -779,38 +768,34 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 return b && (b.status === "For Condemnation" || b.status === "Condemned");
             }).length;
 
-            console.log("--- FINAL PAYLOAD TO BACKEND ---");
-            console.log("Inventory:", inventoryPayload);
-            console.log("Rooms:", roomsData);
-            console.log("Repairs:", repairPayload);
+            const payload = {
+                schoolId, school_id: schoolId, iern: schoolData?.iern,
+                inventoryEntries: inventoryPayload, rooms: roomsData, repairEntries: repairPayload,
+                build_classrooms_total, build_classrooms_new, build_classrooms_good, 
+                build_classrooms_repair, build_classrooms_demolition
+            };
 
-            // Send all data to the backend master endpoint
+            if (!navigator.onLine) {
+                await addModularToOutbox({
+                    unitId: 7, label: "Unit 7: Physical Facilities (Inventory & Mapping)",
+                    url: `/api/save-physical-facilities`, method: 'POST',
+                    payload, schoolId
+                });
+                await clearUnitDraft(7, schoolId);
+                alert("Working Offline: Unit 7 has been saved to your Sync Center.");
+                navigate("/modular-dashboard");
+                return;
+            }
+
             const masterRes = await fetch(`/api/save-physical-facilities`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    schoolId: schoolId,
-                    school_id: schoolId, // Backward fallback
-                    iern: schoolData?.iern,
-                    inventoryEntries: inventoryPayload,
-                    rooms: roomsData,
-                    repairEntries: repairPayload,
-                    // Classroom profile data
-                    build_classrooms_total,
-                    build_classrooms_new,
-                    build_classrooms_good,
-                    build_classrooms_repair,
-                    build_classrooms_demolition
-                })
+                body: JSON.stringify(payload)
             });
 
-            if (!masterRes.ok) {
-                const errorData = await masterRes.json().catch(() => null);
-                console.error("Master Submission Error Response:", errorData);
-                throw new Error("Failed to submit Unit 7 master payload.");
-            }
+            if (!masterRes.ok) throw new Error("Failed to submit Unit 7 master payload.");
 
-            // Force Unit 7 completion XP if not done
+            // XP Logic
             const stored = localStorage.getItem('quest_progress');
             let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
             if (!progress.completedUnits.includes(7)) {
@@ -819,27 +804,50 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 localStorage.setItem('quest_progress', JSON.stringify(progress));
             }
 
-            // Mandatory Sync to backend on every successful save to update timestamp
+            // Optional background sync for metrics
             fetch('/api/user/progress', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    unitId: 7,
-                    schoolId: schoolId,
-                    duration_seconds: 0 // Optional
-                })
-            }).catch(err => console.error("[Unit 7 Sync Error]:", err));
+                body: JSON.stringify({ unitId: 7, schoolId, duration_seconds: 0 })
+            }).catch(e => console.error("[Unit 7 Sync Error]:", e));
 
             setShowSuccess(true);
             await clearUnitDraft(7, schoolId);
-            // Redirection happens via SuccessModal onClose or we can delay it
-            setTimeout(() => {
-                navigate("/modular-dashboard");
-            }, 3000);
-
+            setTimeout(() => navigate("/modular-dashboard"), 3000);
         } catch (err) {
-            console.error("Master submission failed", err);
-            alert("Failed to submit master payload.");
+            console.error("UNIT 7 SUBMIT ERROR:", err);
+            if (!navigator.onLine || err.message.includes('fetch')) {
+                const build_classrooms_total = roomsData.length;
+                const build_classrooms_new = roomsData.filter(r => buildings.find(b => b.id === r.building_local_id)?.status === "Newly Built").length;
+                const build_classrooms_good = roomsData.filter(r => buildings.find(b => b.id === r.building_local_id)?.status === "Good Condition").length;
+                const build_classrooms_repair = roomsData.filter(r => r.condition === 'Repair').length;
+                const build_classrooms_demolition = roomsData.filter(r => {
+                    const b = buildings.find(bld => bld.id === r.building_local_id);
+                    return b && (b.status === "For Condemnation" || b.status === "Condemned");
+                }).length;
+                
+                await addModularToOutbox({
+                    unitId: 7, label: "Unit 7: Physical Facilities (Inventory & Mapping)",
+                    url: `/api/save-physical-facilities`, method: 'POST',
+                    payload: {
+                        schoolId, school_id: schoolId, iern: schoolData?.iern,
+                        inventoryEntries: buildings, rooms: roomsData, 
+                        repairEntries: repairAssessments.map(a => ({
+                            building_no: a.building_name, room_no: a.room_name, item_name: a.item, oms: a.oms,
+                            condition: a.condition, damage_ratio: a.damage_ratio, recommended_action: a.recommend_action,
+                            demo_justification: a.demo_justification, remarks: a.remarks
+                        })),
+                        build_classrooms_total, build_classrooms_new, build_classrooms_good, 
+                        build_classrooms_repair, build_classrooms_demolition
+                    },
+                    schoolId
+                });
+                await clearUnitDraft(7, schoolId);
+                alert("Connection Interrupted: Progress saved to Sync Center.");
+                navigate("/modular-dashboard");
+            } else {
+                alert("Failed to submit master payload.");
+            }
         } finally {
             setLoading(false);
         }

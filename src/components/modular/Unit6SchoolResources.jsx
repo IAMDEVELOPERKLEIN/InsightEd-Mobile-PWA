@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { FiX, FiCheckCircle, FiChevronRight, FiCheck, FiArrowLeft, FiTrash2, FiPlus, FiUnlock, FiMonitor, FiDroplet, FiSave, FiAlertTriangle, FiAlertCircle } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
-import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox } from "../../db";
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const chunkyInput = "w-full p-4 mt-2 bg-gray-50 border-2 border-gray-200 rounded-2xl text-lg font-black text-gray-700 focus:outline-none focus:border-indigo-500 focus:bg-indigo-50 transition-colors shadow-sm text-center";
@@ -826,6 +826,22 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 iern: iern
             };
 
+            if (!navigator.onLine) {
+                // OFFLINE SAVE
+                await addModularToOutbox({
+                    unitId: 6,
+                    label: "Unit 6: School Resources (Furniture, ICT, WASH)",
+                    url: `/api/ph_schools/${storedId}`,
+                    method: 'PUT',
+                    payload: payload,
+                    schoolId: storedId
+                });
+                await clearUnitDraft(6, storedId);
+                alert("Working Offline: Unit 6 data saved to your Sync Center.");
+                navigate("/modular-dashboard");
+                return;
+            }
+
             const res = await fetch(`/api/ph_schools/${storedId}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -880,8 +896,46 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 setLoading(false);
             }
         } catch (e) {
-            console.error(e);
-            alert("Error saving resources.");
+            console.error("UNIT 6 SUBMIT ERROR:", e);
+            if (!navigator.onLine || e.message.includes('fetch')) {
+                // FALLBACK TO OUTBOX
+                const payload = {
+                    unit7_furniture: JSON.stringify({ grades: gradesData.filter(g => g.isVerified), general: generalRoomsData }),
+                    unit7_ict: JSON.stringify(ictData),
+                    unit7_has_ecart: hasEcart,
+                    unit7_ecarts: JSON.stringify(eCarts),
+                    unit7_wash: JSON.stringify(washData),
+                    unit7_utilities: JSON.stringify(utilitiesData),
+                    unit7_completed: true,
+                    u7_ict_smart_tv_cond: ictData.smart_tvs_cond,
+                    u7_ict_projector_cond: ictData.projectors_cond,
+                    u7_ict_printer_cond: ictData.printers_cond,
+                    u7_wash_male_seats_cond: washData.male_seats_cond,
+                    u7_wash_female_seats_cond: washData.female_seats_cond,
+                    u7_wash_common_seats_cond: washData.common_seats_cond,
+                    u7_wash_pwd_seats_cond: washData.pwd_seats_cond,
+                    u7_wash_faucets_cond: washData.faucets_cond,
+                    u7_confirm_no_grid: (utilitiesData.confirm_no_grid_text || "").toLowerCase() === "confirm",
+                    u7_confirm_no_piped: (washData.confirm_no_piped_text || "").toLowerCase() === "confirm",
+                    u7_confirm_zero_wash: (washData.confirm_zero_wash_text || "").toLowerCase() === "confirm",
+                    u7_confirm_no_wired: (utilitiesData.confirm_no_wired_text || "").toLowerCase() === "confirm",
+                    u7_utility_internet_type: utilitiesData.utility_internet_type,
+                    iern: iern
+                };
+                await addModularToOutbox({
+                    unitId: 6,
+                    label: "Unit 6: School Resources (Furniture, ICT, WASH)",
+                    url: `/api/ph_schools/${storedId}`,
+                    method: 'PUT',
+                    payload: payload,
+                    schoolId: storedId
+                });
+                await clearUnitDraft(6, storedId);
+                alert("Connection Interrupted: Progress saved to Sync Center.");
+                navigate("/modular-dashboard");
+            } else {
+                alert("Error saving resources.");
+            }
             setLoading(false);
         }
     };

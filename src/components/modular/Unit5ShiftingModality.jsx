@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { FiX, FiArrowLeft, FiCheckCircle, FiEdit2, FiCheck, FiClock, FiAlertTriangle, FiMonitor, FiRadio, FiBook, FiLayers, FiUnlock, FiSave } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
-import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox } from "../../db";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_CHAPTERS = 4; // 1: Gatekeeper, 2: Grade Loop, 3: ADM, 4: Review
@@ -362,6 +362,22 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 ...finalAdm
             };
             
+            if (!navigator.onLine) {
+                // OFFLINE SAVE
+                await addModularToOutbox({
+                    unitId: 5,
+                    label: "Unit 5: Shifting & Modality",
+                    url: `/api/ph_schools/unit5/${schoolId}`,
+                    method: 'PUT',
+                    payload: payload,
+                    schoolId: schoolId
+                });
+                await clearUnitDraft(5, schoolId);
+                alert("Working Offline: Unit 5 has been saved to your Sync Center.");
+                navigate("/modular-dashboard");
+                return;
+            }
+
             const res = await fetch(`/api/ph_schools/unit5/${schoolId}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -396,7 +412,22 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             await clearUnitDraft(5, schoolId);
             setShowSuccess(true);
         } catch (err) {
-            alert("Failed to save data. " + err.message);
+            console.error("UNIT 5 SUBMIT ERROR:", err);
+            if (!navigator.onLine || err.message.includes('fetch')) {
+                await addModularToOutbox({
+                    unitId: 5,
+                    label: "Unit 5: Shifting & Modality",
+                    url: `/api/ph_schools/unit5/${schoolId}`,
+                    method: 'PUT',
+                    payload: { iern, has_standard_shifting: hasStandardShifting, ...mapData, ...finalAdm },
+                    schoolId: schoolId
+                });
+                await clearUnitDraft(5, schoolId);
+                alert("Connection Interrupted: Progress saved to Sync Center.");
+                navigate("/modular-dashboard");
+            } else {
+                alert("Failed to save data. " + err.message);
+            }
         } finally {
             setLoading(false);
         }

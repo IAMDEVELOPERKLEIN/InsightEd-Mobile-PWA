@@ -5,6 +5,7 @@ import logo from './assets/InsightEd1.png';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { FiLock } from 'react-icons/fi';
+import { saveUnitDraft, saveSchoolToCache } from './db';
 import PageTransition from './components/PageTransition';
 import Papa from 'papaparse';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
@@ -912,6 +913,49 @@ const Register = () => {
                     if (regData?.user?.uid) {
                         localStorage.setItem('uid', regData.user.uid);
                     }
+
+                    // AUTO-SEED UNIT 1 FOR OFFLINE READINESS
+                    try {
+                        // 1. Fetch FULL metadata from schools_IERN to get all location details (Barangay, Province, etc.)
+                        const iernFetch = await fetch(`/api/schools_iern/${selectedSchool.school_id}`).catch(() => null);
+                        let iernData = null;
+                        if (iernFetch?.ok) {
+                            const iernRes = await iernFetch.json();
+                            if (iernRes.exists) iernData = iernRes.data;
+                        }
+
+                        const src = iernData || selectedSchool;
+
+                        const seedData = {
+                            school_id: selectedSchool.school_id,
+                            school_name: (src.school_name || src.School_Name || "").trim(),
+                            region: (src.region || src.Region || selectedRegion || "").trim(),
+                            province: (src.province || src.Province || "").trim(),
+                            municipality: (src.municipality || src.Municipality || src.city || src.City || selectedMunicipality || "").trim(),
+                            barangay: (src.barangay || src.Barangay || "").trim(),
+                            division: (src.division || src.Division || src.Schools_Division_Office || src.SDO || selectedDivision || "").trim(),
+                            district: (src.district || src.District || src.Schools_District || selectedDistrict || "").trim(),
+                            leg_district: (src.leg_district || src.Leg_District || src.Legislative_District || "").trim(),
+                            latitude: src.latitude || src.Latitude || "",
+                            longitude: src.longitude || src.Longitude || "",
+                            iern: (src.iern || src.IERN || "").trim()
+                        };
+                        
+                        await saveUnitDraft(1, selectedSchool.school_id, { 
+                            step: 0, 
+                            formData: seedData,
+                            lastUpdated: Date.now(),
+                            isAutoSeeded: true 
+                        });
+
+                        // 3. ALSO CACHE EXPLICITLY FOR UNIT 1's SCHOOLS_CACHE (Backup)
+                        await saveSchoolToCache({ ...seedData, school_id: selectedSchool.school_id });
+                        
+                        console.log("UNIT 1 AUTO-SEEDED AND CACHED FOR OFFLINE READINESS");
+                    } catch (seedErr) {
+                        console.warn("Auto-seeding Unit 1 failed:", seedErr);
+                    }
+
                     navigate('/nodes-dashboard');
                     return;
                 } else {

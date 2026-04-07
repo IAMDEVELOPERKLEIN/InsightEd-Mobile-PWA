@@ -1,12 +1,78 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { clearProjectsCache } from '../db';
+import { clearProjectsCache, saveUnitDraft, getUnitDraft, saveSchoolToCache } from '../db';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+
+    // AUTO-SEED LOGIC FOR SCHOOL HEADS (ph_schools baseline)
+    const seedUnit1FromMaster = async (schoolId) => {
+        if (!schoolId) return;
+        try {
+            // Check if draft already exists to avoid overwriting user edits
+            const existing = await getUnitDraft(1, schoolId);
+            if (existing && !existing.isAutoSeeded) {
+                console.log("[AuthContext] Unit 1 draft exists, skipping master seed.");
+                return;
+            }
+
+            console.log(`[AuthContext] Seeding Unit 1 baseline for ${schoolId}...`);
+            
+            // PRIORITY 1: Fetch authoritative registry data from schools_IERN
+            const iernFetch = await fetch(`/api/schools_iern/${schoolId}`).catch(() => null);
+            let registryData = null;
+            if (iernFetch?.ok) {
+                const iernRes = await iernFetch.json();
+                if (iernRes.exists) registryData = iernRes.data;
+            }
+
+            // PRIORITY 2: Fallback to ph_schools master list if registry is missing
+            let masterData = null;
+            if (!registryData) {
+                const masterRes = await fetch(`/api/ph_schools/${schoolId}`).catch(() => null);
+                if (masterRes?.ok) {
+                    const mJ = await masterRes.json();
+                    if (mJ.exists) masterData = mJ.data;
+                }
+            }
+
+            const src = registryData || masterData;
+
+            if (src) {
+                const seedData = {
+                    school_id: schoolId,
+                    school_name: (src.school_name || src.School_Name || "").trim(),
+                    region: (src.region || src.Region || "").trim(),
+                    province: (src.province || src.Province || "").trim(),
+                    municipality: (src.municipality || src.Municipality || src.city || src.City || "").trim(),
+                    barangay: (src.barangay || src.Barangay || "").trim(),
+                    division: (src.division || src.Division || src.Schools_Division_Office || src.SDO || "").trim(),
+                    district: (src.district || src.District || src.Schools_District || "").trim(),
+                    leg_district: (src.leg_district || src.Leg_District || src.Legislative_District || "").trim(),
+                    latitude: src.latitude || src.Latitude || src.lat || "",
+                    longitude: src.longitude || src.Longitude || src.long || "",
+                    iern: (src.iern || src.IERN || "").trim()
+                };
+                
+                await saveUnitDraft(1, schoolId, { 
+                    step: 0, 
+                    formData: seedData,
+                    isAutoSeeded: true,
+                    lastUpdated: Date.now()
+                });
+
+                // ALSO CACHE FOR SCHOOL ID WATCHER (OFFLINE REGISTRY)
+                await saveSchoolToCache({ ...seedData, school_id: schoolId });
+
+                console.log("[AuthContext] Unit 1 baseline successfully seeded and cached.");
+            }
+        } catch (err) {
+            console.warn("[AuthContext] School profile background seed failed:", err);
+        }
+    };
 
     useEffect(() => {
         const initAuth = async () => {
@@ -37,7 +103,11 @@ export const AuthProvider = ({ children }) => {
                         // Sync session data for components relying on localStorage
                         if (userData.uid) localStorage.setItem('userId', userData.uid);
                         if (userData.role) localStorage.setItem('userRole', userData.role);
-                        if (userData.school_id) localStorage.setItem('schoolId', userData.school_id);
+                        if (userData.school_id) {
+                            localStorage.setItem('schoolId', userData.school_id);
+                            // Background seed task
+                            seedUnit1FromMaster(userData.school_id);
+                        }
                     } else {
                         // Token invalid or expired
                         localStorage.removeItem('token');
@@ -76,7 +146,11 @@ export const AuthProvider = ({ children }) => {
         // Ensure consistent identity storage
         if (userData.uid) localStorage.setItem('userId', userData.uid);
         if (userData.role) localStorage.setItem('userRole', userData.role);
-        if (userData.school_id) localStorage.setItem('schoolId', userData.school_id);
+        if (userData.school_id) {
+            localStorage.setItem('schoolId', userData.school_id);
+            // Background seed task
+            seedUnit1FromMaster(userData.school_id);
+        }
         
         setUser(userData);
     };

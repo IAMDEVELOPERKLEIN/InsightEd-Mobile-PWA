@@ -43,6 +43,7 @@ import NonDepEdDashboard from './modules/NonDepEdDashboard'; // Dedicated Dashbo
 import LguForms from './modules/LguForms'; // Import newly created LguForms
 import LguProjectDetails from './modules/LguProjectDetails'; // Import LguProjectDetails
 import PSIP from './modules/PSIP'; // Import PSIP
+import SyncCenter from './modules/SyncCenter'; // Sync Center for modular units
 import ProtectedRoute from './components/ProtectedRoute'; // Import ProtectedRoute
 import PasscodeSetupPrompt from './components/PasscodeSetupPrompt'; // <--- IMPORT THIS
 import EFDHome from './modules/EFDHome';
@@ -381,6 +382,7 @@ const AnimatedRoutes = () => {
       <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
       <Route path="/activities" element={<ProtectedRoute><Activity /></ProtectedRoute>} />
       <Route path="/outbox" element={<ProtectedRoute><Outbox /></ProtectedRoute>} />
+      <Route path="/sync-center" element={<ProtectedRoute allowedRoles={['School Head']}><SyncCenter /></ProtectedRoute>} />
       <Route path="/engineer-outbox" element={<ProtectedRoute><EngineerOutbox /></ProtectedRoute>} />
 
       {/* School Head Forms */}

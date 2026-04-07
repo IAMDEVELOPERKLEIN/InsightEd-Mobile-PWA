@@ -55,7 +55,7 @@ export const resolveAssetUrl = (rawPath, opts = {}) => {
  */
 export const resolveDocUrl = (value, opts = {}) => {
     if (!value) return '#';
-    if (value.startsWith('data:') || value.startsWith('http')) return value;
+    if (value.startsWith('data:') || value.startsWith('http') || value.startsWith('blob:') || value.startsWith('local:')) return value;
     if (value.startsWith('/')) return resolveAssetUrl(value, opts);
     // Legacy: raw base64 string
     return `data:application/pdf;base64,${value}`;

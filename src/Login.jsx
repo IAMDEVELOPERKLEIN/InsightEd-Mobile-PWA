@@ -7,6 +7,7 @@ import PageTransition from './components/PageTransition';
 import LoadingScreen from './components/LoadingScreen';
 import PinLogin from './components/PinLogin';
 import { FiArrowLeft } from 'react-icons/fi';
+import { saveSchoolToCache } from './db';
 
 
 import { getRoleGroup, ROLE_GROUPS } from './config/roleGroups';
@@ -315,6 +316,18 @@ const Login = () => {
 
                 if (data.user.school_id) {
                     localStorage.setItem('schoolId', data.user.school_id);
+                    
+                    // PROACTIVE CACHING FOR OFFLINE READINESS (UNIT 1 AUTOFILL)
+                    try {
+                        const iernRes = await fetch(`/api/schools_iern/${data.user.school_id}`).catch(() => null);
+                        if (iernRes?.ok) {
+                            const iernData = await iernRes.json();
+                            if (iernData.exists && iernData.data) {
+                                await saveSchoolToCache({ ...iernData.data, school_id: data.user.school_id });
+                                console.log("💾 [Login] School Registry cached for offline use.");
+                            }
+                        }
+                    } catch (e) { console.warn("Background school caching failed:", e); }
                 }
 
                 // PIN setup check for password logins

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowRight, FiCheckCircle, FiChevronLeft, FiAlertTriangle, FiUnlock, FiSave, FiArrowLeft, FiCheck } from 'react-icons/fi';
+import { FiArrowRight, FiCheckCircle, FiChevronLeft, FiAlertTriangle, FiUnlock, FiSave, FiArrowLeft, FiCheck, FiWifiOff, FiEdit2 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import SuccessModal from '../SuccessModal';
-import { saveUnitDraft, getUnitDraft, clearUnitDraft } from '../../db';
+import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox } from '../../db';
 import { useAuth } from "../../context/AuthContext";
 
 // --- Shared Styles ---
@@ -39,8 +39,10 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [showSuccess, setShowSuccess] = useState(false);
     const [isReadOnly, setIsReadOnly] = useState(propReadOnly || false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
+    const [pendingOutboxId, setPendingOutboxId] = useState(null); 
+    const [showOfflineSuccess, setShowOfflineSuccess] = useState(false);
 
-    const { user } = useAuth();
+    const { user, authLoading } = useAuth();
     const [isReviewMode, setIsReviewMode] = useState(false); 
     const [showWelcomeBack, setShowWelcomeBack] = useState(false);
     const [showDraftModal, setShowDraftModal] = useState(false);
@@ -177,13 +179,50 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     // --- Init / Fetch Data ---
     useEffect(() => {
         const initData = async () => {
-            const storedId = targetSchoolId || localStorage.getItem('schoolId');
-            if (!storedId) {
-                setLoading(false);
-                return;
-            }
-
+            if (authLoading) return;
+            const storedId = targetSchoolId || user?.school_id || localStorage.getItem('schoolId');
+            
             try {
+                // PRIORITY 0: Check Sync Center (Outbox) for Unit 2's own pending submission
+                const outbox = await getModularOutbox().catch(() => []);
+                const pendingUnit2 = outbox.find(entry => entry.unitId === 2 && (entry.schoolId === storedId || entry.payload?.school_id === storedId));
+                
+                // Also check for pending Unit 1 to get latest Curricular Offering
+                const pendingUnit1 = outbox.find(entry => entry.unitId === 1 && (entry.schoolId === storedId || entry.payload?.school_id === storedId));
+
+                if (pendingUnit2) {
+                    console.log("📍 [Unit2] Found pending submission in Sync Center.");
+                    const p = pendingUnit2.payload;
+                    const questionnaire = p.unit2_simplified_enrollment?.questionnaire || p.unit2_simplified_enrollment;
+                    
+                    if (questionnaire) {
+                        setKinderEnrollment(questionnaire.kinderEnrollment || "");
+                        setGradeTotals(questionnaire.gradeTotals || {});
+                        setGradeAvailability(questionnaire.gradeAvailability || {});
+                        setHasSNED(questionnaire.hasSNED);
+                        setSnedTotalCount(questionnaire.snedTotalCount || "");
+                        setSnedProgramType(questionnaire.snedProgramType || null);
+                        setSnedOrganizedClassCount(questionnaire.snedOrganizedClassCount || "");
+                        setHasAralMath(questionnaire.hasAralMath);
+                        setAralMath(questionnaire.aralMath || {});
+                        setHasAralReading(questionnaire.hasAralReading);
+                        setAralReading(questionnaire.aralReading || {});
+                        setHasAralScience(questionnaire.hasAralScience);
+                        setAralScience(questionnaire.aralScience || {});
+                        setGradeGenderMap(questionnaire.gradeGenderMap || p.gradeGenderMap || {});
+                        setOrgType(questionnaire.orgType);
+                        setMgCombinations(questionnaire.mgCombinations || []);
+                    }
+                    
+                    setPendingOutboxId(pendingUnit2.id);
+                    setIsReviewMode(true);
+                    setIsReadOnly(true);
+                    // Don't return yet, we might need pendingUnit1 offering
+                }
+
+                if (!storedId) return;
+
+                // Load path
                 const res = await fetch(`/api/ph_schools/${storedId}`);
                 if (res.ok) {
                     const data = await res.json();
@@ -197,8 +236,9 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                             getUnitDraft(1, storedId)
                         ]);
 
-                        // Prioritization: Unit 1 Draft Cache (nested in formData) -> localStorage -> Database
-                        const storedOffering = draft1?.formData?.curricular_offering 
+                        // Prioritization: Outbox (Unit 1) -> Unit 1 Draft Cache -> localStorage -> Database
+                        const storedOffering = pendingUnit1?.payload?.curricular_offering
+                            || draft1?.formData?.curricular_offering 
                             || localStorage.getItem('schoolOffering') 
                             || d.curricular_offering
                             || "";
@@ -339,7 +379,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             }
         };
         initData();
-    }, []);
+    }, [targetSchoolId, user?.school_id, authLoading]);
 
     // ── Safety Guard: Ensure currentGradeIndex stays in bounds ──────────────────
     useEffect(() => {
@@ -702,6 +742,36 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             const mg_2_enrollment = mgCombinations.length > 1 ? mgCombinations[1].grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0) : null;
             const mg_3_enrollment = mgCombinations.length > 2 ? mgCombinations[2].grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0) : null;
 
+            if (!navigator.onLine) {
+                // OFFLINE SAVE
+                await addModularToOutbox({
+                    unitId: 2,
+                    label: "Unit 2: Learner Profile",
+                    url: `/api/ph_schools/unit2/${storedId}`,
+                    method: 'PUT',
+                    payload: { 
+                        iern,
+                        unit2_simplified_enrollment: payload,
+                        has_sned: hasSNED,
+                        sned_total_count: parseInt(snedTotalCount) || 0,
+                        sned_program_type: snedProgramType,
+                        sned_organized_class_count: parseInt(snedOrganizedClassCount) || 0,
+                        multigrade_groupings_1: mg_1,
+                        multigrade_groupings_2: mg_2,
+                        multigrade_groupings_3: mg_3,
+                        multigrade_enrollment_1: mg_1_enrollment,
+                        multigrade_enrollment_2: mg_2_enrollment,
+                        multigrade_enrollment_3: mg_3_enrollment,
+                        gradeGenderMap 
+                    },
+                    schoolId: storedId
+                });
+
+                await clearUnitDraft(2, storedId);
+                setShowOfflineSuccess(true);
+                return;
+            }
+
             const res = await fetch(`/api/ph_schools/unit2/${storedId}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -746,9 +816,33 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             }
         } catch (e) {
             console.error(e);
-            alert("An error occurred during save.");
+            if (!navigator.onLine || e.message.includes('fetch')) {
+                // FALLBACK TO OUTBOX
+                await addModularToOutbox({
+                    unitId: 2,
+                    label: "Unit 2: Learner Profile",
+                    url: `/api/ph_schools/unit2/${storedId}`,
+                    method: 'PUT',
+                    payload: { iern, unit2_simplified_enrollment: payload, has_sned: hasSNED, sned_total_count: parseInt(snedTotalCount) || 0, sned_program_type: snedProgramType, sned_organized_class_count: parseInt(snedOrganizedClassCount) || 0, multigrade_groupings_1: mg_1, multigrade_groupings_2: mg_2, multigrade_groupings_3: mg_3, multigrade_enrollment_1: mg_1_enrollment, multigrade_enrollment_2: mg_2_enrollment, multigrade_enrollment_3: mg_3_enrollment, gradeGenderMap },
+                    schoolId: storedId
+                });
+                await clearUnitDraft(2, storedId);
+                setShowOfflineSuccess(true);
+            } else {
+                alert("An error occurred during save.");
+            }
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleEditPending = async () => {
+        if (!pendingOutboxId) return;
+        if (window.confirm("Do you want to move this data back to 'Draft' mode to make changes? It will be removed from the Sync Center for now.")) {
+            await deleteModularFromOutbox(pendingOutboxId);
+            setPendingOutboxId(null);
+            setIsReadOnly(false);
+            setIsReviewMode(false);
         }
     };
 
@@ -795,6 +889,22 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     </span>
                     <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight">Enrollment Overview</h1>
                     <p className="text-slate-500 font-medium mt-2 italic">Verified via ESF7 Parity Registry</p>
+
+                    {pendingOutboxId && (
+                        <div className="mt-8 flex flex-col items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+                            <div className="inline-flex items-center gap-2 px-6 py-3 bg-amber-50 border-2 border-amber-100 rounded-full shadow-sm">
+                                <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                                <span className="text-[10px] font-black text-amber-700 uppercase tracking-[0.2em]">Pending Sync • Local Storage Ready</span>
+                            </div>
+                            <button 
+                                onClick={handleEditPending}
+                                className="px-8 py-4 bg-white border-2 border-slate-200 rounded-[2rem] text-[11px] font-black text-slate-600 uppercase tracking-widest hover:border-blue-300 hover:text-blue-600 active:scale-95 transition-all shadow-sm flex items-center gap-2 group"
+                            >
+                                <FiEdit2 className="w-4 h-4 text-slate-400 group-hover:text-blue-500" />
+                                Pull Back to Edit
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Grand Total Hero Card */}
@@ -2093,6 +2203,29 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     className="py-5 rounded-[2rem] bg-blue-600 text-white font-black text-lg shadow-xl shadow-blue-100 active:scale-95 transition-all">
                                     Save & Exit
                                 </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+            <AnimatePresence>
+                {showOfflineSuccess && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full rounded-t-[3rem] p-10 pb-12 shadow-2xl relative">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-amber-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-amber-200 mb-6 font-bold text-white">
+                                <FiWifiOff />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight px-4">Local Secure: Unit 2 Saved!</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-6">Your Learner Profile has been saved to the <strong>Sync Center</strong>. We will automatically update your school's official registry once your internet is restored.</p>
+                            
+                            <div className="mt-10">
+                                <button onClick={() => navigate("/modular-dashboard")}
+                                    className="w-full py-5 rounded-[2rem] bg-amber-600 text-white font-black text-lg shadow-xl shadow-amber-100 active:scale-95 transition-all">
+                                    Return to Modules Dashboard
+                                </button>
+                                <p className="text-[10px] text-amber-500 font-bold uppercase text-center mt-6 tracking-widest leading-loose">✓ Offline Mode • Auto-Sync Enabled ✓</p>
                             </div>
                         </motion.div>
                     </div>
