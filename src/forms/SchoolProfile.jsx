@@ -801,8 +801,8 @@ const SchoolProfile = ({ embedded }) => {
                                                 <option value="">Select Offering...</option>
                                                 <option value="Purely Elementary">Purely Elementary</option>
                                                 <option value="Elementary School and Junior High School (K-10)">Elementary School and Junior High School (K-10)</option>
-                                                <option value="All Offering (K-12)">All Offering (K-12)</option>
-                                                <option value="Junior and Senior High">Junior and Senior High</option>
+                                                <option value="All Offering (K to 12)">All Offering (K to 12)</option>
+                                                <option value="Junior High and Senior High">Junior High and Senior High</option>
                                                 <option value="Purely Junior High School">Purely Junior High School</option>
                                                 <option value="Purely Senior High School">Purely Senior High School</option>
                                             </select>

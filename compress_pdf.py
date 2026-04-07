@@ -51,7 +51,7 @@ def compress_pdf_fitz(input_path, output_path, dpi=96):
             out_doc = fitz.open()
             for page in doc:
                 pix = page.get_pixmap(dpi=dpi)
-                img_bytes = pix.tobytes("jpeg", jpg_quality=70)
+                img_bytes = pix.tobytes("jpeg", jpg_quality=65)
                 out_page = out_doc.new_page(width=page.rect.width, height=page.rect.height)
                 out_page.insert_image(page.rect, stream=img_bytes)
             out_doc.save(s3_path, garbage=4, deflate=True)

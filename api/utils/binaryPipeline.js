@@ -11,7 +11,7 @@ const execAsync = util.promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..', '..');
-const SCRIPT_PATH = path.join(ROOT_DIR, 'compress_pdf.py');
+const SCRIPT_PATH = path.resolve(process.cwd(), 'compress_pdf.py');
 
 const WEBP_MAX_WIDTH = 1200;
 const WEBP_QUALITY = 65;
@@ -52,7 +52,11 @@ export async function compressPDF(inputBuffer) {
                     break;
                 }
             } catch (err) {
-                // Try next command
+                const msg = err.stderr || err.stdout || err.message || '';
+                // Only log if it's a real Python error, not just a missing executor
+                if (!msg.includes('not recognized') && !msg.includes('not found') && !msg.includes('No such file')) {
+                    console.warn(`⚠️ [BinaryPipe-Compress] ${py} failed:`, msg);
+                }
             }
         }
 

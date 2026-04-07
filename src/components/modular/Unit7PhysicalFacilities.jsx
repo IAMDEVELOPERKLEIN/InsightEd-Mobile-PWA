@@ -210,12 +210,20 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                             }
                         }
 
-                        // 3. Filter out monogrades that are part of a MG group (optional but cleaner)
-                        // For Unit 7, it might be better to show both if the user wants to assign a room to a specific grade within a group,
-                        // but usually multigrade rooms are assigned to the group.
-                        // Let's stick to showing what Unit 2 defines as active.
+                        // 3. Filter out monogrades that are part of a MG group
+                        const mgGradeNumbers = new Set();
+                        mgGroups.forEach(mg => {
+                            const digits = mg.label.match(/\d+/g);
+                            if (digits) digits.forEach(d => mgGradeNumbers.add(d));
+                        });
+
+                        const filteredMonogrades = detectedGrades.filter(dg => {
+                            const digit = dg.id.replace(/\D/g, '');
+                            if (!digit) return true; // Keep Kinder or others without digits unless strictly needed
+                            return !mgGradeNumbers.has(digit);
+                        });
                         
-                        setAvailableGrades([...detectedGrades, ...mgGroups]);
+                        setAvailableGrades([...filteredMonogrades, ...mgGroups]);
                     }
                 }
 
@@ -1022,6 +1030,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                             <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Room Name</th>
                                             <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Level</th>
                                             <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Condition</th>
+                                            <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Seats</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
@@ -1039,6 +1048,9 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                         }`}>
                                                         {room.condition === 'Good Condition' || room.condition === 'Newly Built' ? <FiCheck className="w-3.5 h-3.5" /> : <FiAlertTriangle className="w-3.5 h-3.5" />}
                                                     </div>
+                                                </td>
+                                                <td className="px-4 py-4 text-center">
+                                                    <span className="font-bold text-slate-600 text-[11px] whitespace-nowrap">{room.seats || '--'}</span>
                                                 </td>
                                             </tr>
                                         ))}

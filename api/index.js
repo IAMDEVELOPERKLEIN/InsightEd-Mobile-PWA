@@ -229,7 +229,10 @@ const compressBufferTo96Dpi = async (buffer) => {
         const onDiskSize = fs.statSync(tempInput).size;
         console.log(`💾 [Storage-Verified] Temp file saved: ${tempInput} | size=${onDiskSize}B`);
         
-        const scriptPath = path.resolve(__dirname, '..', 'compress_pdf.py');
+        const scriptPath = path.resolve(process.cwd(), 'compress_pdf.py');
+        if (!fs.existsSync(scriptPath)) {
+            console.error(`❌ [PDF-Config] Critical: compress_pdf.py not found at ${scriptPath}`);
+        }
 
         // PROJECT HYDRA: If file is > 1.5MB, attempt Hydra Transformation (PDF to Image Sequence)
         if (buffer.length > 1.5 * 1024 * 1024) {
@@ -252,7 +255,7 @@ const compressBufferTo96Dpi = async (buffer) => {
                     if (msg.includes('not recognized') || msg.includes('not found') || msg.includes('No such file')) continue;
                     // Real Python error — log and stop trying further executors
                     hydraError = msg;
-                    console.warn(`⚠️ [Hydra-Fail] ${executor} failed:`, msg.split('\n').slice(0, 3).join(' | '));
+                    console.warn(`⚠️ [Hydra-Fail] ${executor} failed:`, msg); // Log full message for diagnostics
                     break;
                 }
             }
@@ -289,9 +292,9 @@ const compressBufferTo96Dpi = async (buffer) => {
                 compressSuccess = true;
                 break;
             } catch (e) {
-                const msg = e.stderr || e.message || '';
+                const msg = e.stderr || e.stdout || e.message || '';
                 if (msg.includes('not recognized') || msg.includes('not found') || msg.includes('No such file')) continue;
-                console.warn(`⚠️ [PDF-Compress] ${executor} failed:`, msg.split('\n')[0]);
+                console.warn(`⚠️ [PDF-Compress] ${executor} failed:`, msg); // Log full message for diagnostics
                 break;
             }
         }
@@ -1089,6 +1092,20 @@ const runAutoMigrations = async () => {
 
     await checkAndAddColumn('school_ownership_docs', 'ownership_document_type', 'TEXT', pool);
     if (poolNew) columnPromises.push(checkAndAddColumn('school_ownership_docs', 'ownership_document_type', 'TEXT', poolNew));
+
+    // SDO: School Documents (Binary Storage Migration)
+    await checkAndAddColumn('school_documents', 'binary_id', 'UUID', pool);
+    await checkAndAddColumn('school_documents', 'file_path', 'TEXT', pool);
+    await checkAndAddColumn('school_documents', 'file_size', 'BIGINT', pool);
+    await checkAndAddColumn('school_documents', 'original_size', 'BIGINT', pool);
+    await checkAndAddColumn('school_documents', 'hydra_manifest', 'JSONB', pool);
+    if (poolNew) {
+      await checkAndAddColumn('school_documents', 'binary_id', 'UUID', poolNew);
+      await checkAndAddColumn('school_documents', 'file_path', 'TEXT', poolNew);
+      await checkAndAddColumn('school_documents', 'file_size', 'BIGINT', poolNew);
+      await checkAndAddColumn('school_documents', 'original_size', 'BIGINT', poolNew);
+      await checkAndAddColumn('school_documents', 'hydra_manifest', 'JSONB', poolNew);
+    }
 
     // --- IERN MIGRATION PHASE ---
     if (!(await hasMigrationRun('iern_migration_v2'))) {
@@ -5301,24 +5318,129 @@ app.post('/api/admin/reset-password', async (req, res) => {
 //                SDO SCHOOL MANAGEMENT ENDPOINTS
 // ==================================================================
 
+// Helper to normalize Division Names (Stripping "SDO " or "SDO" prefix if it exists)
+const normalizeDivision = (div) => {
+  if (!div) return div;
+  return div.trim().replace(/^SDO\s*/i, '').trim();
+};
+
 // GET - SDO Location Options
 app.get('/api/sdo/location-options', async (req, res) => {
-  const { region, division } = req.query;
+  let { region, division } = req.query;
 
   if (!region || !division) {
     return res.status(400).json({ error: "Region and Division are required" });
   }
 
+  // Normalize division to handle "SDO " prefix mismatch
+  const originalDivision = division;
+  division = normalizeDivision(division);
+  if (originalDivision && originalDivision !== division) {
+    console.log(`[SDO API] Normalizing division for options: "${originalDivision}" -> "${division}"`);
+  }
+
+  // Helper to normalize Names (Fixing encoding issues like ?? -> Ñ)
+  const normalize = (str) => {
+    if (!str) return str;
+    // Replace ?? with Ñ and trim
+    return str.replace(/\?\?/g, 'Ñ').trim();
+  };
+
   try {
-    const result = await pool.query(`
+    // 1. Fetch Provinces, Municipalities, Districts, and Legislative Districts from all_locations
+    // We use all_locations as it's the most comprehensive for the SDO's jurisdiction.
+    const baseLocations = await pool.query(`
       SELECT DISTINCT 
-        "Province" as province, "Municipality" as municipality, "District" as district, "Legislative_District" as leg_district, "Barangay" as barangay
-      FROM "schools_IERN"
-      WHERE "Region" = $1 AND "Division" = $2
-      ORDER BY province, municipality, district, barangay
+        province, 
+        municipality, 
+        district, 
+        legislative_district as leg_district
+      FROM all_locations
+      WHERE UPPER(TRIM(region)) = UPPER(TRIM($1)) 
+        AND UPPER(TRIM(division)) = UPPER(TRIM($2))
+      ORDER BY province, municipality, district
     `, [region, division]);
 
-    res.json(result.rows);
+    // Cleanup encoding for the base locations
+    const cleanedBase = baseLocations.rows.map(r => ({
+        province: normalize(r.province),
+        municipality: normalize(r.municipality),
+        district: normalize(r.district),
+        leg_district: normalize(r.leg_district)
+    }));
+
+    // 2. Fetch Barangays from ph_barangays using the provinces/municipalities found
+    // We get the unique municipalities (normalized for matching)
+    const munsForMatch = [...new Set(cleanedBase.map(r => r.municipality.toUpperCase()))];
+    const provsForMatch = [...new Set(cleanedBase.map(r => r.province.toUpperCase()))];
+
+    const barangayResult = await pool.query(`
+      SELECT DISTINCT 
+        province, 
+        municipality, 
+        barangay
+      FROM ph_barangays
+      WHERE UPPER(TRIM(region)) = UPPER(TRIM($1))
+        AND (UPPER(TRIM(province)) = ANY($2) OR UPPER(REPLACE(TRIM(province), '??', 'Ñ')) = ANY($2))
+        AND (UPPER(TRIM(municipality)) = ANY($3) OR UPPER(REPLACE(TRIM(municipality), '??', 'Ñ')) = ANY($3))
+      ORDER BY province, municipality, barangay
+    `, [region, provsForMatch, munsForMatch]);
+
+    // Normalize barangay result as well
+    const cleanedBarangays = barangayResult.rows.map(r => ({
+        province: normalize(r.province),
+        municipality: normalize(r.municipality),
+        barangay: normalize(r.barangay)
+    }));
+
+    // 3. Merge results
+    const barangayMap = cleanedBarangays.reduce((acc, row) => {
+      const key = `${row.province.toUpperCase()}|${row.municipality.toUpperCase()}`;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(row.barangay);
+      return acc;
+    }, {});
+
+    const mergedRows = [];
+    cleanedBase.forEach(base => {
+      const key = `${base.province.toUpperCase()}|${base.municipality.toUpperCase()}`;
+      const barangays = barangayMap[key] || [];
+      
+      if (barangays.length > 0) {
+        barangays.forEach(bgy => {
+          mergedRows.push({
+            ...base,
+            barangay: bgy
+          });
+        });
+      } else {
+        // Fallback: If no barangays found in ph_barangays, try schools_IERN specifically
+        mergedRows.push({
+          ...base,
+          barangay: null
+        });
+      }
+    });
+
+    // Final fallback to schools_IERN if mergedRows is empty
+    if (mergedRows.length === 0) {
+        const iernResult = await pool.query(`
+            SELECT DISTINCT 
+                "Province" as province, "Municipality" as municipality, "District" as district, 
+                "Legislative_District" as leg_district, "Barangay" as barangay
+            FROM "schools_IERN"
+            WHERE "Region" = $1 AND "Division" = $2
+        `, [region, division]);
+        return res.json(iernResult.rows.map(r => ({
+            province: normalize(r.province),
+            municipality: normalize(r.municipality),
+            district: normalize(r.district),
+            leg_district: normalize(r.leg_district),
+            barangay: normalize(r.barangay)
+        })));
+    }
+
+    res.json(mergedRows);
   } catch (err) {
     console.error("Location Options Error:", err);
     res.status(500).json({ error: "Failed to fetch location options" });
@@ -5509,71 +5631,155 @@ app.post('/api/sdo/submit-school', async (req, res) => {
   }
 });
 
-// POST - SDO Upload Document (Base64)
-app.post('/api/sdo/upload-document', async (req, res) => {
-  const { pending_id, school_id, type, base64 } = req.body;
-
-  if (!type || !base64) {
-    return res.status(400).json({ error: "Document type and base64 data are required" });
+// POST - SDO Preview Compression (Real-time Feedback)
+app.post('/api/sdo/preview-compression', memoryUpload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "File is required" });
   }
 
   try {
+    const { buffer: compressedBuffer, hydraManifest } = await compressBufferTo96Dpi(req.file.buffer);
+    
+    res.json({
+      success: true,
+      original_size: req.file.size,
+      compressed_size: compressedBuffer.length,
+      hydra_triggered: !!hydraManifest,
+      shards_count: hydraManifest ? hydraManifest.length : 0
+    });
+  } catch (err) {
+    console.error("Preview Compression Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST - SDO Upload Document (Optimized Postgres Binary)
+app.post('/api/sdo/upload-document', memoryUpload.single('file'), async (req, res) => {
+  const { pending_id, school_id, type } = req.body;
+
+  if (!type || !req.file) {
+    return res.status(400).json({ error: "Document type and file are required" });
+  }
+
+  try {
+    // 1. Process File — PDF Optimization Engine (Ghostscript/Hydra)
+    let finalDocValue = null;
+    let finalBinaryId = null;
+    let finalHydraManifest = null;
+    let storedSize = req.file.size;
+    let originalSizeFound = req.file.size;
+
+    try {
+        const { buffer: compressedBuffer, hydraManifest } = await compressBufferTo96Dpi(req.file.buffer);
+        // CRITICAL: Pass req.file.size as originalSize to skip redundant compression in upsertBinary
+        const { binary_id, stored_size, original_size: returnedOrigSize } = await upsertBinary(pool, compressedBuffer, 'application/pdf', req.file.size);
+        
+        finalBinaryId = binary_id;
+        finalDocValue = `/api/asset/${binary_id}`;
+        storedSize = stored_size; 
+        finalHydraManifest = hydraManifest;
+        originalSizeFound = returnedOrigSize || req.file.size;
+        
+        console.log(`🗄️ [SDOUpload] Stored binary: ${binary_id} | size=${storedSize}B | hydra=${!!hydraManifest} | (orig=${req.file.size}B)`);
+    } catch (binErr) {
+        console.warn('⚠️ [SDOUpload] Binary pipeline failure, falling back to database column storage (Base64):', binErr.message);
+        // Fallback: Legacy base64 storage if binary pipeline fails
+        finalDocValue = `data:application/pdf;base64,${req.file.buffer.toString('base64')}`;
+        finalBinaryId = null;
+        storedSize = req.file.size;
+        originalSizeFound = req.file.size;
+    }
+
+    // 2. Save to database
     const query = `
-      INSERT INTO school_documents (pending_id, school_id, doc_type, file_data)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO school_documents (pending_id, school_id, doc_type, file_data, binary_id, file_path, file_size, original_size, hydra_manifest)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     `;
-    await pool.query(query, [pending_id || null, school_id || null, type, base64]);
-    console.log(`✅ Document uploaded directly to Database: ${type} for School ID: ${school_id || 'Pending ' + pending_id}`);
-    res.json({ success: true });
+    await pool.query(query, [
+        pending_id || null, 
+        school_id || null, 
+        type, 
+        (finalBinaryId ? null : finalDocValue), // Only store Base64 in file_data if binary_id is null
+        finalBinaryId, 
+        finalDocValue, 
+        storedSize, 
+        originalSizeFound, 
+        finalHydraManifest ? JSON.stringify(finalHydraManifest) : null
+    ]);
+
+    console.log(`✅ [SDOUpload] Success: ${type} for School ID: ${school_id || 'Pending ' + pending_id} (Stored=${storedSize}B | binary=${finalBinaryId})`);
+    res.json({ 
+        success: true,
+        binary_id: finalBinaryId,
+        file_path: finalDocValue
+    });
   } catch (err) {
     console.error("❌ SDO Document Upload Error:", err.message);
     res.status(500).json({ error: "Failed to save document" });
   }
 });
 
-// GET - SDO Retrieve Document (Base64)
+// GET - SDO Retrieve Document (Supports Postgres Binary & Legacy Base64)
 app.get('/api/sdo/document/:id/:type', async (req, res) => {
   const { id, type } = req.params;
 
   try {
-    // Robust query: Look up by either school_id OR pending_id 
-    // to prevent Document Not Found errors if the front-end confuses them.
     const query = `
-      SELECT file_data FROM school_documents 
+      SELECT file_data, binary_id, file_path, file_name, hydra_manifest 
+      FROM school_documents 
       WHERE (school_id = $1 OR pending_id::text = $1) 
         AND doc_type = $2 
       ORDER BY created_at DESC LIMIT 1
     `;
     const params = [id, type];
-
     const docRes = await pool.query(query, params);
 
     if (docRes.rows.length === 0) {
       return res.status(404).json({ error: "Document not found" });
     }
 
-    const base64Str = docRes.rows[0].file_data;
+    const { file_data, binary_id, file_path, file_name, hydra_manifest } = docRes.rows[0];
 
-    // Handle standard data URI format: data:application/pdf;base64,...
-    const matches = base64Str.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-
-    if (matches && matches.length === 3) {
-      const contentType = matches[1];
-      const buffer = Buffer.from(matches[2], 'base64');
-
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Disposition', `attachment; filename="${type}_${id}.pdf"`);
-      res.send(buffer);
-    } else {
-      // Fallback if the string doesn't have the mime type prefix
-      const buffer = Buffer.from(base64Str, 'base64');
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${type}_${id}.pdf"`);
-      res.send(buffer);
+    // Case A: Postgres Binary (Preferred)
+    if (binary_id) {
+        console.log(`🔗 [SDORetrieve] Resolving binary ${binary_id} for ${id}/${type}`);
+        // Internal redirect to the asset API
+        return res.redirect(`/api/asset/${binary_id}`);
     }
+
+    // Case B: Legacy External File Path
+    if (file_path && file_path.startsWith('/uploads/')) {
+        const fullPath = path.join(UPLOAD_BASE_PATH, file_path.replace('/uploads/', ''));
+        if (fs.existsSync(fullPath)) {
+            res.setHeader('Content-Type', 'application/pdf');
+            return fs.createReadStream(fullPath).pipe(res);
+        }
+    }
+
+    // Case C: Legacy Base64 (on-column)
+    if (file_data) {
+        const base64Str = file_data;
+        const matches = base64Str.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+
+        if (matches && matches.length === 3) {
+            const contentType = matches[1];
+            const buffer = Buffer.from(matches[2], 'base64');
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Content-Disposition', `attachment; filename="${file_name || type + '_' + id + '.pdf'}"`);
+            return res.send(buffer);
+        } else {
+            const buffer = Buffer.from(base64Str, 'base64');
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="${file_name || type + '_' + id + '.pdf'}"`);
+            return res.send(buffer);
+        }
+    }
+
+    return res.status(404).json({ error: "Document data missing or corrupted" });
+
   } catch (err) {
     console.error("❌ SDO Document Fetch Error:", err.message);
-    res.status(500).json({ error: "Failed to fetch document" });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -5641,13 +5847,18 @@ app.get('/api/admin/reviewed-schools', async (req, res) => {
 });
 
 // GET - SDO Location Coordinates (Avg Lat/Lng for Auto-Pan)
-// Endpoint to get the first school's location for a given set of filters (for map auto-pan)
 app.get('/api/sdo/first-school-location', async (req, res) => {
   try {
-    console.log('” FIRST-SCHOOL-LOCATION ENDPOINT HIT');
-    console.log('Query params:', req.query);
+    let { region, division, province, municipality, district, barangay } = req.query;
 
-    const { region, division, province, municipality, district, legislative_district } = req.query;
+    // Normalize division to handle "SDO " prefix mismatch
+    division = normalizeDivision(division);
+
+    // Normalization helper
+    const normalizeHelper = (str) => {
+      if (!str) return str;
+      return str.replace(/\?\?/g, 'Ñ').trim();
+    };
 
     let query = `
             SELECT "Latitude" as lat, "Longitude" as lng 
@@ -5656,37 +5867,29 @@ app.get('/api/sdo/first-school-location', async (req, res) => {
             AND "Latitude" IS NOT NULL AND "Longitude" IS NOT NULL
         `;
     const params = [region, division];
-    let paramIndex = 3;
 
-    if (province) {
-      query += ` AND province = $${paramIndex}`;
-      params.push(province);
-      paramIndex++;
-    }
-    if (municipality) {
-      query += ` AND municipality = $${paramIndex}`;
-      params.push(municipality);
-      paramIndex++;
-    }
-    if (district) {
-      query += ` AND district = $${paramIndex}`;
-      params.push(district);
-      paramIndex++;
-    }
-    if (req.query.barangay) { // Explicitly check req.query or destructure it above
-      query += ` AND barangay = $${paramIndex}`;
-      params.push(req.query.barangay);
-      paramIndex++;
-    }
+    // We use flexible matching for all filters
+    const addFilter = (col, val) => {
+      if (val && val !== 'undefined') {
+        params.push(val);
+        query += ` AND (UPPER(TRIM("${col}")) = UPPER(TRIM($${params.length})) OR UPPER(REPLACE("${col}", '??', 'Ñ')) = UPPER(TRIM($${params.length})))`;
+      }
+    };
+
+    addFilter('Province', province);
+    addFilter('Municipality', municipality);
+    addFilter('District', district);
+    addFilter('Barangay', barangay);
 
     query += ` LIMIT 1`;
 
-    console.log('Query:', query);
-    console.log('Params:', params);
-
     const result = await pool.query(query, params);
-    console.log('Result:', result.rows[0]);
-    res.json(result.rows[0] || null);
+    
+    if (result.rows.length > 0) {
+        res.json(result.rows[0]);
+    } else {
+        res.json(null);
+    }
 
   } catch (err) {
     console.error('ERROR in first-school-location:', err);
@@ -5694,15 +5897,20 @@ app.get('/api/sdo/first-school-location', async (req, res) => {
   }
 });
 
-// Original endpoint (kept for reference or other uses)
 app.get('/api/sdo/location-coordinates', async (req, res) => {
-  const { region, division } = req.query;
+  let { region, division } = req.query;
   if (!region || !division) return res.status(400).json({ error: "Region and Division required" });
 
+  // Normalize division to handle "SDO " prefix mismatch
+  division = normalizeDivision(division);
+
+  // Normalization helper
+  const normalizeHelper = (str) => {
+    if (!str) return str;
+    return str.replace(/\?\?/g, 'Ñ').trim();
+  };
+
   try {
-    console.log(`“ Fetching coordinates for ${region}, ${division}`);
-    // We group by province, municipality, barangay to get granular averages
-    // SAFE QUERY: Cast to text first to handle both NUMERIC and VARCHAR columns safely with NULLIF
     const result = await pool.query(`
       SELECT 
         "Province" as province, "Municipality" as municipality, "Barangay" as barangay,
@@ -5713,14 +5921,20 @@ app.get('/api/sdo/location-coordinates', async (req, res) => {
       GROUP BY province, municipality, barangay
     `, [region, division]);
 
-    console.log(`“ Found ${result.rows.length} coordinate groups`);
-    res.json(result.rows);
+    const cleaned = result.rows.map(r => ({
+      province: normalizeHelper(r.province),
+      municipality: normalizeHelper(r.municipality),
+      barangay: normalizeHelper(r.barangay),
+      lat: r.lat,
+      lng: r.lng
+    }));
+
+    res.json(cleaned);
   } catch (err) {
     console.error("Location Coordinates Error:", err);
     res.status(500).json({ error: "Failed to fetch coordinates" });
   }
 });
-
 // POST - admin Approve School
 // --- CHATBOT KNOWLEDGE TEACHING ---
 app.post('/api/admin/teach', async (req, res) => {
@@ -6017,25 +6231,61 @@ app.patch('/api/admin/resubmit-request/:pending_id', async (req, res) => {
   }
 });
 
-// POST - SDO Re-Upload Document (Base64)
-app.post('/api/sdo/resubmit-document/:pending_id', async (req, res) => {
+// POST - SDO Resubmit Document (Optimized Postgres Binary)
+app.post('/api/sdo/resubmit-document/:pending_id', memoryUpload.single('file'), async (req, res) => {
   const { pending_id } = req.params;
-  const { school_id, type, base64 } = req.body;
+  const { school_id, type } = req.body;
 
-  if (!type || !base64) {
-    return res.status(400).json({ error: "Document type and base64 data are required" });
+  if (!type || !req.file) {
+    return res.status(400).json({ error: "Document type and file are required" });
   }
 
   try {
-    // 1. Insert/Update the document
-    // We insert a new row so the history is preserved, and the GET route's ORDER BY created_at DESC LIMIT 1 fetches this latest one.
-    const query = `
-      INSERT INTO school_documents (pending_id, school_id, doc_type, file_data)
-      VALUES ($1, $2, $3, $4)
-    `;
-    await pool.query(query, [pending_id, school_id || null, type, base64]);
+    // 1. Process File — PDF Optimization Engine (Ghostscript/Hydra)
+    let finalDocValue = null;
+    let finalBinaryId = null;
+    let finalHydraManifest = null;
+    let storedSize = req.file.size;
+    let originalSizeFound = req.file.size;
 
-    // 2. Set the status back to 'pending'
+    try {
+        const { buffer: compressedBuffer, hydraManifest } = await compressBufferTo96Dpi(req.file.buffer);
+        // CRITICAL: Pass req.file.size as originalSize to skip redundant compression in upsertBinary 
+        const { binary_id, stored_size, original_size: returnedOrigSize } = await upsertBinary(pool, compressedBuffer, 'application/pdf', req.file.size);
+        
+        finalBinaryId = binary_id;
+        finalDocValue = `/api/asset/${binary_id}`;
+        storedSize = stored_size; 
+        finalHydraManifest = hydraManifest;
+        originalSizeFound = returnedOrigSize || req.file.size;
+        
+        console.log(`🗄️ [SDOResubmit] Stored binary: ${binary_id} | size=${storedSize}B | hydra=${!!finalHydraManifest} | (orig=${req.file.size}B)`);
+    } catch (binErr) {
+        console.warn('⚠️ [SDOResubmit] Binary pipeline failure, falling back to database column storage (Base64):', binErr.message);
+        finalDocValue = `data:application/pdf;base64,${req.file.buffer.toString('base64')}`;
+        finalBinaryId = null;
+        storedSize = req.file.size;
+        originalSizeFound = req.file.size;
+    }
+
+    // 2. Save to database
+    const query = `
+      INSERT INTO school_documents (pending_id, school_id, doc_type, file_data, binary_id, file_path, file_size, original_size, hydra_manifest)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `;
+    await pool.query(query, [
+        pending_id || null, 
+        school_id || null, 
+        type, 
+        (finalBinaryId ? null : finalDocValue), 
+        finalBinaryId, 
+        finalDocValue, 
+        storedSize, 
+        originalSizeFound, 
+        finalHydraManifest ? JSON.stringify(finalHydraManifest) : null
+    ]);
+
+    // 3. Set the status back to 'pending'
     await pool.query(`
       UPDATE pending_schools
       SET status = 'pending', submitted_at = CURRENT_TIMESTAMP, admin_comment = NULL
@@ -11679,6 +11929,7 @@ app.post('/api/save-physical-facilities', async (req, res) => {
     await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS above_7x9 INTEGER DEFAULT 0`).catch(() => {});
     await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS iern TEXT`).catch(() => {});
     await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS is_in_use BOOLEAN DEFAULT TRUE`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS seats TEXT`).catch(() => {});
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS ph_buildings_repairs (
@@ -11845,8 +12096,8 @@ app.post('/api/save-physical-facilities', async (req, res) => {
                   school_id, iern, building_name, room_name, category,
                   storey, classroom, year_completed, remarks,
                   less_than_7x9, "7x9", above_7x9, 
-                  grade_level, advisory_teacher, status, is_in_use
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                  grade_level, advisory_teacher, status, is_in_use, seats
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
           `, [
           sId, data.iern || sId,
           room.building_name, room.room_name,
@@ -11858,7 +12109,8 @@ app.post('/api/save-physical-facilities', async (req, res) => {
           roomDim === 'above 7x9' ? 1 : 0,
           room.grade_level || '', room.teacher_id || '',
           room.condition || 'Good Condition',
-          (room.is_in_use !== undefined) ? room.is_in_use : true
+          (room.is_in_use !== undefined) ? room.is_in_use : true,
+          room.seats || ''
         ]);
       }
     }
