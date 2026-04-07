@@ -33,6 +33,34 @@ const RecenterMap = ({ center }) => {
     return null;
 };
 
+// Helper: Calculate corner points for a rotated rectangle centered at (lat, lng)
+const calculateRotatedPolygon = (lat, lng, length, width, rotation) => {
+    if (!lat || !lng) return null;
+    const toRad = Math.PI / 180;
+    const rotRad = rotation * toRad;
+    const latMeters = 111320; // Approx meters per degree latitude
+    const lngMeters = 111320 * Math.cos(lat * toRad);
+
+    const halfL = length / 2;
+    const halfW = width / 2;
+
+    const corners = [
+        { x: -halfW, y: halfL },  // Top-left
+        { x: halfW, y: halfL },   // Top-right
+        { x: halfW, y: -halfL },  // Bottom-right
+        { x: -halfW, y: -halfL }  // Bottom-left
+    ];
+
+    return corners.map(c => {
+        const rotX = c.x * Math.cos(rotRad) - c.y * Math.sin(rotRad);
+        const rotY = c.x * Math.sin(rotRad) + c.y * Math.cos(rotRad);
+        return [
+            lat + (rotY / latMeters),
+            lng + (rotX / lngMeters)
+        ];
+    });
+};
+
 // ── Constants ──────────────────────────────────────────────────────────
 const DEFAULT_BUILDING_TYPES = [
     "Academic Building",
@@ -192,21 +220,6 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                     setCenterMap([parseFloat(baseline.latitude), parseFloat(baseline.longitude)]);
                 }
 
-                        // 3. Filter out monogrades that are part of a MG group
-                        const mgGradeNumbers = new Set();
-                        mgGroups.forEach(mg => {
-                            const digits = mg.label.match(/\d+/g);
-                            if (digits) digits.forEach(d => mgGradeNumbers.add(d));
-                        });
-
-                        const filteredMonogrades = detectedGrades.filter(dg => {
-                            const digit = dg.id.replace(/\D/g, '');
-                            if (!digit) return true; // Keep Kinder or others without digits unless strictly needed
-                            return !mgGradeNumbers.has(digit);
-                        });
-                        
-                        setAvailableGrades([...filteredMonogrades, ...mgGroups]);
-                    }
                 // 3. RECONSTRUCT AVAILABLE GRADES
                 const co = (baseline.curricular_offering || "").toLowerCase();
                 const hasKinder = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("kinder");
@@ -819,13 +832,6 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             };
 
             if (!navigator.onLine) {
-                await addModularToOutbox({
-                    unitId: 7, label: "Unit 7: Physical Facilities (Inventory & Mapping)",
-                    url: `/api/save-physical-facilities`, method: 'POST',
-                    payload, schoolId
-                });
-                await clearUnitDraft(7, schoolId);
-                
                 // Update local quest progress
                 const stored = localStorage.getItem('quest_progress');
                 let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
@@ -835,6 +841,13 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                     progress.xp += 500;
                     localStorage.setItem('quest_progress', JSON.stringify(progress));
                 }
+
+                await addModularToOutbox({
+                    unitId: 7, label: "Unit 7: Physical Facilities (Inventory & Mapping)",
+                    url: `/api/save-physical-facilities`, method: 'POST',
+                    payload, schoolId
+                });
+                await clearUnitDraft(7, schoolId);
 
                 setShowOfflineSuccess(true);
                 return;
@@ -870,16 +883,30 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
         } catch (err) {
             console.error("UNIT 7 SUBMIT ERROR:", err);
             if (!navigator.onLine || err.message.includes('fetch') || err.message.includes('Network error')) {
-                const payload = {
+                // Prepare exactly the same payload for the outbox
+                const repairPayload = repairAssessments.map(a => ({
+                    building_no: a.building_name,
+                    room_no: a.room_name,
+                    item_name: a.item,
+                    oms: a.oms,
+                    condition: a.condition,
+                    damage_ratio: a.damage_ratio,
+                    recommended_action: a.recommend_action,
+                    demo_justification: a.demo_justification,
+                    remarks: a.remarks
+                }));
+
+                const outboxPayload = {
                     schoolId, school_id: schoolId, iern: schoolData?.iern,
-                    inventoryEntries: buildings, rooms: roomsData, repairEntries: repairAssessments,
+                    inventoryEntries: buildings, rooms: roomsData, repairEntries: repairPayload,
                     build_classrooms_total: roomsData.length,
                     spaces: spaces
                 };
+
                 await addModularToOutbox({
                     unitId: 7, label: "Unit 7: Physical Facilities (Inventory & Mapping)",
                     url: `/api/save-physical-facilities`, method: 'POST',
-                    payload, schoolId
+                    payload: outboxPayload, schoolId
                 });
                 await clearUnitDraft(7, schoolId);
                 setShowOfflineSuccess(true);

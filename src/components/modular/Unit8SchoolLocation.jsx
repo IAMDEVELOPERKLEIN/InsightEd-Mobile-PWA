@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiMapPin, FiActivity, FiShield, FiCloudRain, FiTruck, FiNavigation, FiZap, FiAlertTriangle, FiCheck, FiSave, FiUnlock } from 'react-icons/fi';
+import { FiArrowLeft, FiMapPin, FiActivity, FiShield, FiCloudRain, FiTruck, FiNavigation, FiZap, FiAlertTriangle, FiCheck, FiSave, FiUnlock, FiWifiOff } from 'react-icons/fi';
 import { FaBus, FaCarSide, FaWalking, FaWater, FaMountain, FaClinicMedical, FaSignal, FaMapMarkerAlt } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import SchoolLocation from '../../forms/SchoolLocation';
 import SuccessModal from '../SuccessModal';
 import BottomNav from '../../modules/BottomNav';
-import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft, getModularOutbox } from "../../db";
 import { useAuth } from "../../context/AuthContext";
 
 const Unit8SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
@@ -42,6 +42,11 @@ const Unit8SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             }
 
             try {
+                // 1. SYNC CENTER LOOKAHEAD
+                const outbox = await getModularOutbox();
+                const pendingU8 = outbox.find(o => o.unitId === 8 && o.schoolId === schoolId);
+                if (pendingU8) setPendingUnit8(pendingU8);
+
                 // Initial completion check - only run once on mount
                 let isUnitCompleted = false;
                 if (!hasCheckedCompletion.current) {
@@ -56,8 +61,13 @@ const Unit8SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 }
 
                 // If read-only, fetch the actual data for the dashboard
-                const effectiveReadOnly = propReadOnly || isReadOnly || isUnitCompleted;
-                if (effectiveReadOnly) {
+                const effectiveReadOnly = propReadOnly || isReadOnly || isUnitCompleted || (!!pendingU8);
+                if (pendingU8) {
+                    // MASTER PRECEDENCE: SYNC CENTER
+                    setLocationData(pendingU8.payload);
+                    if (pendingU8.payload.iern) setIern(pendingU8.payload.iern);
+                    if (!propReadOnly) setIsReadOnly(true); // Treat as read-only if it's in outbox
+                } else if (effectiveReadOnly) {
                     const res = await fetch(`/api/school-location/${schoolId}`);
                     const result = await res.json();
                     if (result.success && result.data) {
@@ -67,7 +77,7 @@ const Unit8SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 }
 
                 // Check for Draft (only if not viewing a completed unit)
-                if (!effectiveReadOnly) {
+                if (!effectiveReadOnly && !pendingU8) {
                     // Also fetch IERN from the main school record to ensure we have it for the form
                     const schoolRes = await fetch(`/api/ph_schools/${schoolId}?t=${Date.now()}`);
                     if (schoolRes.ok) {
@@ -126,7 +136,12 @@ const Unit8SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         }).catch(e => console.error("[Unit 8 Sync Error]:", e));
 
         if (schoolId) await clearUnitDraft(8, schoolId);
-        setShowSuccess(true);
+        
+        if (!navigator.onLine) {
+            setShowOfflineSuccess(true);
+        } else {
+            setShowSuccess(true);
+        }
     };
 
     const SummaryDashboard = () => {
@@ -433,7 +448,9 @@ const Unit8SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                             <div className="text-[10px] font-black tracking-widest text-[#004A99] uppercase">Unit 8</div>
                             <h1 className="text-sm font-black text-gray-800 uppercase tracking-tight">School Terrain</h1>
                         </div>
-                        <div className="w-10" />
+                        <button onClick={() => setShowDraftModal(true)} className="p-2 -mr-2 rounded-full hover:bg-slate-100 text-slate-500 transition-colors">
+                            <FiSave className="w-5 h-5" />
+                        </button>
                     </div>
                 </header>
             )}
@@ -515,10 +532,37 @@ const Unit8SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             </AnimatePresence>
             <SuccessModal 
                 isOpen={showSuccess} 
-                onClose={() => setShowSuccess(false)} 
+                onClose={() => {
+                    setShowSuccess(false);
+                    navigate("/modular-dashboard");
+                }}
                 message="School terrain and location audit synced successfully! ✓"
                 redirectUrl="/modular-dashboard"
             />
+
+            <AnimatePresence>
+                {showOfflineSuccess && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full rounded-t-[3rem] p-10 pb-12 shadow-2xl relative max-w-md">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-orange-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-orange-200 mb-6 font-bold text-white">
+                                <FiWifiOff />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight px-4">Local Secure: Unit 8 Saved!</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-6">Your school terrain, proximity matrix, and risk index data have been saved locally. We will automatically sync your location profile once you're back online.</p>
+                            
+                            <div className="mt-10">
+                                <button onClick={() => navigate("/modular-dashboard")}
+                                    className="w-full py-5 rounded-[2rem] bg-orange-600 text-white font-black text-lg shadow-xl shadow-orange-100 active:scale-95 transition-all outline-none">
+                                    Return to Modules Dashboard
+                                </button>
+                                <p className="text-[10px] text-orange-500 font-bold uppercase text-center mt-6 tracking-widest leading-loose">✓ Offline Mode • Auto-Sync Enabled ✓</p>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </motion.div>
     );
 };

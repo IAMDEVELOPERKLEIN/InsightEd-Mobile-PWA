@@ -277,9 +277,13 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     else if (['7','8','9','10'].includes(nid)) isOffered = hasJHS;
                     else if (['11','12'].includes(nid)) isOffered = hasSHS;
                     
+                    const u2Grade = u2Parsed.find(x => x.grade_level === pg.id);
+                    const isActive = u2Grade ? u2Grade.is_active !== false : true;
+
                     const enrollment = getEnrollmentForGrade(pg.id);
                     const sections = getCountForGrade(pg.id);
-                    if (enrollment > 0 || sections > 0 || isOffered) {
+                    
+                    if (isActive && (enrollment > 0 || sections > 0 || isOffered)) {
                         expectedGrades.push({ id: pg.id, grade_level: pg.label, enrolled: enrollment, sections: sections, isVerified: false });
                     }
                 });
