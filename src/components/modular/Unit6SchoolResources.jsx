@@ -63,6 +63,7 @@ const WATER_SOURCES = [
 ];
 
 const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
+    const DEBUG_MODE = false; // Set to true for data integrity diagnostics
     const navigate = useNavigate();
 
     const [loading, setLoading] = useState(true);
@@ -321,7 +322,14 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         if (parsed.grades) {
                             parsed.grades.forEach(sg => {
                                 const idx = mergedExpectedGrades.findIndex(eg => eg.id === sg.id);
-                                if (idx >= 0) mergedExpectedGrades[idx] = { ...mergedExpectedGrades[idx], ...sg, isVerified: true };
+                                if (idx >= 0) {
+                                    if (DEBUG_MODE && (mergedExpectedGrades[idx].enrolled !== sg.enrolled || mergedExpectedGrades[idx].sections !== sg.sections)) {
+                                        console.log(`[Unit6-Diag] Count mismatch for ${sg.grade_level}: FreshEnrolled=${mergedExpectedGrades[idx].enrolled}, StaleEnrolled=${sg.enrolled}`);
+                                    }
+                                    // eslint-disable-next-line no-unused-vars
+                                    const { enrolled, sections, ...rest } = sg;
+                                    mergedExpectedGrades[idx] = { ...mergedExpectedGrades[idx], ...rest, isVerified: true };
+                                }
                             });
                         }
                         setGradesData(mergedExpectedGrades);

@@ -14,19 +14,20 @@ import {
   FiClock,
   FiAlertCircle,
   FiFileText,
-  FiRefreshCw
+  FiRefreshCw,
+  FiDownload
 } from 'react-icons/fi';
 import { TbSchool } from 'react-icons/tb';
 import PageTransition from '../components/PageTransition';
 import { useAuth } from '../context/AuthContext';
 import BottomNav from './BottomNav';
 
-// --- Helper: progress color ---
-const progressColor = (pct) => {
-  if (pct >= 80) return 'bg-emerald-500';
-  if (pct >= 50) return 'bg-amber-400';
-  if (pct >= 20) return 'bg-blue-500';
-  return 'bg-rose-400';
+// --- Helper: progress color (Refined with Premium Gradients) ---
+const progressGradient = (pct) => {
+  if (pct >= 80) return 'from-emerald-400 to-emerald-600 shadow-emerald-500/20';
+  if (pct >= 50) return 'from-amber-300 to-amber-500 shadow-amber-500/20';
+  if (pct >= 20) return 'from-blue-400 to-blue-600 shadow-blue-500/20';
+  return 'from-rose-400 to-rose-600 shadow-rose-500/20';
 };
 
 const progressTextColor = (pct) => {
@@ -43,18 +44,25 @@ const StatBadge = ({ label, value, color = 'bg-slate-100 dark:bg-slate-800 text-
   </span>
 );
 
-// --- Progress Bar ---
-const ProgressBar = ({ pct, className = '' }) => (
+// --- Progress Bar (Refined Premium Design) ---
+const ProgressBar = ({ pct, className = '', showLabel = true, size = 'md' }) => (
   <div className={`flex items-center gap-3 ${className}`}>
-    <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+    <div className={`flex-1 ${size === 'sm' ? 'h-1.5' : 'h-2.5'} bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden relative shadow-inner`}>
       <motion.div
         initial={{ width: 0 }}
         animate={{ width: `${Math.min(100, pct)}%` }}
-        transition={{ duration: 0.8, ease: 'easeOut' }}
-        className={`h-full rounded-full ${progressColor(pct)}`}
-      />
+        transition={{ duration: 1, ease: [0.34, 1.56, 0.64, 1] }}
+        className={`h-full rounded-full bg-gradient-to-r ${progressGradient(pct)} shadow-lg relative`}
+      >
+        {/* Shine Effect */}
+        <div className="absolute inset-0 bg-white/20 opacity-30 skew-x-[-20deg] translate-x-[-50%] animate-pulse" />
+      </motion.div>
     </div>
-    <span className={`text-xs font-black w-10 text-right ${progressTextColor(pct)}`}>{Math.round(pct)}%</span>
+    {showLabel && (
+      <span className={`text-[10px] font-black w-10 text-right tabular-nums ${progressTextColor(pct)}`}>
+        {Math.round(pct)}%
+      </span>
+    )}
   </div>
 );
 
@@ -103,6 +111,10 @@ const MonitoringDashboard = () => {
   const [totalResults, setTotalResults] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+
+  // --- Pagination state ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   // --- Filtering & Sorting state ---
   const [sortBy, setSortBy] = useState('completion'); // 'completion', 'name', 'school_id'
@@ -242,36 +254,36 @@ const MonitoringDashboard = () => {
     }
 
     // 3. Sorting Logic
-    return [...list].sort((a, b) => {
+    const sorted = [...list].sort((a, b) => {
       const pctA = parseFloat(a.completion_percentage || 0);
       const pctB = parseFloat(b.completion_percentage || 0);
 
-      // ALWAYS Prioritize 100% if sortBy is 'completion' or by default
-      if (sortBy === 'completion') {
-        if (pctA >= 100 && pctB < 100) return -1;
-        if (pctA < 100 && pctB >= 100) return 1;
-        return pctB - pctA; // Then sort by highest pct
-      }
+      // ALWAYS Prioritize 100%
+      if (pctA >= 100 && pctB < 100) return -1;
+      if (pctA < 100 && pctB >= 100) return 1;
 
-      if (sortBy === 'name') {
-        // Even when sorting by name, keep 100% schools at top if desired (or just true A-Z)
-        // Let's do true A-Z/ID but keep the 100% at very top if they are the primary focus
-        // Actually, user said "make 100% schools on top" + "also add filters".
-        // I'll make 100% always at top regardless of sort choice for maximum visibility.
-        if (pctA >= 100 && pctB < 100) return -1;
-        if (pctA < 100 && pctB >= 100) return 1;
-        return (a.school_name || '').localeCompare(b.school_name || '');
-      }
-
-      if (sortBy === 'school_id') {
-        if (pctA >= 100 && pctB < 100) return -1;
-        if (pctA < 100 && pctB >= 100) return 1;
-        return (a.school_id || '').localeCompare(b.school_id || '');
-      }
+      if (sortBy === 'completion') return pctB - pctA;
+      if (sortBy === 'name') return (a.school_name || '').localeCompare(b.school_name || '');
+      if (sortBy === 'school_id') return (a.school_id || '').localeCompare(b.school_id || '');
 
       return 0;
     });
+
+    return sorted;
   }, [selectedDistrict, selectedDivision, groupedByDivision, searchTerm, sortBy, completionFilter]);
+
+  // Paginated school list
+  const paginatedSchools = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return schoolList.slice(start, start + itemsPerPage);
+  }, [schoolList, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(schoolList.length / itemsPerPage);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, sortBy, completionFilter, itemsPerPage, selectedDistrict]);
 
   // --- Navigation helpers ---
   const drillToDivision = (name) => {
@@ -298,6 +310,46 @@ const MonitoringDashboard = () => {
       setSelectedDivision(null);
     }
     setSearchTerm('');
+  };
+
+  // --- CSV Export ---
+  const DEBUG_EXPORT = true;
+
+  const convertSchoolsToCSV = (list) => {
+    const headers = ['Region', 'Division', 'District', 'School ID', 'School Name', 'Registered', 'Accomplishment (%)'];
+    const rows = list.map(s => [
+      s.region || '',
+      s.division || '',
+      s.district || '',
+      s.school_id || '',
+      (s.school_name || '').replace(/,/g, ' '),
+      s.is_registered ? 'Yes' : 'No',
+      `${parseFloat(s.completion_percentage || 0).toFixed(2)}%`,
+    ]);
+    return [headers, ...rows].map(r => r.join(',')).join('\n');
+  };
+
+  const handleGenerateCSV = () => {
+    const exportList = level === 'schools' ? schoolList : schools;
+    if (DEBUG_EXPORT) {
+      console.log(`DEBUG: Exporting ${exportList.length} schools`);
+      if (exportList.length > 0) {
+        const first = exportList[0];
+        const requiredCols = ['region', 'division', 'district', 'school_id', 'school_name', 'is_registered', 'completion_percentage'];
+        const missing = requiredCols.filter(c => !(c in first));
+        if (missing.length) console.warn('DEBUG: Missing columns in export data:', missing);
+        else console.log('DEBUG: All required columns present.');
+      }
+    }
+    const csv = convertSchoolsToCSV(exportList);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    link.href = url;
+    link.download = `monitoring_report_${date}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   // --- Scope text for header ---
@@ -468,14 +520,22 @@ const MonitoringDashboard = () => {
                 color="bg-indigo-600" 
                 subtext="Staged / Verified"
             />
-            <TopStatCard 
-                title="Leading District" 
-                value={leadingDistrict ? leadingDistrict.name : 'N/A'} 
-                secondaryValue={leadingDistrict ? `${Math.round(leadingDistrict.avgPct)}%` : ''}
-                icon={FiZap} 
-                color="bg-amber-500" 
-                subtext="Rank 1 Completion"
-            />
+            <motion.button
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={handleGenerateCSV}
+                className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col justify-between text-left cursor-pointer hover:border-blue-300 dark:hover:border-blue-700 transition-all group"
+            >
+                <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 leading-none">Export Data</span>
+                    <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center shadow-md group-hover:bg-blue-700 transition-colors">
+                        <FiDownload size={15} className="text-white" />
+                    </div>
+                </div>
+                <p className="text-lg sm:text-2xl font-black text-slate-800 dark:text-white leading-none">CSV Report</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 font-medium">Download monitoring data</p>
+            </motion.button>
         </div>
 
         {/* ===== LEVEL LABEL ===== */}
@@ -530,7 +590,7 @@ const MonitoringDashboard = () => {
                     </div>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Division</p>
                     <h3 className="font-black text-slate-900 dark:text-white text-base leading-tight mb-3 uppercase">{div.name}</h3>
-                    <ProgressBar pct={div.avgPct} className="mb-4" />
+                    <ProgressBar pct={div.avgPct} className="mb-4" size="md" />
                     <div className="flex items-center gap-2 flex-wrap">
                       <StatBadge label="Schools" value={div.count} color="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300" />
                       <StatBadge label="Completed" value={div.completed} color="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400" />
@@ -571,7 +631,7 @@ const MonitoringDashboard = () => {
                     </div>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">District</p>
                     <h3 className="font-black text-slate-900 dark:text-white text-base leading-tight mb-3 uppercase">{dist.name}</h3>
-                    <ProgressBar pct={dist.avgPct} className="mb-4" />
+                    <ProgressBar pct={dist.avgPct} className="mb-4" size="md" />
                     <div className="flex items-center gap-2 flex-wrap">
                       <StatBadge label="Schools" value={dist.count} color="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300" />
                       <StatBadge label="Completed" value={dist.completed} color="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400" />
@@ -600,9 +660,9 @@ const MonitoringDashboard = () => {
                     <span className="hidden md:block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Progress</span>
                   </div>
 
-                  {schoolList.length === 0 ? (
+                  {paginatedSchools.length === 0 ? (
                     <p className="text-center text-slate-400 py-20 font-medium text-sm">No schools found{searchTerm ? ' matching your search' : ''}.</p>
-                  ) : schoolList.map((school, i) => (
+                  ) : paginatedSchools.map((school, i) => (
                     <motion.div
                       key={school.school_id}
                       initial={{ opacity: 0, y: 8 }}
@@ -611,20 +671,20 @@ const MonitoringDashboard = () => {
                       className="group grid grid-cols-[1fr_auto] md:grid-cols-[1fr_140px] gap-4 items-center px-6 py-5 border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors"
                     >
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-blue-600 transition-colors truncate">
-                            {school.school_name}
-                            <span className="md:hidden ml-1.5 text-[10px] font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded">
-                              {Math.round(school.completion_percentage || 0)}%
-                            </span>
-                          </p>
-                          {!school.is_registered && (
-                            <span className="flex-shrink-0 bg-rose-50 dark:bg-rose-900/20 text-rose-500 text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter border border-rose-100 dark:border-rose-900/30 flex items-center gap-0.5">
-                              <FiAlertCircle size={10} /> Unregistered
-                            </span>
-                          )}
+                        <div className="flex items-center justify-between gap-2 overflow-hidden mb-1">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <p className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-blue-600 transition-colors truncate">
+                              {school.school_name}
+                            </p>
+                            {!school.is_registered && (
+                              <span className="flex-shrink-0 bg-rose-50 dark:bg-rose-900/20 text-rose-500 text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter border border-rose-100 dark:border-rose-900/30 flex items-center gap-0.5">
+                                <FiAlertCircle size={10} />
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mt-0.5 flex items-center gap-1">
+                        
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mb-2 flex items-center gap-1">
                           <FiActivity size={9} />
                           {school.school_id} • {school.district || 'District N/A'}
                           {school.esf7_status && school.esf7_status !== 'NOT_STARTED' && (
@@ -637,18 +697,84 @@ const MonitoringDashboard = () => {
                             </span>
                           )}
                         </p>
+
+                        {/* Mobile Progress Bar (Visible ONLY on mobile) */}
+                        <div className="md:hidden">
+                          <ProgressBar pct={parseFloat(school.completion_percentage || 0)} size="sm" />
+                        </div>
                       </div>
                       <div className="hidden md:block">
-                        <ProgressBar pct={parseFloat(school.completion_percentage)} />
+                        <ProgressBar pct={parseFloat(school.completion_percentage || 0)} />
                       </div>
                     </motion.div>
                   ))}
 
-                  {/* Footer count */}
-                  <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800">
-                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                      Showing {schoolList.length} school{schoolList.length !== 1 ? 's' : ''} {searchTerm ? `for "${searchTerm}"` : `in ${selectedDistrict}`}
-                    </p>
+                  {/* Footer with Pagination */}
+                  <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                        Showing {paginatedSchools.length} of {schoolList.length} school{schoolList.length !== 1 ? 's' : ''}
+                      </p>
+                      
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Per page:</span>
+                        <select 
+                          value={itemsPerPage}
+                          onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                          className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-[10px] font-black text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                        >
+                          {[20, 50, 100].map(val => (
+                            <option key={val} value={val}>{val}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {totalPages > 1 && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          disabled={currentPage === 1}
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition-all active:scale-90"
+                        >
+                          <FiChevronRight className="rotate-180" size={14} />
+                        </button>
+                        
+                        <div className="flex items-center gap-1 px-2">
+                          {[...Array(totalPages)].map((_, i) => {
+                            const pg = i + 1;
+                            // Show first, last, and pages around current
+                            if (pg === 1 || pg === totalPages || (pg >= currentPage - 1 && pg <= currentPage + 1)) {
+                              return (
+                                <button
+                                  key={pg}
+                                  onClick={() => setCurrentPage(pg)}
+                                  className={`w-8 h-8 rounded-xl text-[10px] font-black transition-all active:scale-90 ${
+                                    currentPage === pg 
+                                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' 
+                                      : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+                                  }`}
+                                >
+                                  {pg}
+                                </button>
+                              );
+                            }
+                            if (pg === currentPage - 2 || pg === currentPage + 2) {
+                              return <span key={pg} className="text-slate-300 dark:text-slate-700 text-[10px] font-black">...</span>;
+                            }
+                            return null;
+                          })}
+                        </div>
+
+                        <button
+                          disabled={currentPage === totalPages}
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition-all active:scale-90"
+                        >
+                          <FiChevronRight size={14} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </motion.div>

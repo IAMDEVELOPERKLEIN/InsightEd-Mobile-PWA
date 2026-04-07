@@ -17,7 +17,23 @@ def add_barangay(region, province, municipality, barangay):
         conn = psycopg2.connect(database_url, sslmode='require')
         cur = conn.cursor()
 
-        # 1. Check if the barangay already exists in the given municipality
+        # 1. First, verify that the region/province/municipality combination exists
+        loc_check_query = """
+            SELECT DISTINCT region, province, municipality 
+            FROM ph_barangays 
+            WHERE UPPER(TRIM(region)) = UPPER(TRIM(%s)) 
+              AND UPPER(TRIM(province)) = UPPER(TRIM(%s)) 
+              AND UPPER(TRIM(municipality)) = UPPER(TRIM(%s))
+        """
+        cur.execute(loc_check_query, (region, province, municipality))
+        if not cur.fetchone():
+            print(f"\n[❌] Error: The location '{municipality}, {province} ({region})' was not found in the database.")
+            print("Please ensure the spelling matches the existing records exactly.")
+            cur.close()
+            conn.close()
+            return
+
+        # 2. Check if the barangay already exists in the given municipality
         check_query = """
             SELECT id FROM ph_barangays 
             WHERE UPPER(TRIM(region)) = UPPER(TRIM(%s)) 
@@ -30,7 +46,7 @@ def add_barangay(region, province, municipality, barangay):
         if cur.fetchone():
             print(f"\n[!] Barangay '{barangay}' already exists in {municipality}, {province} ({region}).")
         else:
-            # 2. Insert the new barangay
+            # 3. Insert the new barangay
             insert_query = """
                 INSERT INTO ph_barangays (region, province, municipality, barangay) 
                 VALUES (%s, %s, %s, %s)

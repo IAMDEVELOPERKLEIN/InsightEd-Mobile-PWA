@@ -94,6 +94,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         school_type: "",
         mother_school_id: "",
         extension_mother_school_name: "",
+        annex_details: [],
         ownership_document_type: "",
         established_month: "",
         established_year: "",
@@ -242,6 +243,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 merged.google_drive_file_name = takeValue(merged.google_drive_file_name, d.google_drive_file_name, "");
                 merged.school_type = takeValue(merged.school_type, d.school_type, "");
                 merged.mother_school_id = takeValue(merged.mother_school_id, d.mother_school_id, "");
+                merged.annex_details = d.annex_details || [];
                 merged.extension_mother_school_name = takeValue(merged.extension_mother_school_name, d.extension_mother_school_name, "");
                 merged.ownership_document_type = takeValue(merged.ownership_document_type, d.ownership_document_type, "");
                 merged.local_file_path = takeValue(merged.local_file_path, d.local_file_path, "");
@@ -717,6 +719,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 established_year: formData.established_year,
                 school_type: formData.school_type,
                 mother_school_id: formData.mother_school_id,
+                annex_details: formData.annex_details,
                 extension_mother_school_name: formData.extension_mother_school_name,
                 ownership_document_type: formData.ownership_document_type,
                 head_first_name: formData.head_first_name,
@@ -851,10 +854,22 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         formData.school_type &&
         formData.established_month &&
         formData.established_year && (
-        (formData.school_type === "with_annex" && (formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && formData.extension_mother_school_name.trim().length > 0 && !motherSchoolNotFound)) ||
+        (formData.school_type === "with_annex" && 
+            formData.annex_details.length > 0 && 
+            formData.annex_details.every(annex => 
+                annex.id.length === 6 && 
+                /^\d+$/.test(annex.id) && 
+                annex.name.trim().length > 0
+            )
+        ) ||
         (formData.school_type === "without_annex") ||
-        (formData.school_type === "extension" && (formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && formData.extension_mother_school_name.trim().length > 0 && !motherSchoolNotFound)) ||
-        (formData.school_type !== "without_annex" && motherSchoolNotFound && formData.extension_mother_school_name.trim().length > 5)
+        (formData.school_type === "extension" && 
+            formData.mother_school_id.length === 6 && 
+            /^\d+$/.test(formData.mother_school_id) && 
+            formData.extension_mother_school_name.trim().length > 0 && 
+            !motherSchoolNotFound
+        ) ||
+        (formData.school_type === "extension" && motherSchoolNotFound && formData.extension_mother_school_name.trim().length > 5)
     );
     const isCurrentStepValid = () => {
         if (currentStep === 0) return isStep0Valid;
@@ -1007,6 +1022,44 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 🎊
                                             </div>
                                         </div>
+                                        
+                                        {/* Annex Registry (For Mother Schools) */}
+                                        {formData.school_type === "with_annex" && formData.annex_details?.length > 0 && (
+                                            <div className="mt-8 space-y-4">
+                                                <div className="flex items-center gap-2 ml-2">
+                                                    <div className="w-1.5 h-6 bg-blue-500 rounded-full" />
+                                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Annex Registry ({formData.annex_details.length})</h3>
+                                                </div>
+                                                <div className="grid grid-cols-1 gap-3">
+                                                    {formData.annex_details.map((annex, i) => (
+                                                        <div key={i} className="flex items-center gap-4 p-4 bg-blue-50/50 rounded-[2rem] border border-blue-100 shadow-sm group hover:bg-blue-50 transition-all">
+                                                            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-xl shadow-sm">🏫</div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest leading-none mb-1">Annex ID: {annex.id}</p>
+                                                                <h4 className="font-black text-slate-800 text-sm truncate">{annex.name}</h4>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Mother School Info (For Annexes) */}
+                                        {formData.school_type === "extension" && (
+                                            <div className="mt-8 space-y-4">
+                                                <div className="flex items-center gap-2 ml-2">
+                                                    <div className="w-1.5 h-6 bg-purple-500 rounded-full" />
+                                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Mother School Link</h3>
+                                                </div>
+                                                <div className="p-5 bg-purple-50 rounded-[2.5rem] border border-purple-100 flex items-start gap-5 shadow-sm">
+                                                    <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-2xl shadow-sm">🏢</div>
+                                                    <div className="flex-1 min-w-0 pt-0.5">
+                                                        <p className="text-[10px] font-black text-purple-600 uppercase tracking-widest mb-1">Registered Mother ID: {formData.mother_school_id}</p>
+                                                        <h4 className="text-lg font-black text-purple-900 leading-tight">{formData.extension_mother_school_name}</h4>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </section>
 
@@ -1617,8 +1670,128 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             </motion.div>
                                         )}
 
-                                        {/* Mother School ID - For Annex & Extension */}
-                                        {(formData.school_type === "with_annex" || formData.school_type === "extension") && (
+                                        {/* School Type: With Annex - How many? */}
+                                        {formData.school_type === "with_annex" && (
+                                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                                                className="space-y-3">
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">How many annexes?</label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="number"
+                                                        min="1"
+                                                        max="20"
+                                                        value={formData.annex_details.length || ""}
+                                                        onChange={(e) => {
+                                                            const count = parseInt(e.target.value) || 0;
+                                                            setFormData(prev => {
+                                                                const newDetails = [...prev.annex_details];
+                                                                if (count > newDetails.length) {
+                                                                    for (let i = newDetails.length; i < count; i++) {
+                                                                        newDetails.push({ id: "", name: "", isManual: false });
+                                                                    }
+                                                                } else {
+                                                                    newDetails.splice(count);
+                                                                }
+                                                                return { ...prev, annex_details: newDetails };
+                                                            });
+                                                        }}
+                                                        placeholder="Number of annexes"
+                                                        className={chunkyInput}
+                                                    />
+                                                    <FiList className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 pointer-events-none" />
+                                                </div>
+                                            </motion.div>
+                                        )}
+
+                                        {/* Dynamic Annex ID Inputs */}
+                                        {formData.school_type === "with_annex" && formData.annex_details.map((annex, idx) => (
+                                            <motion.div key={idx} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.05 }}
+                                                className="space-y-3 border-l-4 border-blue-100 pl-4 py-2">
+                                                <label className="text-[11px] font-black text-blue-500 uppercase tracking-widest block">Annex #{idx + 1} School ID</label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="tel"
+                                                        value={annex.id}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            setFormData(prev => {
+                                                                const newDetails = [...prev.annex_details];
+                                                                newDetails[idx] = { ...newDetails[idx], id: val, isManual: false };
+                                                                return { ...prev, annex_details: newDetails };
+                                                            });
+                                                            
+                                                            if (val.length === 6 && /^\d+$/.test(val)) {
+                                                                fetch(`/api/schools_iern/${val}`)
+                                                                    .then(r => r.ok ? r.json() : null)
+                                                                    .then(data => {
+                                                                        if (data?.exists && data.data?.School_Name) {
+                                                                            setFormData(prev => {
+                                                                                const updated = [...prev.annex_details];
+                                                                                updated[idx] = { ...updated[idx], name: data.data.School_Name, isManual: false };
+                                                                                return { ...prev, annex_details: updated };
+                                                                            });
+                                                                        } else {
+                                                                            setFormData(prev => {
+                                                                                const updated = [...prev.annex_details];
+                                                                                updated[idx] = { ...updated[idx], name: "", isManual: true };
+                                                                                return { ...prev, annex_details: updated };
+                                                                            });
+                                                                        }
+                                                                    })
+                                                                    .catch(() => {
+                                                                        setFormData(prev => {
+                                                                            const updated = [...prev.annex_details];
+                                                                            updated[idx] = { ...updated[idx], name: "", isManual: true };
+                                                                            return { ...prev, annex_details: updated };
+                                                                        });
+                                                                    });
+                                                            } else {
+                                                                setFormData(prev => {
+                                                                    const updated = [...prev.annex_details];
+                                                                    updated[idx] = { ...updated[idx], name: "" };
+                                                                    return { ...prev, annex_details: updated };
+                                                                });
+                                                            }
+                                                        }}
+                                                        maxLength="6"
+                                                        placeholder="6-digit ID"
+                                                        className={chunkyInput}
+                                                    />
+                                                    {annex.id.length === 6 && /^\d+$/.test(annex.id) && annex.name && !annex.isManual && <FiCheckCircle className="absolute right-5 top-1/2 -translate-y-1/2 text-emerald-500 w-6 h-6" />}
+                                                    {annex.id.length === 6 && /^\d+$/.test(annex.id) && annex.isManual && <FiAlertCircle className="absolute right-5 top-1/2 -translate-y-1/2 text-amber-500 w-6 h-6" />}
+                                                </div>
+
+                                                {/* Manual Name Entry if Not Found */}
+                                                {(annex.isManual || (annex.id.length === 6 && !annex.name)) && (
+                                                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="space-y-2">
+                                                        <p className="text-[10px] font-bold text-amber-600 uppercase tracking-tight italic">ID not found. Enter school name manually:</p>
+                                                        <input
+                                                            type="text"
+                                                            value={annex.name}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                setFormData(prev => {
+                                                                    const updated = [...prev.annex_details];
+                                                                    updated[idx] = { ...updated[idx], name: val };
+                                                                    return { ...prev, annex_details: updated };
+                                                                });
+                                                            }}
+                                                            placeholder="Official Annex School Name"
+                                                            className={chunkyInput}
+                                                        />
+                                                    </motion.div>
+                                                )}
+
+                                                {annex.name && !annex.isManual && (
+                                                    <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="px-5 py-2 bg-blue-50 border border-blue-100 rounded-2xl">
+                                                        <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest break-all line-clamp-1">{annex.name}</p>
+                                                    </motion.div>
+                                                )}
+                                            </motion.div>
+                                        ))}
+
+                                        {/* Original Mother School ID Logic - ONLY FOR EXTENSION */}
+                                        {formData.school_type === "extension" && (
                                             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
                                                 className="space-y-3">
                                                 <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">
