@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiEdit2, FiCheck, FiArrowRight, FiArrowLeft, FiChevronLeft, FiPlus, FiTrash2, FiMapPin, FiSave, FiSearch, FiChevronDown, FiUnlock, FiAlertTriangle, FiClock, FiAlertOctagon, FiCloudLightning, FiTrendingUp } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiEdit2, FiCheck, FiArrowRight, FiArrowLeft, FiChevronLeft, FiPlus, FiTrash2, FiMapPin, FiSave, FiSearch, FiChevronDown, FiUnlock, FiAlertTriangle, FiClock, FiAlertOctagon, FiCloudLightning, FiTrendingUp, FiWifiOff } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import BottomNav from "../../modules/BottomNav";
-import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox } from "../../db";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, getModularOutbox } from "../../db";
 import { MapContainer, TileLayer, Marker, Popup, Rectangle, Polygon, useMapEvents, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -57,10 +57,12 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
     const [schoolId, setSchoolId] = useState("");
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [showOfflineSuccess, setShowOfflineSuccess] = useState(false);
     const [showWelcomeBack, setShowWelcomeBack] = useState(false);
     const [isCertified, setIsCertified] = useState(false);
     const [showDraftModal, setShowDraftModal] = useState(false);
     const [schoolData, setSchoolData] = useState(null);
+    const [savedData, setSavedData] = useState(null);
     const [currentPage, setCurrentPage] = useState(1); // 1-5 Wizard Stages
     const [buildingTypes, setBuildingTypes] = useState(() => {
         const cached = localStorage.getItem("nsbi_building_types");
@@ -149,85 +151,109 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             setSchoolId(storedId);
 
             try {
+                // 1. GATHER ALL LOCAL SOURCES
+                const outbox = await getModularOutbox().catch(() => []);
+                const pendingUnit1 = outbox.find(e => e.unitId === 1 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const pendingUnit2 = outbox.find(e => e.unitId === 2 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const pendingUnit3 = outbox.find(e => e.unitId === 3 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const pendingUnit7 = outbox.find(e => e.unitId === 7 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
                 const draft = await getUnitDraft(7, storedId);
-                const resProfile = await fetch(`/api/ph_schools/${storedId}`);
-                if (resProfile.ok) {
-                    const profile = await resProfile.json();
-                    if (profile.exists && profile.data) {
-                        setSchoolData(profile.data);
-                        if (profile.data.latitude && profile.data.longitude) {
-                            setCenterMap([parseFloat(profile.data.latitude), parseFloat(profile.data.longitude)]);
-                        }
 
-                        // --- Unit 2 Grade & Grouping Detection (Replacing Unit 7) ---
-                        const co = (profile.data.curricular_offering || "").toLowerCase();
-                        const hasKinder = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("kinder");
-                        const hasElem = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12");
-                        const hasJHS = co.includes("junior high") || co.includes("jhs") || co.includes("k to 10") || co.includes("k to 12");
-                        const hasSHS = co.includes("senior high") || co.includes("shs") || co.includes("k to 12");
-
-                        let u2Parsed = [];
-                        if (profile.data.unit2_simplified_enrollment) {
-                            try {
-                                const raw = typeof profile.data.unit2_simplified_enrollment === 'string' 
-                                    ? JSON.parse(profile.data.unit2_simplified_enrollment) 
-                                    : profile.data.unit2_simplified_enrollment;
-                                u2Parsed = Array.isArray(raw) ? raw : (raw.array || []);
-                            } catch (e) { console.warn("U2 Parse Error", e); }
-                        }
-
-                        const detectedGrades = [];
-                        const ALL_POSSIBLE = [
-                            { id: "kinder", label: "Kinder" },
-                            ...['1','2','3','4','5','6','7','8','9','10','11','12'].map(lvl => ({ id: `g${lvl}`, label: `Grade ${lvl}` }))
-                        ];
-
-                        // 1. Identify Monogrades from Unit 2
-                        ALL_POSSIBLE.forEach(pg => {
-                            let isOffered = false;
-                            const nid = pg.id.replace('g', '');
-                            if (pg.id === 'kinder') isOffered = hasKinder;
-                            else if (['1','2','3','4','5','6'].includes(nid)) isOffered = hasElem;
-                            else if (['7','8','9','10'].includes(nid)) isOffered = hasJHS;
-                            else if (['11','12'].includes(nid)) isOffered = hasSHS;
-
-                            const u2Entry = u2Parsed.find(x => x.grade_level === pg.id);
-                            const isActive = u2Entry ? u2Entry.is_active !== false : isOffered;
-                            const hasEnrollment = u2Entry ? (parseInt(u2Entry.total) > 0) : false;
-
-                            if (hasEnrollment || (isOffered && isActive)) {
-                                detectedGrades.push({ id: pg.id, label: pg.label, isMultigrade: false });
-                            }
-                        });
-
-                        // 2. Identify Multigrade Groups from Unit 2/Profile
-                        const mgGroups = [];
-                        for (let i = 1; i <= 3; i++) {
-                            const groupName = profile.data[`multigrade_groupings_${i}`];
-                            const groupEnrollment = parseInt(profile.data[`multigrade_enrollment_${i}`] || 0);
-                            if (groupName && groupEnrollment > 0) {
-                                mgGroups.push({ id: `mg_${i}`, label: groupName, isMultigrade: true });
-                            }
-                        }
-
-                        // 3. Filter out monogrades that are part of a MG group (optional but cleaner)
-                        // For Unit 7, it might be better to show both if the user wants to assign a room to a specific grade within a group,
-                        // but usually multigrade rooms are assigned to the group.
-                        // Let's stick to showing what Unit 2 defines as active.
-                        
-                        setAvailableGrades([...detectedGrades, ...mgGroups]);
+                // 2. RECONSTRUCT SCHOOL BASELINE
+                let baseline = { iern: "", curricular_offering: "", latitude: 14.5995, longitude: 120.9842 };
+                try {
+                    const res = await fetch(`/api/ph_schools/${storedId}`);
+                    if (res.ok) {
+                        const profile = await res.json();
+                        if (profile.exists && profile.data) baseline = { ...baseline, ...profile.data };
                     }
+                } catch (e) { console.log("📍 [Unit7] Offline: Using local sources for baseline."); }
+
+                // Overlay Unit 1 Sync Center Data
+                if (pendingUnit1) baseline.curricular_offering = pendingUnit1.payload?.curricular_offering || baseline.curricular_offering;
+                
+                // Overlay Unit 2 Sync Center Data
+                if (pendingUnit2) {
+                    baseline.unit2_simplified_enrollment = pendingUnit2.payload?.unit2_simplified_enrollment;
+                    baseline.total_enrollment = pendingUnit2.payload?.total_enrollment || baseline.total_enrollment;
+                    
+                    // Also multigrade groupings
+                    baseline.multigrade_groupings_1 = pendingUnit2.payload?.multigrade_groupings_1;
+                    baseline.multigrade_groupings_2 = pendingUnit2.payload?.multigrade_groupings_2;
+                    baseline.multigrade_groupings_3 = pendingUnit2.payload?.multigrade_groupings_3;
+                    
+                    baseline.multigrade_enrollment_1 = pendingUnit2.payload?.multigrade_enrollment_1;
+                    baseline.multigrade_enrollment_2 = pendingUnit2.payload?.multigrade_enrollment_2;
+                    baseline.multigrade_enrollment_3 = pendingUnit2.payload?.multigrade_enrollment_3;
                 }
 
-                // MASTER PRECEDENCE: Draft > Database
-                if (draft) {
+                setSchoolData(baseline);
+                if (baseline.latitude && baseline.longitude) {
+                    setCenterMap([parseFloat(baseline.latitude), parseFloat(baseline.longitude)]);
+                }
+
+                // 3. RECONSTRUCT AVAILABLE GRADES
+                const co = (baseline.curricular_offering || "").toLowerCase();
+                const hasKinder = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("kinder");
+                const hasElem = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12");
+                const hasJHS = co.includes("junior high") || co.includes("jhs") || co.includes("k to 10") || co.includes("k to 12");
+                const hasSHS = co.includes("senior high") || co.includes("shs") || co.includes("k to 12");
+
+                let u2Parsed = [];
+                if (baseline.unit2_simplified_enrollment) {
+                    try {
+                        const raw = typeof baseline.unit2_simplified_enrollment === 'string' ? JSON.parse(baseline.unit2_simplified_enrollment) : baseline.unit2_simplified_enrollment;
+                        u2Parsed = Array.isArray(raw) ? raw : (raw.array || []);
+                    } catch (e) { console.warn("U2 Parse Error", e); }
+                }
+
+                const detectedGrades = [];
+                const ALL_POSSIBLE = [
+                    { id: "kinder", label: "Kinder" },
+                    ...['1','2','3','4','5','6','7','8','9','10','11','12'].map(lvl => ({ id: `g${lvl}`, label: `Grade ${lvl}` }))
+                ];
+
+                ALL_POSSIBLE.forEach(pg => {
+                    let isOffered = false;
+                    const nid = pg.id.replace('g', '');
+                    if (pg.id === 'kinder') isOffered = hasKinder;
+                    else if (['1','2','3','4','5','6'].includes(nid)) isOffered = hasElem;
+                    else if (['7','8','9','10'].includes(nid)) isOffered = hasJHS;
+                    else if (['11','12'].includes(nid)) isOffered = hasSHS;
+
+                    const u2Entry = u2Parsed.find(x => x.grade_level === pg.id);
+                    const isActive = u2Entry ? u2Entry.is_active !== false : isOffered;
+                    const hasEnrollment = u2Entry ? (parseInt(u2Entry.total) >= 0) : false; // Note: using >= 0 to include active grades even if zero enrollment
+
+                    if (hasEnrollment || (isOffered && isActive)) {
+                        detectedGrades.push({ id: pg.id, label: pg.label, isMultigrade: false });
+                    }
+                });
+
+                const mgGroups = [];
+                for (let i = 1; i <= 3; i++) {
+                    const groupName = baseline[`multigrade_groupings_${i}`];
+                    if (groupName) mgGroups.push({ id: `mg_${i}`, label: groupName, isMultigrade: true });
+                }
+                setAvailableGrades([...detectedGrades, ...mgGroups]);
+
+                // 4. RESTORE UNIT 7 DATA
+                if (pendingUnit7) {
+                    setBuildings(pendingUnit7.payload?.inventoryEntries || []);
+                    setRoomsData(pendingUnit7.payload?.rooms || []);
+                    setRepairAssessments(pendingUnit7.payload?.repairEntries || []);
+                    setSpaces(pendingUnit7.payload?.spaces || []);
+                    setHasRepair(pendingUnit7.payload?.repairEntries?.length > 0);
+                    setSavedData(pendingUnit7.payload);
+                    setIsReadOnly(true);
+                } else if (draft) {
                     setCurrentPage(draft.currentPage || 1);
                     setBuildings(draft.buildings || []);
                     setRoomsData(draft.roomsData || []);
                     setRepairAssessments(draft.repairAssessments || []);
                     setSpaces(draft.spaces || []);
                     setHasRepair(draft.hasRepair);
-                    setIsReadOnly(false); // Force edit mode for drafts
+                    setIsReadOnly(false);
                     setShowWelcomeBack(true);
                     setTimeout(() => setShowWelcomeBack(false), 3000);
                 } else {
@@ -242,7 +268,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             }
         };
         init();
-    }, []);
+    }, [targetSchoolId]);
 
     const fetchMasterData = async (id) => {
         try {
@@ -772,7 +798,9 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 schoolId, school_id: schoolId, iern: schoolData?.iern,
                 inventoryEntries: inventoryPayload, rooms: roomsData, repairEntries: repairPayload,
                 build_classrooms_total, build_classrooms_new, build_classrooms_good, 
-                build_classrooms_repair, build_classrooms_demolition
+                build_classrooms_repair, build_classrooms_demolition,
+                // Reconstruction Metadata
+                spaces: spaces
             };
 
             if (!navigator.onLine) {
@@ -782,8 +810,18 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                     payload, schoolId
                 });
                 await clearUnitDraft(7, schoolId);
-                alert("Working Offline: Unit 7 has been saved to your Sync Center.");
-                navigate("/modular-dashboard");
+                
+                // Update local quest progress
+                const stored = localStorage.getItem('quest_progress');
+                let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+                if (!progress.completedUnits.includes(7)) {
+                    progress.completedUnits.push(7);
+                    if (!progress.completedUnits.includes(10)) progress.completedUnits.push(10);
+                    progress.xp += 500;
+                    localStorage.setItem('quest_progress', JSON.stringify(progress));
+                }
+
+                setShowOfflineSuccess(true);
                 return;
             }
 
@@ -816,37 +854,22 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             setTimeout(() => navigate("/modular-dashboard"), 3000);
         } catch (err) {
             console.error("UNIT 7 SUBMIT ERROR:", err);
-            if (!navigator.onLine || err.message.includes('fetch')) {
-                const build_classrooms_total = roomsData.length;
-                const build_classrooms_new = roomsData.filter(r => buildings.find(b => b.id === r.building_local_id)?.status === "Newly Built").length;
-                const build_classrooms_good = roomsData.filter(r => buildings.find(b => b.id === r.building_local_id)?.status === "Good Condition").length;
-                const build_classrooms_repair = roomsData.filter(r => r.condition === 'Repair').length;
-                const build_classrooms_demolition = roomsData.filter(r => {
-                    const b = buildings.find(bld => bld.id === r.building_local_id);
-                    return b && (b.status === "For Condemnation" || b.status === "Condemned");
-                }).length;
-                
+            if (!navigator.onLine || err.message.includes('fetch') || err.message.includes('Network error')) {
+                const payload = {
+                    schoolId, school_id: schoolId, iern: schoolData?.iern,
+                    inventoryEntries: buildings, rooms: roomsData, repairEntries: repairAssessments,
+                    build_classrooms_total: roomsData.length,
+                    spaces: spaces
+                };
                 await addModularToOutbox({
                     unitId: 7, label: "Unit 7: Physical Facilities (Inventory & Mapping)",
                     url: `/api/save-physical-facilities`, method: 'POST',
-                    payload: {
-                        schoolId, school_id: schoolId, iern: schoolData?.iern,
-                        inventoryEntries: buildings, rooms: roomsData, 
-                        repairEntries: repairAssessments.map(a => ({
-                            building_no: a.building_name, room_no: a.room_name, item_name: a.item, oms: a.oms,
-                            condition: a.condition, damage_ratio: a.damage_ratio, recommended_action: a.recommend_action,
-                            demo_justification: a.demo_justification, remarks: a.remarks
-                        })),
-                        build_classrooms_total, build_classrooms_new, build_classrooms_good, 
-                        build_classrooms_repair, build_classrooms_demolition
-                    },
-                    schoolId
+                    payload, schoolId
                 });
                 await clearUnitDraft(7, schoolId);
-                alert("Connection Interrupted: Progress saved to Sync Center.");
-                navigate("/modular-dashboard");
+                setShowOfflineSuccess(true);
             } else {
-                alert("Failed to submit master payload.");
+                alert("Failed to save facilities data. " + err.message);
             }
         } finally {
             setLoading(false);
@@ -2119,6 +2142,29 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 )}
             </AnimatePresence>
 
+            <AnimatePresence>
+                {showOfflineSuccess && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center pointer-events-auto">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full rounded-t-[3rem] p-10 pb-12 shadow-2xl relative max-w-md">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-orange-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-orange-200 mb-6 font-bold text-white">
+                                <FiWifiOff />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight px-4">Local Secure: Unit 7 Saved!</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-6">Your infrastructure layout, building inventory, and facility assessments have been saved locally. We will automatically sync your school's physical profile once you're back online.</p>
+                            
+                            <div className="mt-10">
+                                <button onClick={() => navigate("/modular-dashboard")}
+                                    className="w-full py-5 rounded-[2rem] bg-orange-600 text-white font-black text-lg shadow-xl shadow-orange-100 active:scale-95 transition-all outline-none">
+                                    Return to Modules Dashboard
+                                </button>
+                                <p className="text-[10px] text-orange-500 font-bold uppercase text-center mt-6 tracking-widest leading-loose">✓ Offline Mode • Auto-Sync Enabled ✓</p>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
