@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiCheck, FiChevronRight, FiChevronLeft, FiLayers, FiUsers, FiUnlock, FiSave, FiArrowLeft, FiAlertTriangle } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiCheck, FiChevronRight, FiChevronLeft, FiLayers, FiUsers, FiUnlock, FiSave, FiArrowLeft, FiAlertTriangle, FiWifiOff } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, getModularOutbox } from "../../db";
@@ -91,6 +91,9 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     const [iern, setIern] = useState("");
     const [showWelcomeBack, setShowWelcomeBack] = useState(false);
     const [showDraftModal, setShowDraftModal] = useState(false);
+    const [showOfflineSuccess, setShowOfflineSuccess] = useState(false);
+    const [pendingOutboxId, setPendingOutboxId] = useState(null);
+    const [isReviewMode, setIsReviewMode] = useState(false);
 
     const [isFetching, setIsFetching] = useState(true);
     const [fetchError, setFetchError] = useState(null);
@@ -290,6 +293,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 const outbox = await getModularOutbox().catch(() => []);
                 const pendingUnit1 = outbox.find(e => e.unitId === 1 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
                 const pendingUnit2 = outbox.find(e => e.unitId === 2 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const pendingUnit3 = outbox.find(e => e.unitId === 3 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
                 const draft = await getUnitDraft(3, storedId);
 
                 // 2. Reconstruct school baseline
@@ -313,8 +317,20 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                         let sum = parseInt(q.kinderEnrollment) || 0;
                         if (q.gradeTotals) Object.values(q.gradeTotals).forEach(v => sum += (parseInt(v) || 0));
                         baseline.total_enrollment = sum;
-                        baseline.unit2_simplified_enrollment = p.unit2_simplified_enrollment; 
+                        baseline.unit2_simplified_enrollment = p.unit2_simplified_enrollment;
                     }
+                    baseline.multigrade_groupings_1 = p.multigrade_groupings_1;
+                    baseline.multigrade_groupings_2 = p.multigrade_groupings_2;
+                    baseline.multigrade_groupings_3 = p.multigrade_groupings_3;
+                    baseline.multigrade_enrollment_1 = p.multigrade_enrollment_1;
+                    baseline.multigrade_enrollment_2 = p.multigrade_enrollment_2;
+                    baseline.multigrade_enrollment_3 = p.multigrade_enrollment_3;
+                }
+
+                if (pendingUnit3) {
+                    baseline.unit3_simplified_counts = pendingUnit3.payload?.unit3_simplified_counts;
+                    // Also flag as completed to trigger Read Only if needed
+                    baseline.unit3_completed = true; 
                 }
 
                 if (baseline.iern) setIern(baseline.iern);
@@ -352,7 +368,15 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                     };
                 });
 
-                if (draft) {
+                // 4. APPLY SYNC CENTER (UNIT 3)
+                if (pendingUnit3) {
+                    setSectionData(pendingUnit3.payload?.sectionData || mergedData);
+                    setPendingOutboxId(pendingUnit3.id);
+                    setIsReviewMode(true);
+                    setIsReadOnly(true);
+                } 
+                // 5. APPLY DRAFT
+                else if (draft) {
                     setSectionData(draft.sectionData || mergedData);
                     setCurrentStep(draft.step !== undefined ? draft.step : 1);
                     setIsReadOnly(false);
@@ -360,6 +384,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                     setTimeout(() => setShowWelcomeBack(false), 3000);
                 } else {
                     setSectionData(mergedData);
+                    setCurrentStep(1);
                     if (isActuallySaved || baseline.unit3_completed || propReadOnly) {
                         setIsReadOnly(true);
                     }
@@ -466,7 +491,9 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 has_multigrade: availableGrades.some(g => g.id.startsWith("mg_")),
                 multigrade_sections_count: 0,
                 multigrade_groups: null,
-                unit3_simplified_counts: JSON.stringify(payloadArray)
+                unit3_simplified_counts: JSON.stringify(payloadArray),
+                sectionData: sectionData, // IMPORTANT: needed for offline summary reconstruction
+                totalSteps: availableGrades.length
             };
 
             // Extract the strings cleanly for API routing
@@ -502,8 +529,17 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                     schoolId: schoolId
                 });
                 await clearUnitDraft(3, schoolId);
-                alert("Working Offline: Unit 3 section data saved to your Sync Center.");
-                navigate("/modular-dashboard");
+                
+                // Update local visual progress
+                const stored = localStorage.getItem('quest_progress');
+                let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+                if (!progress.completedUnits.includes(3)) {
+                    progress.completedUnits.push(3);
+                    progress.xp = (progress.xp || 0) + 200;
+                }
+                localStorage.setItem('quest_progress', JSON.stringify(progress));
+
+                setShowOfflineSuccess(true);
                 return;
             }
 
@@ -547,8 +583,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                     schoolId: schoolId
                 });
                 await clearUnitDraft(3, schoolId);
-                alert("Network Interrupted: Progress saved to Sync Center.");
-                navigate("/modular-dashboard");
+                setShowOfflineSuccess(true);
             } else {
                 alert(err.message);
             }
@@ -1150,6 +1185,30 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                                     className="py-5 rounded-[2rem] bg-blue-600 text-white font-black text-lg shadow-xl shadow-blue-100 active:scale-95 transition-all outline-none">
                                     Save & Exit
                                 </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {showOfflineSuccess && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full rounded-t-[3rem] p-10 pb-12 shadow-2xl relative">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-amber-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-amber-200 mb-6 font-bold text-white">
+                                <FiWifiOff />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight px-4">Local Secure: Unit 3 Saved!</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-6">Your Section Registry has been saved locally. We will automatically update your school's official records once your internet is restored.</p>
+                            
+                            <div className="mt-10">
+                                <button onClick={() => navigate("/modular-dashboard")}
+                                    className="w-full py-5 rounded-[2rem] bg-amber-600 text-white font-black text-lg shadow-xl shadow-amber-100 active:scale-95 transition-all outline-none">
+                                    Return to Modules Dashboard
+                                </button>
+                                <p className="text-[10px] text-amber-500 font-bold uppercase text-center mt-6 tracking-widest leading-loose">✓ Offline Mode • Auto-Sync Enabled ✓</p>
                             </div>
                         </motion.div>
                     </div>
