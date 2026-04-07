@@ -268,17 +268,17 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
                 // Overlay Unit 1 Sync Center Data
                 if (pendingUnit1) baseline.curricular_offering = pendingUnit1.payload?.curricular_offering || baseline.curricular_offering;
-                
+
                 // Overlay Unit 2 Sync Center Data
                 if (pendingUnit2) {
                     baseline.unit2_simplified_enrollment = pendingUnit2.payload?.unit2_simplified_enrollment;
                     baseline.total_enrollment = pendingUnit2.payload?.total_enrollment || baseline.total_enrollment;
-                    
+
                     // Also multigrade groupings
                     baseline.multigrade_groupings_1 = pendingUnit2.payload?.multigrade_groupings_1;
                     baseline.multigrade_groupings_2 = pendingUnit2.payload?.multigrade_groupings_2;
                     baseline.multigrade_groupings_3 = pendingUnit2.payload?.multigrade_groupings_3;
-                    
+
                     baseline.multigrade_enrollment_1 = pendingUnit2.payload?.multigrade_enrollment_1;
                     baseline.multigrade_enrollment_2 = pendingUnit2.payload?.multigrade_enrollment_2;
                     baseline.multigrade_enrollment_3 = pendingUnit2.payload?.multigrade_enrollment_3;
@@ -307,20 +307,20 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 const detectedGrades = [];
                 const ALL_POSSIBLE = [
                     { id: "kinder", label: "Kinder" },
-                    ...['1','2','3','4','5','6','7','8','9','10','11','12'].map(lvl => ({ id: `g${lvl}`, label: `Grade ${lvl}` }))
+                    ...['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'].map(lvl => ({ id: `g${lvl}`, label: `Grade ${lvl}` }))
                 ];
 
                 ALL_POSSIBLE.forEach(pg => {
                     let isOffered = false;
                     const nid = pg.id.replace('g', '');
                     if (pg.id === 'kinder') isOffered = hasKinder;
-                    else if (['1','2','3','4','5','6'].includes(nid)) isOffered = hasElem;
-                    else if (['7','8','9','10'].includes(nid)) isOffered = hasJHS;
-                    else if (['11','12'].includes(nid)) isOffered = hasSHS;
+                    else if (['1', '2', '3', '4', '5', '6'].includes(nid)) isOffered = hasElem;
+                    else if (['7', '8', '9', '10'].includes(nid)) isOffered = hasJHS;
+                    else if (['11', '12'].includes(nid)) isOffered = hasSHS;
 
                     const u2Entry = u2Parsed.find(x => x.grade_level === pg.id);
                     const isActive = u2Entry ? u2Entry.is_active !== false : isOffered;
-                    const hasEnrollment = u2Entry ? (parseInt(u2Entry.total) >= 0) : false; // Note: using >= 0 to include active grades even if zero enrollment
+                    const hasEnrollment = u2Entry ? (parseInt(u2Entry.total) >= 0) : false;
 
                     if (hasEnrollment || (isOffered && isActive)) {
                         detectedGrades.push({ id: pg.id, label: pg.label, isMultigrade: false });
@@ -493,7 +493,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
         if (!lat || !lng || !lengthM || !widthM) return null;
 
         const rotationRad = (rotationDeg * Math.PI) / 180;
-        
+
         // Meters per degree approximations
         const metersPerLat = 111320;
         const metersPerLng = 111320 * Math.cos(lat * Math.PI / 180);
@@ -604,7 +604,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
     const handleSaveBuilding = () => {
         const isDuplicateBuilding = buildings.some(
             b => b.id !== editingBuildingId &&
-                 (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase()
+                (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase()
         );
         if (isDuplicateBuilding) {
             alert("A building with this name already exists. Please use a unique name.");
@@ -872,8 +872,8 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
         const unassessedRooms = repairRooms.filter(room => {
             const building = buildings.find(b => b.id === room.building_local_id);
             const bName = building ? (building.building_name || building.building_no) : "";
-            return !repairAssessments.some(a => 
-                (a.building_name === bName || a.building_no === bName) && 
+            return !repairAssessments.some(a =>
+                (a.building_name === bName || a.building_no === bName) &&
                 (a.room_name === room.room_name || a.room_no === room.room_name)
             );
         });
@@ -914,13 +914,23 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             const payload = {
                 schoolId, school_id: schoolId, iern: schoolData?.iern,
                 inventoryEntries: inventoryPayload, rooms: roomsData, repairEntries: repairPayload,
-                build_classrooms_total, build_classrooms_new, build_classrooms_good, 
+                build_classrooms_total, build_classrooms_new, build_classrooms_good,
                 build_classrooms_repair, build_classrooms_demolition,
                 // Reconstruction Metadata
                 spaces: spaces
             };
 
             if (!navigator.onLine) {
+<<<<<<< Updated upstream
+=======
+                await addModularToOutbox({
+                    unitId: 7, label: "Unit 7: Physical Facilities (Inventory & Mapping)",
+                    url: `/api/save-physical-facilities`, method: 'POST',
+                    payload, schoolId
+                });
+                await clearUnitDraft(7, schoolId);
+
+>>>>>>> Stashed changes
                 // Update local quest progress
                 const stored = localStorage.getItem('quest_progress');
                 let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
@@ -1343,529 +1353,201 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             ) : (
                 <main className="flex-1 w-full max-w-3xl mx-auto p-4 lg:p-6 flex flex-col pt-8">
 
-                {currentPage === 1 && (
-                    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-                        <h2 className="text-3xl font-black text-gray-800 tracking-tight leading-tight mb-2">
-                            Visual Multi-Space Builder 🏗️
-                        </h2>
-                        <p className="text-gray-500 mb-6 font-medium">Draw and record buildable spaces for the school campus footprint.</p>
+                    {currentPage === 1 && (
+                        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+                            <h2 className="text-3xl font-black text-gray-800 tracking-tight leading-tight mb-2">
+                                Visual Multi-Space Builder 🏗️
+                            </h2>
+                            <p className="text-gray-500 mb-6 font-medium">Draw and record buildable spaces for the school campus footprint.</p>
 
-                        {/* Form or Add Button */}
-                        <AnimatePresence mode="wait">
-                            {!isFormVisible ? (
-                                <motion.button
-                                    key="addbtn"
-                                    initial={{ opacity: 0, scale: 0.9 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.9 }}
-                                    onClick={() => {
-                                        setIsFormVisible(true);
-                                        // Scroll to top when opening form so user sees it
-                                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                                    }}
-                                    className="bg-emerald-500 w-full py-4 rounded-2xl text-white font-black text-lg border-b-[6px] border-emerald-700 active:border-b-0 active:translate-y-[6px] shadow-lg flex justify-center items-center gap-2 mb-8 transition-all hover:bg-emerald-400"
-                                >
-                                    <FiPlus className="w-6 h-6" /> Add Buildable Space
-                                </motion.button>
-                            ) : (
-                                <motion.div
-                                    key="form"
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: -20 }}
-                                    className="bg-white p-5 rounded-3xl shadow-lg border border-gray-100 mb-8"
-                                >
-                                    <div className="flex justify-between items-center mb-4">
-                                        <h3 className="font-black text-xl text-gray-800">New Space Details</h3>
-                                        <button onClick={() => setIsFormVisible(false)} className="text-gray-400 hover:text-gray-700"><FiX className="w-6 h-6" /></button>
-                                    </div>
-
-                                    <p className="text-sm font-bold text-amber-600 mb-4 bg-amber-50 p-3 rounded-lg flex items-center gap-2">
-                                        <FiMapPin className="shrink-0" />
-                                        {newSpace.center_lat ? "Pin placed! Adjust size." : "Tap on the map below to select the center location!"}
-                                    </p>
-
-                                    <div className="space-y-4">
-                                        <div>
-                                            <label className="text-sm font-bold text-gray-500 ml-2">Space Name / ID</label>
-                                            <input type="text" value={newSpace.space_name} onChange={(e) => setNewSpace({ ...newSpace, space_name: e.target.value })}
-                                                className={`w-full bg-gray-50 border-2 ${spaces.some(s => (s.space_name || "").trim().toLowerCase() === (newSpace.space_name || "").trim().toLowerCase()) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-200 focus:border-emerald-500'} mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none transition-all`} />
-                                            {spaces.some(s => (s.space_name || "").trim().toLowerCase() === (newSpace.space_name || "").trim().toLowerCase()) && (
-                                                <p className="text-rose-500 text-[10px] font-black uppercase mt-1 ml-2 flex items-center gap-1">
-                                                    <FiAlertTriangle /> This space name is already in use
-                                                </p>
-                                            )}
+                            {/* Form or Add Button */}
+                            <AnimatePresence mode="wait">
+                                {!isFormVisible ? (
+                                    <motion.button
+                                        key="addbtn"
+                                        initial={{ opacity: 0, scale: 0.9 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 0.9 }}
+                                        onClick={() => {
+                                            setIsFormVisible(true);
+                                            // Scroll to top when opening form so user sees it
+                                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                                        }}
+                                        className="bg-emerald-500 w-full py-4 rounded-2xl text-white font-black text-lg border-b-[6px] border-emerald-700 active:border-b-0 active:translate-y-[6px] shadow-lg flex justify-center items-center gap-2 mb-8 transition-all hover:bg-emerald-400"
+                                    >
+                                        <FiPlus className="w-6 h-6" /> Add Buildable Space
+                                    </motion.button>
+                                ) : (
+                                    <motion.div
+                                        key="form"
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -20 }}
+                                        className="bg-white p-5 rounded-3xl shadow-lg border border-gray-100 mb-8"
+                                    >
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h3 className="font-black text-xl text-gray-800">New Space Details</h3>
+                                            <button onClick={() => setIsFormVisible(false)} className="text-gray-400 hover:text-gray-700"><FiX className="w-6 h-6" /></button>
                                         </div>
 
-                                        <div className="flex gap-4">
-                                            <div className="flex-1">
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Length (meters)</label>
-                                                <input type="number" value={newSpace.length_m} onChange={(e) => setNewSpace({ ...newSpace, length_m: parseFloat(e.target.value) || 0 })}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all text-center" />
-                                            </div>
-                                            <div className="flex-1">
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Width (meters)</label>
-                                                <input type="number" value={newSpace.width_m} onChange={(e) => setNewSpace({ ...newSpace, width_m: parseFloat(e.target.value) || 0 })}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all text-center" />
-                                            </div>
-                                        </div>
+                                        <p className="text-sm font-bold text-amber-600 mb-4 bg-amber-50 p-3 rounded-lg flex items-center gap-2">
+                                            <FiMapPin className="shrink-0" />
+                                            {newSpace.center_lat ? "Pin placed! Adjust size." : "Tap on the map below to select the center location!"}
+                                        </p>
 
-                                        <div className="bg-emerald-50 p-4 rounded-2xl border-2 border-emerald-100 mt-4">
-                                            <div className="flex justify-between items-center mb-4">
-                                                <span className="font-bold text-emerald-800">Computed Area:</span>
-                                                <span className="text-3xl font-black text-emerald-600">{totalAreaSqm.toFixed(2)} m&sup2;</span>
-                                            </div>
-                                            
-                                            <div className="pt-4 border-t border-emerald-200/50">
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <label className="text-xs font-black text-emerald-700 uppercase tracking-widest">Rotation Angle</label>
-                                                    <span className="text-xs font-black text-emerald-600">{newSpace.rotation_deg}°</span>
-                                                </div>
-                                                <input 
-                                                    type="range" 
-                                                    min="0" 
-                                                    max="360" 
-                                                    value={newSpace.rotation_deg} 
-                                                    onChange={(e) => setNewSpace({ ...newSpace, rotation_deg: parseInt(e.target.value) })}
-                                                    className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <button onClick={handleSaveSpace} disabled={loading || !newSpace.center_lat || spaces.some(s => (s.space_name || "").trim().toLowerCase() === (newSpace.space_name || "").trim().toLowerCase())}
-                                        className="w-full mt-6 py-4 rounded-2xl text-white font-black text-lg bg-indigo-500 border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px] transition-all disabled:opacity-50 disabled:bg-gray-300 disabled:border-gray-400 shadow-xl shadow-indigo-200/50">
-                                        {loading ? "Saving..." : "Save space configuration ✓"}
-                                    </button>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-
-                        {/* Map Display area */}
-                        <div className="bg-white p-3 rounded-2xl shadow-sm border border-gray-200 mb-6 relative overflow-hidden z-0">
-                            <div className="h-[400px] rounded-xl overflow-hidden shadow-inner">
-                                {centerMap && (
-                                    <MapContainer center={centerMap} zoom={18} scrollWheelZoom={true} className="h-full w-full">
-                                        <TileLayer
-                                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                            maxZoom={20}
-                                        />
-                                        <MapClickHandler />
-                                        <RecenterMap center={centerMap} />
-
-                                        {/* Render existing spaces */}
-                                        {spaces.map((s, idx) => {
-                                            const poly = calculateRotatedPolygon(parseFloat(s.center_lat), parseFloat(s.center_lng), parseFloat(s.length_m), parseFloat(s.width_m), parseFloat(s.rotation_deg) || 0);
-                                            if (!poly) return null;
-                                            return (
-                                                <React.Fragment key={idx}>
-                                                    <Polygon positions={poly} pathOptions={{ color: 'blue', weight: 2, fillOpacity: 0.2 }} />
-                                                    <Marker position={[s.center_lat, s.center_lng]}>
-                                                        <Popup>{s.space_name} ({s.total_area_sqm} sqm)</Popup>
-                                                    </Marker>
-                                                </React.Fragment>
-                                            );
-                                        })}
-
-                                        {/* Render new drawing space */}
-                                        {newSpace.center_lat && newSpace.center_lng && isFormVisible && (() => {
-                                            const poly = calculateRotatedPolygon(newSpace.center_lat, newSpace.center_lng, newSpace.length_m || 0, newSpace.width_m || 0, newSpace.rotation_deg || 0);
-                                            if (!poly) return null;
-                                            return (
-                                                <>
-                                                    <Polygon
-                                                        positions={poly}
-                                                        pathOptions={{ color: 'emerald', weight: 4, fillOpacity: 0.4 }}
-                                                    />
-                                                    <Marker position={[newSpace.center_lat, newSpace.center_lng]}>
-                                                        <Popup>Target Location</Popup>
-                                                    </Marker>
-                                                </>
-                                            );
-                                        })()}
-                                    </MapContainer>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* List of Saved spaces */}
-                        {spaces.length > 0 && (
-                            <div className="mt-4">
-                                <h3 className="font-black text-xl text-gray-800 mb-4 px-2">Saved Spaces</h3>
-                                <div className="space-y-3">
-                                    {spaces.map(s => (
-                                        <div key={s.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
+                                        <div className="space-y-4">
                                             <div>
-                                                <h4 className="font-bold text-lg text-gray-800">{s.space_name}</h4>
-                                                <p className="text-sm text-gray-500 font-medium">{s.length_m}m &times; {s.width_m}m &nbsp;&bull;&nbsp; <span className="text-emerald-600 font-bold">{parseFloat(s.total_area_sqm).toFixed(2)} m&sup2;</span></p>
+                                                <label className="text-sm font-bold text-gray-500 ml-2">Space Name / ID</label>
+                                                <input type="text" value={newSpace.space_name} onChange={(e) => setNewSpace({ ...newSpace, space_name: e.target.value })}
+                                                    className={`w-full bg-gray-50 border-2 ${spaces.some(s => (s.space_name || "").trim().toLowerCase() === (newSpace.space_name || "").trim().toLowerCase()) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-200 focus:border-emerald-500'} mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none transition-all`} />
+                                                {spaces.some(s => (s.space_name || "").trim().toLowerCase() === (newSpace.space_name || "").trim().toLowerCase()) && (
+                                                    <p className="text-rose-500 text-[10px] font-black uppercase mt-1 ml-2 flex items-center gap-1">
+                                                        <FiAlertTriangle /> This space name is already in use
+                                                    </p>
+                                                )}
                                             </div>
-                                            <button onClick={() => handleDelete(s.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors">
-                                                <FiTrash2 className="w-5 h-5" />
-                                            </button>
+
+                                            <div className="flex gap-4">
+                                                <div className="flex-1">
+                                                    <label className="text-sm font-bold text-gray-500 ml-2">Length (meters)</label>
+                                                    <input type="number" value={newSpace.length_m} onChange={(e) => setNewSpace({ ...newSpace, length_m: parseFloat(e.target.value) || 0 })}
+                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all text-center" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <label className="text-sm font-bold text-gray-500 ml-2">Width (meters)</label>
+                                                    <input type="number" value={newSpace.width_m} onChange={(e) => setNewSpace({ ...newSpace, width_m: parseFloat(e.target.value) || 0 })}
+                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all text-center" />
+                                                </div>
+                                            </div>
+
+                                            <div className="bg-emerald-50 p-4 rounded-2xl border-2 border-emerald-100 mt-4">
+                                                <div className="flex justify-between items-center mb-4">
+                                                    <span className="font-bold text-emerald-800">Computed Area:</span>
+                                                    <span className="text-3xl font-black text-emerald-600">{totalAreaSqm.toFixed(2)} m&sup2;</span>
+                                                </div>
+
+                                                <div className="pt-4 border-t border-emerald-200/50">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <label className="text-xs font-black text-emerald-700 uppercase tracking-widest">Rotation Angle</label>
+                                                        <span className="text-xs font-black text-emerald-600">{newSpace.rotation_deg}°</span>
+                                                    </div>
+                                                    <input
+                                                        type="range"
+                                                        min="0"
+                                                        max="360"
+                                                        value={newSpace.rotation_deg}
+                                                        onChange={(e) => setNewSpace({ ...newSpace, rotation_deg: parseInt(e.target.value) })}
+                                                        className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                                    />
+                                                </div>
+                                            </div>
                                         </div>
-                                    ))}
+
+                                        <button onClick={handleSaveSpace} disabled={loading || !newSpace.center_lat || spaces.some(s => (s.space_name || "").trim().toLowerCase() === (newSpace.space_name || "").trim().toLowerCase())}
+                                            className="w-full mt-6 py-4 rounded-2xl text-white font-black text-lg bg-indigo-500 border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px] transition-all disabled:opacity-50 disabled:bg-gray-300 disabled:border-gray-400 shadow-xl shadow-indigo-200/50">
+                                            {loading ? "Saving..." : "Save space configuration ✓"}
+                                        </button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            {/* Map Display area */}
+                            <div className="bg-white p-3 rounded-2xl shadow-sm border border-gray-200 mb-6 relative overflow-hidden z-0">
+                                <div className="h-[400px] rounded-xl overflow-hidden shadow-inner">
+                                    {centerMap && (
+                                        <MapContainer center={centerMap} zoom={18} scrollWheelZoom={true} className="h-full w-full">
+                                            <TileLayer
+                                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                                maxZoom={20}
+                                            />
+                                            <MapClickHandler />
+                                            <RecenterMap center={centerMap} />
+
+                                            {/* Render existing spaces */}
+                                            {spaces.map((s, idx) => {
+                                                const poly = calculateRotatedPolygon(parseFloat(s.center_lat), parseFloat(s.center_lng), parseFloat(s.length_m), parseFloat(s.width_m), parseFloat(s.rotation_deg) || 0);
+                                                if (!poly) return null;
+                                                return (
+                                                    <React.Fragment key={idx}>
+                                                        <Polygon positions={poly} pathOptions={{ color: 'blue', weight: 2, fillOpacity: 0.2 }} />
+                                                        <Marker position={[s.center_lat, s.center_lng]}>
+                                                            <Popup>{s.space_name} ({s.total_area_sqm} sqm)</Popup>
+                                                        </Marker>
+                                                    </React.Fragment>
+                                                );
+                                            })}
+
+                                            {/* Render new drawing space */}
+                                            {newSpace.center_lat && newSpace.center_lng && isFormVisible && (() => {
+                                                const poly = calculateRotatedPolygon(newSpace.center_lat, newSpace.center_lng, newSpace.length_m || 0, newSpace.width_m || 0, newSpace.rotation_deg || 0);
+                                                if (!poly) return null;
+                                                return (
+                                                    <>
+                                                        <Polygon
+                                                            positions={poly}
+                                                            pathOptions={{ color: 'emerald', weight: 4, fillOpacity: 0.4 }}
+                                                        />
+                                                        <Marker position={[newSpace.center_lat, newSpace.center_lng]}>
+                                                            <Popup>Target Location</Popup>
+                                                        </Marker>
+                                                    </>
+                                                );
+                                            })()}
+                                        </MapContainer>
+                                    )}
                                 </div>
                             </div>
-                        )}
-                    </motion.div>
-                )}
 
-                {/* ────────────────────────────────────────────────────────
-                    PHASE 2: Register Building
-                    ──────────────────────────────────────────────────────── */}
-                {currentPage === 2 && (
-                    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-                        <h2 className="text-3xl font-black text-gray-800 tracking-tight leading-tight mb-2">
-                            Register Building 🏢
-                        </h2>
-                        <p className="text-gray-500 mb-6 font-medium">Log the physical structures on your campus.</p>
-
-                        {/* Inventory Area */}
-                        <div className="space-y-6">
-                            {/* Card List */}
-                            {allBuildings.length > 0 && (
-                                <div className="space-y-4">
-                                    {allBuildings.map(b => (
-                                        <div key={b.id} className="bg-white p-5 rounded-3xl shadow-sm border-2 border-gray-100 flex justify-between items-center">
-                                            <div>
-                                                <h4 className="font-black text-xl text-gray-800">{b.building_name}</h4>
-                                                <div className="flex gap-2 mt-1">
-                                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${b.status === 'Newly Built' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
-                                                        {b.status}
-                                                    </span>
+                            {/* List of Saved spaces */}
+                            {spaces.length > 0 && (
+                                <div className="mt-4">
+                                    <h3 className="font-black text-xl text-gray-800 mb-4 px-2">Saved Spaces</h3>
+                                    <div className="space-y-3">
+                                        {spaces.map(s => (
+                                            <div key={s.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
+                                                <div>
+                                                    <h4 className="font-bold text-lg text-gray-800">{s.space_name}</h4>
+                                                    <p className="text-sm text-gray-500 font-medium">{s.length_m}m &times; {s.width_m}m &nbsp;&bull;&nbsp; <span className="text-emerald-600 font-bold">{parseFloat(s.total_area_sqm).toFixed(2)} m&sup2;</span></p>
                                                 </div>
-                                                <p className="text-sm font-bold text-gray-500 mt-1">{b.category} &bull; {b.storey} Storey &bull; {roomsData.filter(r => r.building_local_id === b.id).length} Rooms</p>
-                                            </div>
-                                            <div className="flex flex-col gap-2">
-                                                <button onClick={() => handleEditBuilding(b)} className="p-3 bg-indigo-50 text-indigo-500 rounded-xl hover:bg-indigo-100 transition-colors">
-                                                    <FiEdit2 className="w-5 h-5" />
-                                                </button>
-                                                <button onClick={() => handleDeleteBuilding(b.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors">
+                                                <button onClick={() => handleDelete(s.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors">
                                                     <FiTrash2 className="w-5 h-5" />
                                                 </button>
                                             </div>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
                             )}
+                        </motion.div>
+                    )}
 
-                            {/* Add Button */}
-                            {!showBuildingModal ? (
-                                <motion.button
-                                    initial={{ opacity: 0, scale: 0.9 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    onClick={() => setShowBuildingModal(true)}
-                                    className="bg-indigo-50 w-full py-4 rounded-2xl text-indigo-600 font-black text-lg border-2 border-indigo-200 border-dashed hover:bg-indigo-100 hover:border-indigo-300 transition-all flex justify-center items-center gap-2"
-                                >
-                                    <FiPlus className="w-6 h-6" /> Register Building
-                                </motion.button>
-                            ) : (
-                                /* Form Area */
-                                <motion.div
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    className="bg-white p-6 rounded-[2rem] shadow-xl border border-gray-200"
-                                >
-                                    <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
-                                        <h3 className="font-black text-2xl text-gray-800">Building Details</h3>
-                                        <button onClick={() => setShowBuildingModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full">
-                                            <FiX className="w-6 h-6" />
-                                        </button>
-                                    </div>
-
-                                    <div className="space-y-5">
-                                        <div>
-                                            <label className="text-sm font-bold text-gray-500 ml-2">Building Name</label>
-                                            <input
-                                                type="text"
-                                                value={buildingFormData.building_name}
-                                                onChange={(e) => setBuildingFormData({ ...buildingFormData, building_name: e.target.value })}
-                                                className={`w-full bg-gray-50 border-2 ${buildings.some(b => b.id !== editingBuildingId && (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase()) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-200 focus:border-indigo-500'} mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none transition-all placeholder-gray-300`}
-                                                placeholder="e.g. Marcos Type Bldg"
-                                            />
-                                            {buildings.some(b => b.id !== editingBuildingId && (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase()) && (
-                                                <p className="text-rose-500 text-[10px] font-black uppercase mt-1 ml-2 flex items-center gap-1">
-                                                    <FiAlertTriangle /> This building name is already in use
-                                                </p>
-                                            )}
-                                        </div>
-
-                                        <div className={`relative ${isBuildingDropdownOpen ? 'z-50' : 'z-0'}`}>
-                                            <label className="text-sm font-bold text-gray-500 ml-2">Building Category</label>
-                                            <div className="relative mt-1">
-                                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                    <FiSearch className="text-gray-400 w-5 h-5" />
-                                                </div>
-                                                <input
-                                                    type="text"
-                                                    placeholder="Search building type..."
-                                                    value={isBuildingDropdownOpen ? buildingSearch : buildingFormData.category}
-                                                    onFocus={() => {
-                                                        setIsBuildingDropdownOpen(true);
-                                                        setBuildingSearch("");
-                                                    }}
-                                                    onChange={(e) => {
-                                                        setBuildingSearch(e.target.value);
-                                                        setBuildingFormData(prev => ({ ...prev, category: e.target.value }));
-                                                    }}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl pl-11 pr-12 py-4 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 focus:bg-white transition-all placeholder-gray-300 shadow-sm"
-                                                />
-                                                <div
-                                                    className="absolute inset-y-0 right-0 pr-4 flex items-center cursor-pointer text-gray-400 hover:text-indigo-500"
-                                                    onClick={() => setIsBuildingDropdownOpen(!isBuildingDropdownOpen)}
-                                                >
-                                                    <FiChevronDown className={`w-6 h-6 transition-transform duration-300 ${isBuildingDropdownOpen ? 'rotate-180' : ''}`} />
-                                                </div>
-
-                                                <AnimatePresence>
-                                                    {isBuildingDropdownOpen && (
-                                                        <>
-                                                            <motion.div
-                                                                initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                                                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                                exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                                                                className="absolute z-[100] w-full mt-2 bg-white border-2 border-gray-100 rounded-3xl shadow-2xl max-h-72 overflow-y-auto overflow-x-hidden py-2"
-                                                            >
-                                                                {(buildingSearch ? buildingTypes.filter(t => t.toLowerCase().includes(buildingSearch.toLowerCase())) : buildingTypes).map(type => (
-                                                                    <button
-                                                                        key={type}
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            setBuildingFormData({ ...buildingFormData, category: type });
-                                                                            setBuildingSearch(type);
-                                                                            setIsBuildingDropdownOpen(false);
-                                                                        }}
-                                                                        className={`w-full text-left px-6 py-4 font-bold text-gray-700 transition-all border-b border-gray-50 last:border-0 hover:bg-indigo-50 hover:pl-8 flex items-center justify-between ${buildingFormData.category === type ? 'bg-indigo-50 text-indigo-600' : ''}`}
-                                                                    >
-                                                                        <span>{type}</span>
-                                                                        {buildingFormData.category === type && <FiCheck className="w-5 h-5" />}
-                                                                    </button>
-                                                                ))}
-                                                                <div className="px-6 py-8 text-center text-gray-400">
-                                                                    {buildingTypes.length === 0 ? (
-                                                                        <>
-                                                                            <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                                                                            <p className="italic font-medium">Fetching building types...</p>
-                                                                        </>
-                                                                    ) : (buildingSearch && buildingTypes.filter(t => t.toLowerCase().includes(buildingSearch.toLowerCase())).length === 0) ? (
-                                                                        <>
-                                                                            <FiSearch className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                                                                            <p className="italic font-medium">No matching building types found</p>
-                                                                        </>
-                                                                    ) : null}
-                                                                </div>
-                                                            </motion.div>
-                                                            <div className="fixed inset-0 z-40" onClick={() => setIsBuildingDropdownOpen(false)}></div>
-                                                        </>
-                                                    )}
-                                                </AnimatePresence>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex gap-4">
-                                            <div className="flex-1">
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Storeys</label>
-                                                <input
-                                                    type="text"
-                                                    inputMode="numeric"
-                                                    value={buildingFormData.storey}
-                                                    placeholder="1"
-                                                    onChange={(e) => {
-                                                        const val = e.target.value.replace(/[^0-9]/g, '');
-                                                        setBuildingFormData({ ...buildingFormData, storey: val });
-                                                    }}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center"
-                                                />
-                                            </div>
-                                            <div className="flex-1">
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Classrooms</label>
-                                                <input
-                                                    type="text"
-                                                    inputMode="numeric"
-                                                    value={buildingFormData.classroom}
-                                                    placeholder="1"
-                                                    onChange={(e) => {
-                                                        const val = e.target.value.replace(/[^0-9]/g, '');
-                                                        setBuildingFormData({ ...buildingFormData, classroom: val });
-                                                    }}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div>
-                                            <label className="text-sm font-bold text-gray-500 ml-2">Year Completed</label>
-                                            <select
-                                                value={buildingFormData.year_completed}
-                                                onChange={(e) => setBuildingFormData({ ...buildingFormData, year_completed: parseInt(e.target.value) })}
-                                                className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer"
-                                            >
-                                                {years.map(y => <option key={y} value={y}>{y}</option>)}
-                                            </select>
-                                        </div>
-
-                                        <div className="flex gap-4">
-                                            <div className="flex-1">
-                                                <label className="text-sm font-bold text-gray-500 ml-2 mb-1 block">Building Status</label>
-                                                <select
-                                                    value={buildingFormData.status}
-                                                    onChange={(e) => setBuildingFormData({ ...buildingFormData, status: e.target.value })}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all cursor-pointer"
-                                                >
-                                                    <option value="Newly Built">Newly Built</option>
-                                                    <option value="Good Condition">Good Condition</option>
-                                                    <option value="For Major Repairs">For Major Repairs</option>
-                                                    <option value="For Minor Repairs">For Minor Repairs</option>
-                                                    <option value="For Condemnation">For Condemnation</option>
-                                                    <option value="Condemned">Condemned</option>
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        {(buildingFormData.status === 'For Condemnation' || buildingFormData.status === 'Condemned') && (
-                                            <div className="p-5 bg-rose-50 rounded-2xl border-2 border-rose-100 space-y-4">
-                                                <h4 className="text-sm font-black text-rose-600 uppercase tracking-widest flex items-center gap-2">
-                                                    <FiAlertTriangle className="w-4 h-4" /> Justification for Condemnation
-                                                </h4>
-                                                <div className="grid grid-cols-1 gap-3">
-                                                    {[
-                                                        { id: 'condemn_age', label: 'Age / Dilapidation', icon: <FiClock /> },
-                                                        { id: 'condemn_hazard', label: 'Safety Hazard', icon: <FiAlertOctagon /> },
-                                                        { id: 'condemn_calamity', label: 'Calamity Damage', icon: <FiCloudLightning /> },
-                                                        { id: 'condemn_upgrade', label: 'Site Upgrade / Repurposing', icon: <FiTrendingUp /> }
-                                                    ].map(item => (
-                                                        <button
-                                                            key={item.id}
-                                                            onClick={() => setBuildingFormData({ ...buildingFormData, [item.id]: !buildingFormData[item.id] })}
-                                                            className={`py-3 px-4 rounded-xl font-bold text-sm border-2 text-left flex items-center justify-between transition-all ${buildingFormData[item.id] ? 'bg-white border-rose-400 text-rose-700 shadow-sm' : 'bg-rose-50/50 border-rose-100 text-rose-300 hover:bg-white hover:border-rose-200'}`}
-                                                        >
-                                                            <span className="flex items-center gap-2">{item.icon} {item.label}</span>
-                                                            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${buildingFormData[item.id] ? 'bg-rose-500 border-rose-500 text-white' : 'border-rose-200'}`}>
-                                                                {buildingFormData[item.id] && <FiCheck className="w-3 h-3" />}
-                                                            </div>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        <div>
-                                            <label className="text-sm font-bold text-gray-500 ml-2">Remarks</label>
-                                            <textarea
-                                                value={buildingFormData.remarks}
-                                                onChange={(e) => setBuildingFormData({ ...buildingFormData, remarks: e.target.value })}
-                                                className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all min-h-[100px]"
-                                                placeholder="Optional notes..."
-                                            ></textarea>
-                                        </div>
-
-                                        <button
-                                            onClick={handleSaveBuilding}
-                                            disabled={buildings.some(b => b.id !== editingBuildingId && (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase())}
-                                            className="w-full mt-4 py-4 rounded-2xl text-white font-black text-lg bg-indigo-500 border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-indigo-200/50 disabled:opacity-50 disabled:bg-gray-300 disabled:border-gray-400"
-                                        >
-                                            Save Building
-                                        </button>
-                                    </div>
-                                </motion.div>
-                            )}
-                        </div>
-                    </motion.div>
-                )}
-
-                {/* ────────────────────────────────────────────────────────
-                    PHASE 2: Granular Room Setup
+                    {/* ────────────────────────────────────────────────────────
+                    PHASE 2: Register Building
                     ──────────────────────────────────────────────────────── */}
-                {currentPage === 3 && (
-                    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-                        <h2 className="text-3xl font-black text-gray-800 tracking-tight leading-tight mb-2">
-                            Granular Room Setup 🏫
-                        </h2>
-                        <p className="text-gray-500 mb-6 font-medium">Set detailed information for each room in your registered buildings.</p>
+                    {currentPage === 2 && (
+                        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+                            <h2 className="text-3xl font-black text-gray-800 tracking-tight leading-tight mb-2">
+                                Register Building 🏢
+                            </h2>
+                            <p className="text-gray-500 mb-6 font-medium">Log the physical structures on your campus.</p>
 
-                        <div className="space-y-6">
-                            {roomsData.length === 0 && (
-                                <div className="bg-amber-50 p-8 rounded-3xl border-2 border-amber-200 text-center">
-                                    <p className="text-amber-800 font-bold">No rooms generated yet. Please register a building first!</p>
-                                    <button onClick={() => setCurrentPage(2)} className="mt-4 px-6 py-2 bg-amber-500 text-white rounded-xl font-bold">Go to Step 2</button>
-                                </div>
-                            )}
-
-                            {(() => {
-                                const nameCounts = {};
-                                roomsData.forEach(r => {
-                                    const key = (r.room_name || "").trim().toLowerCase();
-                                    if (key) nameCounts[key] = (nameCounts[key] || 0) + 1;
-                                });
-                                const duplicateNames = new Set(
-                                    Object.keys(nameCounts).filter(k => nameCounts[k] > 1)
-                                );
-
-                                return roomsData.slice((roomsPage - 1) * roomsPerPage, roomsPage * roomsPerPage).map((room) => {
-                                    const building = allBuildings.find(b => b.id === room.building_local_id);
-                                    const isDuplicate = duplicateNames.has((room.room_name || "").trim().toLowerCase());
-                                    const isBuildingCondemned = building?.status === "For Condemnation" || building?.status === "Condemned";
-
-                                    return (
-                                        <div key={room.id} className={`bg-white p-6 rounded-3xl shadow-sm border-2 ${isDuplicate ? 'border-rose-200 shadow-rose-50' : isBuildingCondemned ? 'border-amber-200 bg-amber-50/20 shadow-amber-50' : room.is_in_use === false ? 'border-slate-100 opacity-60 bg-slate-50/10' : 'border-gray-100'}`}>
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div className="flex-1 mr-4">
-                                                    <input
-                                                        type="text"
-                                                        value={room.room_name}
-                                                        onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, room_name: e.target.value } : r))}
-                                                        className={`font-black text-xl ${isDuplicate ? 'text-rose-600' : 'text-gray-800'} bg-transparent border-b-2 border-dashed ${isDuplicate ? 'border-rose-300' : 'border-gray-200'} focus:border-indigo-500 outline-none w-full`}
-                                                    />
-                                                    {isDuplicate && (
-                                                        <p className="text-rose-500 text-[10px] font-black uppercase mt-1 flex items-center gap-1">
-                                                            <FiAlertTriangle /> Duplicate Room Name
-                                                        </p>
-                                                    )}
-                                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{building?.building_name || building?.building_no || 'N/A'}</p>
-                                                    {isBuildingCondemned && (
-                                                        <p className="text-[10px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md uppercase tracking-widest inline-flex items-center gap-1 mt-2 border border-rose-100">
-                                                            <FiAlertTriangle className="w-3 h-3" /> Building Condemned
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${room.condition === 'Repair' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                                                    {room.condition}
-                                                </span>
-                                                <button onClick={() => handleDeleteRoom(room.id)} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="Delete Room">
-                                                    <FiTrash2 className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Dimensions</label>
-                                                <select
-                                                    value={room.dimensions}
-                                                    onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, dimensions: e.target.value } : r))}
-                                                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
-                                                >
-                                                    <option value="Less than 7x9">Less than 7x9</option>
-                                                    <option value="7x9">7x9</option>
-                                                    <option value="Above 7x9">Above 7x9</option>
-                                                </select>
-                                            </div>
-
-                                            {!isBuildingCondemned && (
+                            {/* Inventory Area */}
+                            <div className="space-y-6">
+                                {/* Card List */}
+                                {allBuildings.length > 0 && (
+                                    <div className="space-y-4">
+                                        {allBuildings.map(b => (
+                                            <div key={b.id} className="bg-white p-5 rounded-3xl shadow-sm border-2 border-gray-100 flex justify-between items-center">
                                                 <div>
-                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Condition</label>
-                                                    <select
-                                                        value={room.condition}
-                                                        onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, condition: e.target.value } : r))}
-                                                        className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
-                                                    >
-                                                        <option value="Newly Built">Newly Built</option>
-                                                        <option value="Good Condition">Good Condition</option>
-                                                        <option value="Repair">Repair</option>
-                                                    </select>
+                                                    <h4 className="font-black text-xl text-gray-800">{b.building_name}</h4>
+                                                    <div className="flex gap-2 mt-1">
+                                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${b.status === 'Newly Built' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                            {b.status}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-sm font-bold text-gray-500 mt-1">{b.category} &bull; {b.storey} Storey &bull; {roomsData.filter(r => r.building_local_id === b.id).length} Rooms</p>
                                                 </div>
+<<<<<<< Updated upstream
                                             )}
 
                                             <div className="md:col-span-2">
@@ -2087,106 +1769,652 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                         className={`p-4 rounded-2xl shadow-lg transition-all active:scale-95 ${isAssessed ? 'bg-indigo-50 text-indigo-500 shadow-indigo-100' : 'bg-amber-500 text-white shadow-amber-100'}`}
                                                     >
                                                         {isAssessed ? <FiEdit2 className="w-6 h-6" /> : <FiPlus className="w-6 h-6" />}
+=======
+                                                <div className="flex flex-col gap-2">
+                                                    <button onClick={() => handleEditBuilding(b)} className="p-3 bg-indigo-50 text-indigo-500 rounded-xl hover:bg-indigo-100 transition-colors">
+                                                        <FiEdit2 className="w-5 h-5" />
+                                                    </button>
+                                                    <button onClick={() => handleDeleteBuilding(b.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors">
+                                                        <FiTrash2 className="w-5 h-5" />
+>>>>>>> Stashed changes
                                                     </button>
                                                 </div>
                                             </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-
-                            {showRepairModal && (
-                                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-[2rem] shadow-xl border-2 border-amber-100 mt-10">
-                                    <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
-                                        <h3 className="font-black text-2xl text-gray-800">Assessment: {repairRoomFormData.room_name}</h3>
-                                        <button onClick={() => setShowRepairModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full"><FiX className="w-6 h-6" /></button>
+                                        ))}
                                     </div>
+                                )}
 
-                                    {/* Item Checklist */}
-                                    <h4 className="font-bold text-gray-700 mb-4 px-1">Checklist of Damaged Items</h4>
-                                    <div className="space-y-4 mb-8">
-                                        {REPAIR_CATEGORIES.map(category => {
-                                            const isChecked = !!repairItemsState[category];
-                                            const itemData = repairItemsState[category] || {};
+                                {/* Add Button */}
+                                {!showBuildingModal ? (
+                                    <motion.button
+                                        initial={{ opacity: 0, scale: 0.9 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        onClick={() => setShowBuildingModal(true)}
+                                        className="bg-indigo-50 w-full py-4 rounded-2xl text-indigo-600 font-black text-lg border-2 border-indigo-200 border-dashed hover:bg-indigo-100 hover:border-indigo-300 transition-all flex justify-center items-center gap-2"
+                                    >
+                                        <FiPlus className="w-6 h-6" /> Register Building
+                                    </motion.button>
+                                ) : (
+                                    /* Form Area */
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="bg-white p-6 rounded-[2rem] shadow-xl border border-gray-200"
+                                    >
+                                        <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
+                                            <h3 className="font-black text-2xl text-gray-800">Building Details</h3>
+                                            <button onClick={() => setShowBuildingModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full">
+                                                <FiX className="w-6 h-6" />
+                                            </button>
+                                        </div>
 
-                                            return (
-                                                <div key={category} className={`border-2 rounded-2xl overflow-hidden transition-all ${isChecked ? 'border-amber-400 bg-amber-50/30' : 'border-gray-100 bg-white'}`}>
-                                                    <label className="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50">
-                                                        <input type="checkbox" checked={isChecked} onChange={() => handleToggleRepairItem(category)}
-                                                            className="w-6 h-6 rounded text-amber-500 focus:ring-amber-500 border-gray-300" />
-                                                        <span className={`font-bold text-lg ${isChecked ? 'text-amber-800' : 'text-gray-600'}`}>{category}</span>
-                                                    </label>
+                                        <div className="space-y-5">
+                                            <div>
+                                                <label className="text-sm font-bold text-gray-500 ml-2">Building Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={buildingFormData.building_name}
+                                                    onChange={(e) => setBuildingFormData({ ...buildingFormData, building_name: e.target.value })}
+                                                    className={`w-full bg-gray-50 border-2 ${buildings.some(b => b.id !== editingBuildingId && (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase()) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-200 focus:border-indigo-500'} mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none transition-all placeholder-gray-300`}
+                                                    placeholder="e.g. Marcos Type Bldg"
+                                                />
+                                                {buildings.some(b => b.id !== editingBuildingId && (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase()) && (
+                                                    <p className="text-rose-500 text-[10px] font-black uppercase mt-1 ml-2 flex items-center gap-1">
+                                                        <FiAlertTriangle /> This building name is already in use
+                                                    </p>
+                                                )}
+                                            </div>
 
-                                                    {isChecked && (
-                                                        <div className="p-4 pt-0 space-y-4 border-t border-amber-100 mt-2">
-                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                                <div>
-                                                                    <label className="text-xs font-bold text-gray-500">What it is made of</label>
-                                                                    <input type="text" value={itemData.oms} onChange={(e) => handleUpdateRepairItem(category, 'oms', e.target.value)}
-                                                                        className="w-full bg-white border-2 border-gray-200 mt-1 rounded-xl px-3 py-2 text-sm font-bold text-gray-700 outline-none focus:border-amber-500" placeholder="e.g. GI Sheet, Concrete, Wood" />
+                                            <div className={`relative ${isBuildingDropdownOpen ? 'z-50' : 'z-0'}`}>
+                                                <label className="text-sm font-bold text-gray-500 ml-2">Building Category</label>
+                                                <div className="relative mt-1">
+                                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                                        <FiSearch className="text-gray-400 w-5 h-5" />
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Search building type..."
+                                                        value={isBuildingDropdownOpen ? buildingSearch : buildingFormData.category}
+                                                        onFocus={() => {
+                                                            setIsBuildingDropdownOpen(true);
+                                                            setBuildingSearch("");
+                                                        }}
+                                                        onChange={(e) => {
+                                                            setBuildingSearch(e.target.value);
+                                                            setBuildingFormData(prev => ({ ...prev, category: e.target.value }));
+                                                        }}
+                                                        className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl pl-11 pr-12 py-4 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 focus:bg-white transition-all placeholder-gray-300 shadow-sm"
+                                                    />
+                                                    <div
+                                                        className="absolute inset-y-0 right-0 pr-4 flex items-center cursor-pointer text-gray-400 hover:text-indigo-500"
+                                                        onClick={() => setIsBuildingDropdownOpen(!isBuildingDropdownOpen)}
+                                                    >
+                                                        <FiChevronDown className={`w-6 h-6 transition-transform duration-300 ${isBuildingDropdownOpen ? 'rotate-180' : ''}`} />
+                                                    </div>
+
+                                                    <AnimatePresence>
+                                                        {isBuildingDropdownOpen && (
+                                                            <>
+                                                                <motion.div
+                                                                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                                    exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                                                                    className="absolute z-[100] w-full mt-2 bg-white border-2 border-gray-100 rounded-3xl shadow-2xl max-h-72 overflow-y-auto overflow-x-hidden py-2"
+                                                                >
+                                                                    {(buildingSearch ? buildingTypes.filter(t => t.toLowerCase().includes(buildingSearch.toLowerCase())) : buildingTypes).map(type => (
+                                                                        <button
+                                                                            key={type}
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                setBuildingFormData({ ...buildingFormData, category: type });
+                                                                                setBuildingSearch(type);
+                                                                                setIsBuildingDropdownOpen(false);
+                                                                            }}
+                                                                            className={`w-full text-left px-6 py-4 font-bold text-gray-700 transition-all border-b border-gray-50 last:border-0 hover:bg-indigo-50 hover:pl-8 flex items-center justify-between ${buildingFormData.category === type ? 'bg-indigo-50 text-indigo-600' : ''}`}
+                                                                        >
+                                                                            <span>{type}</span>
+                                                                            {buildingFormData.category === type && <FiCheck className="w-5 h-5" />}
+                                                                        </button>
+                                                                    ))}
+                                                                    <div className="px-6 py-8 text-center text-gray-400">
+                                                                        {buildingTypes.length === 0 ? (
+                                                                            <>
+                                                                                <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                                                                                <p className="italic font-medium">Fetching building types...</p>
+                                                                            </>
+                                                                        ) : (buildingSearch && buildingTypes.filter(t => t.toLowerCase().includes(buildingSearch.toLowerCase())).length === 0) ? (
+                                                                            <>
+                                                                                <FiSearch className="w-10 h-10 mx-auto mb-2 opacity-20" />
+                                                                                <p className="italic font-medium">No matching building types found</p>
+                                                                            </>
+                                                                        ) : null}
+                                                                    </div>
+                                                                </motion.div>
+                                                                <div className="fixed inset-0 z-40" onClick={() => setIsBuildingDropdownOpen(false)}></div>
+                                                            </>
+                                                        )}
+                                                    </AnimatePresence>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex gap-4">
+                                                <div className="flex-1">
+                                                    <label className="text-sm font-bold text-gray-500 ml-2">Storeys</label>
+                                                    <input
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        value={buildingFormData.storey}
+                                                        placeholder="1"
+                                                        onChange={(e) => {
+                                                            const val = e.target.value.replace(/[^0-9]/g, '');
+                                                            setBuildingFormData({ ...buildingFormData, storey: val });
+                                                        }}
+                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center"
+                                                    />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <label className="text-sm font-bold text-gray-500 ml-2">Classrooms</label>
+                                                    <input
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        value={buildingFormData.classroom}
+                                                        placeholder="1"
+                                                        onChange={(e) => {
+                                                            const val = e.target.value.replace(/[^0-9]/g, '');
+                                                            setBuildingFormData({ ...buildingFormData, classroom: val });
+                                                        }}
+                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="text-sm font-bold text-gray-500 ml-2">Year Completed</label>
+                                                <select
+                                                    value={buildingFormData.year_completed}
+                                                    onChange={(e) => setBuildingFormData({ ...buildingFormData, year_completed: parseInt(e.target.value) })}
+                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+                                                >
+                                                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                                </select>
+                                            </div>
+
+                                            <div className="flex gap-4">
+                                                <div className="flex-1">
+                                                    <label className="text-sm font-bold text-gray-500 ml-2 mb-1 block">Building Status</label>
+                                                    <select
+                                                        value={buildingFormData.status}
+                                                        onChange={(e) => setBuildingFormData({ ...buildingFormData, status: e.target.value })}
+                                                        className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all cursor-pointer"
+                                                    >
+                                                        <option value="Newly Built">Newly Built</option>
+                                                        <option value="Good Condition">Good Condition</option>
+                                                        <option value="For Major Repairs">For Major Repairs</option>
+                                                        <option value="For Minor Repairs">For Minor Repairs</option>
+                                                        <option value="For Condemnation">For Condemnation</option>
+                                                        <option value="Condemned">Condemned</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            {(buildingFormData.status === 'For Condemnation' || buildingFormData.status === 'Condemned') && (
+                                                <div className="p-5 bg-rose-50 rounded-2xl border-2 border-rose-100 space-y-4">
+                                                    <h4 className="text-sm font-black text-rose-600 uppercase tracking-widest flex items-center gap-2">
+                                                        <FiAlertTriangle className="w-4 h-4" /> Justification for Condemnation
+                                                    </h4>
+                                                    <div className="grid grid-cols-1 gap-3">
+                                                        {[
+                                                            { id: 'condemn_age', label: 'Age / Dilapidation', icon: <FiClock /> },
+                                                            { id: 'condemn_hazard', label: 'Safety Hazard', icon: <FiAlertOctagon /> },
+                                                            { id: 'condemn_calamity', label: 'Calamity Damage', icon: <FiCloudLightning /> },
+                                                            { id: 'condemn_upgrade', label: 'Site Upgrade / Repurposing', icon: <FiTrendingUp /> }
+                                                        ].map(item => (
+                                                            <button
+                                                                key={item.id}
+                                                                onClick={() => setBuildingFormData({ ...buildingFormData, [item.id]: !buildingFormData[item.id] })}
+                                                                className={`py-3 px-4 rounded-xl font-bold text-sm border-2 text-left flex items-center justify-between transition-all ${buildingFormData[item.id] ? 'bg-white border-rose-400 text-rose-700 shadow-sm' : 'bg-rose-50/50 border-rose-100 text-rose-300 hover:bg-white hover:border-rose-200'}`}
+                                                            >
+                                                                <span className="flex items-center gap-2">{item.icon} {item.label}</span>
+                                                                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${buildingFormData[item.id] ? 'bg-rose-500 border-rose-500 text-white' : 'border-rose-200'}`}>
+                                                                    {buildingFormData[item.id] && <FiCheck className="w-3 h-3" />}
                                                                 </div>
-                                                                <div>
-                                                                    <label className="text-xs font-bold text-gray-500">Action</label>
-                                                                    <select value={itemData.recommend_action} onChange={(e) => handleUpdateRepairItem(category, 'recommend_action', e.target.value)}
-                                                                        className="w-full bg-white border-2 border-gray-200 mt-1 rounded-xl px-3 py-2 text-sm font-bold text-gray-700 outline-none focus:border-amber-500 appearance-none">
-                                                                        <option value="Routine Repair">Routine Repair</option>
-                                                                        <option value="Major Repair / Rehabilitation">Major Repair / Rehabilitation</option>
-                                                                        <option value="Structural Retrofit">Structural Retrofit</option>
-                                                                        <option value="Recommend for Condemnation">Recommend for Condemnation</option>
-                                                                        <option value="Recommend for Demolition">Recommend for Demolition</option>
-                                                                    </select>
-                                                                </div>
-                                                            </div>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
 
-                                                            {itemData.recommend_action === 'Recommend for Demolition' && (
-                                                                <div className="bg-rose-50 p-3 rounded-xl border border-rose-100">
-                                                                    <label className="text-[10px] font-black uppercase tracking-wider text-rose-500 mb-1 block">Demolition Justification</label>
-                                                                    <select value={itemData.demo_justification} onChange={(e) => handleUpdateRepairItem(category, 'demo_justification', e.target.value)}
-                                                                        className="w-full bg-white border-2 border-rose-200 rounded-lg px-3 py-2 text-sm font-bold text-rose-700 outline-none focus:border-rose-500">
-                                                                        <option value="">-- Select Justification --</option>
-                                                                        <option value="Beyond repair due to age and lifecycle">Beyond repair due to age and lifecycle</option>
-                                                                        <option value="Structural or safety issues">Structural or safety issues</option>
-                                                                        <option value="Severe damage due to calamity">Severe damage due to calamity</option>
-                                                                        <option value="MGB‑declared hazard‑prone area">MGB‑declared hazard‑prone area</option>
-                                                                        <option value="Site relocation or right-of-way">Site relocation or right-of-way</option>
-                                                                    </select>
-                                                                </div>
-                                                            )}
+                                            <div>
+                                                <label className="text-sm font-bold text-gray-500 ml-2">Remarks</label>
+                                                <textarea
+                                                    value={buildingFormData.remarks}
+                                                    onChange={(e) => setBuildingFormData({ ...buildingFormData, remarks: e.target.value })}
+                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all min-h-[100px]"
+                                                    placeholder="Optional notes..."
+                                                ></textarea>
+                                            </div>
 
-                                                            <div className="flex gap-4">
-                                                                <div className="flex-1">
-                                                                    <label className="text-xs font-bold text-gray-500">Estimated Damage</label>
-                                                                    <input type="range" min="0" max="100" step="10" value={itemData.damage_ratio} onChange={(e) => handleUpdateRepairItem(category, 'damage_ratio', parseInt(e.target.value))}
-                                                                        className="w-full mt-2 accent-amber-500 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-                                                                    <div className="text-right text-xs font-black text-amber-600 mt-1">{itemData.damage_ratio}%</div>
-                                                                </div>
-                                                            </div>
+                                            <button
+                                                onClick={handleSaveBuilding}
+                                                disabled={buildings.some(b => b.id !== editingBuildingId && (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase())}
+                                                className="w-full mt-4 py-4 rounded-2xl text-white font-black text-lg bg-indigo-500 border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-indigo-200/50 disabled:opacity-50 disabled:bg-gray-300 disabled:border-gray-400"
+                                            >
+                                                Save Building
+                                            </button>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </div>
+                        </motion.div>
+                    )}
 
-                                                            <div>
-                                                                <label className="text-[10px] font-bold text-gray-400 ml-1">REMARKS</label>
-                                                                <input type="text" value={itemData.remarks} onChange={(e) => handleUpdateRepairItem(category, 'remarks', e.target.value)}
-                                                                    className="w-full bg-white border-2 border-gray-100 mt-0.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 outline-none focus:border-amber-400" />
-                                                            </div>
+                    {/* ────────────────────────────────────────────────────────
+                    PHASE 2: Granular Room Setup
+                    ──────────────────────────────────────────────────────── */}
+                    {currentPage === 3 && (
+                        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+                            <h2 className="text-3xl font-black text-gray-800 tracking-tight leading-tight mb-2">
+                                Granular Room Setup 🏫
+                            </h2>
+                            <p className="text-gray-500 mb-6 font-medium">Set detailed information for each room in your registered buildings.</p>
+
+                            <div className="space-y-6">
+                                {roomsData.length === 0 && (
+                                    <div className="bg-amber-50 p-8 rounded-3xl border-2 border-amber-200 text-center">
+                                        <p className="text-amber-800 font-bold">No rooms generated yet. Please register a building first!</p>
+                                        <button onClick={() => setCurrentPage(2)} className="mt-4 px-6 py-2 bg-amber-500 text-white rounded-xl font-bold">Go to Step 2</button>
+                                    </div>
+                                )}
+
+                                {(() => {
+                                    const nameCounts = {};
+                                    roomsData.forEach(r => {
+                                        const key = (r.room_name || "").trim().toLowerCase();
+                                        if (key) nameCounts[key] = (nameCounts[key] || 0) + 1;
+                                    });
+                                    const duplicateNames = new Set(
+                                        Object.keys(nameCounts).filter(k => nameCounts[k] > 1)
+                                    );
+
+                                    return roomsData.slice((roomsPage - 1) * roomsPerPage, roomsPage * roomsPerPage).map((room) => {
+                                        const building = allBuildings.find(b => b.id === room.building_local_id);
+                                        const isDuplicate = duplicateNames.has((room.room_name || "").trim().toLowerCase());
+                                        const isBuildingCondemned = building?.status === "For Condemnation" || building?.status === "Condemned";
+
+                                        return (
+                                            <div key={room.id} className={`bg-white p-6 rounded-3xl shadow-sm border-2 ${isDuplicate ? 'border-rose-200 shadow-rose-50' : isBuildingCondemned ? 'border-amber-200 bg-amber-50/20 shadow-amber-50' : room.is_in_use === false ? 'border-slate-100 opacity-60 bg-slate-50/10' : 'border-gray-100'}`}>
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div className="flex-1 mr-4">
+                                                        <input
+                                                            type="text"
+                                                            value={room.room_name}
+                                                            onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, room_name: e.target.value } : r))}
+                                                            className={`font-black text-xl ${isDuplicate ? 'text-rose-600' : 'text-gray-800'} bg-transparent border-b-2 border-dashed ${isDuplicate ? 'border-rose-300' : 'border-gray-200'} focus:border-indigo-500 outline-none w-full`}
+                                                        />
+                                                        {isDuplicate && (
+                                                            <p className="text-rose-500 text-[10px] font-black uppercase mt-1 flex items-center gap-1">
+                                                                <FiAlertTriangle /> Duplicate Room Name
+                                                            </p>
+                                                        )}
+                                                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{building?.building_name || building?.building_no || 'N/A'}</p>
+                                                        {isBuildingCondemned && (
+                                                            <p className="text-[10px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md uppercase tracking-widest inline-flex items-center gap-1 mt-2 border border-rose-100">
+                                                                <FiAlertTriangle className="w-3 h-3" /> Building Condemned
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${room.condition === 'Repair' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                            {room.condition}
+                                                        </span>
+                                                        <button onClick={() => handleDeleteRoom(room.id)} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="Delete Room">
+                                                            <FiTrash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Dimensions</label>
+                                                        <select
+                                                            value={room.dimensions}
+                                                            onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, dimensions: e.target.value } : r))}
+                                                            className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
+                                                        >
+                                                            <option value="Less than 7x9">Less than 7x9</option>
+                                                            <option value="7x9">7x9</option>
+                                                            <option value="Above 7x9">Above 7x9</option>
+                                                        </select>
+                                                    </div>
+
+                                                    {!isBuildingCondemned && (
+                                                        <div>
+                                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Condition</label>
+                                                            <select
+                                                                value={room.condition}
+                                                                onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, condition: e.target.value } : r))}
+                                                                className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
+                                                            >
+                                                                <option value="Newly Built">Newly Built</option>
+                                                                <option value="Good Condition">Good Condition</option>
+                                                                <option value="Repair">Repair</option>
+                                                            </select>
                                                         </div>
                                                     )}
+
+                                                    <div className="md:col-span-2">
+                                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Grade Level(s)</label>
+                                                        <div className="space-y-3">
+                                                            <div className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-3 py-2 min-h-[44px] flex flex-wrap gap-1.5 focus-within:border-indigo-500 transition-all cursor-pointer">
+                                                                {(room.grade_level || "").split(',').filter(Boolean).map(g => (
+                                                                    <span key={g} className="bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 group-hover:bg-indigo-700 transition-colors">
+                                                                        {g}
+                                                                        <FiX
+                                                                            className="cursor-pointer hover:text-rose-300"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                const currentGrades = (room.grade_level || "").split(',').filter(Boolean);
+                                                                                const newGrades = currentGrades.filter(x => x !== g);
+                                                                                setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: newGrades.join(',') } : r));
+                                                                            }}
+                                                                        />
+                                                                    </span>
+                                                                ))}
+                                                                {!(room.grade_level || "") && <span className="text-gray-400 text-sm font-medium py-0.5">Select Grade Levels</span>}
+                                                            </div>
+
+                                                            <div className="mt-2 flex flex-wrap gap-2">
+                                                                {availableGrades.length > 0 ? (
+                                                                    availableGrades.map(g => {
+                                                                        const isSelected = (room.grade_level || "").split(',').filter(Boolean).includes(g.label);
+                                                                        return (
+                                                                            <button
+                                                                                key={g.id}
+                                                                                type="button"
+                                                                                onClick={() => {
+                                                                                    const currentGrades = (room.grade_level || "").split(',').filter(Boolean);
+                                                                                    let newGrades;
+                                                                                    if (isSelected) {
+                                                                                        newGrades = currentGrades.filter(x => x !== g.label);
+                                                                                    } else {
+                                                                                        newGrades = [...currentGrades, g.label];
+                                                                                    }
+                                                                                    setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: newGrades.join(',') } : r));
+                                                                                }}
+                                                                                className={`text-[10px] font-black px-3 py-1.5 rounded-lg border-2 transition-all ${isSelected
+                                                                                    ? "bg-indigo-50 border-indigo-500 text-indigo-700 shadow-sm"
+                                                                                    : "bg-white border-gray-100 text-gray-500 hover:border-indigo-200"
+                                                                                    }`}
+                                                                            >
+                                                                                {g.label}
+                                                                            </button>
+                                                                        );
+                                                                    })
+                                                                ) : (
+                                                                    <p className="text-[10px] font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-100 italic">
+                                                                        ⚠️ No audited grades found in Unit 7
+                                                                    </p>
+                                                                )}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const isSelected = (room.grade_level || "").split(',').filter(Boolean).includes("Non-Instructional");
+                                                                        const currentGrades = (room.grade_level || "").split(',').filter(Boolean);
+                                                                        let newGrades;
+                                                                        if (isSelected) {
+                                                                            newGrades = currentGrades.filter(x => x !== "Non-Instructional");
+                                                                        } else {
+                                                                            newGrades = [...currentGrades, "Non-Instructional"];
+                                                                        }
+                                                                        setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: newGrades.join(',') } : r));
+                                                                    }}
+                                                                    className={`text-[10px] font-black px-3 py-1.5 rounded-lg border-2 transition-all ${(room.grade_level || "").split(',').filter(Boolean).includes("Non-Instructional")
+                                                                        ? "bg-slate-100 border-slate-500 text-slate-700 shadow-sm"
+                                                                        : "bg-white border-gray-100 text-gray-400 hover:border-slate-200"
+                                                                        }`}
+                                                                >
+                                                                    Non-Instructional
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {!isBuildingCondemned && (
+                                                        <div>
+                                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Total Seats Capacity</label>
+                                                            <input
+                                                                type="text"
+                                                                inputMode="numeric"
+                                                                value={room.seats || ""}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value.replace(/[^0-9]/g, '');
+                                                                    setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, seats: val } : r));
+                                                                }}
+                                                                placeholder="0"
+                                                                className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
+                                                            />
+                                                        </div>
+                                                    )}
+
+                                                    {/* In Use / Not Used Toggle */}
+                                                    <div className="md:col-span-2 pt-4 border-t-2 border-dashed border-gray-100 flex items-center justify-between mt-2">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg shadow-sm ${room.is_in_use !== false ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'}`}>
+                                                                {room.is_in_use !== false ? '✅' : '🚫'}
+                                                            </div>
+                                                            <div>
+                                                                <p className={`font-black text-[11px] uppercase tracking-wider ${room.is_in_use !== false ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                                                    {room.is_in_use !== false ? 'Currently In Use' : 'Not Currently In Use'}
+                                                                </p>
+                                                                <p className="text-[9px] font-bold text-gray-400 mt-0.5">Instructional Space Status</p>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, is_in_use: !(r.is_in_use !== false) } : r))}
+                                                            className={`relative w-12 h-6 rounded-full transition-all duration-500 ease-out outline-none ${room.is_in_use !== false ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                                                        >
+                                                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-500 ease-out shadow-sm ${room.is_in_use !== false ? 'left-7' : 'left-1'}`} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    });
+                                })()}
+
+                                {/* Pagination Controls */}
+                                {roomsData.length > roomsPerPage && (
+                                    <div className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl">
+                                        <button
+                                            onClick={() => setRoomsPage(prev => Math.max(prev - 1, 1))}
+                                            disabled={roomsPage === 1}
+                                            className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-gray-600 disabled:opacity-50"
+                                        >
+                                            <FiArrowLeft /> Previous
+                                        </button>
+                                        <span className="font-black text-gray-400 uppercase text-xs tracking-widest">
+                                            Page {roomsPage} of {Math.ceil(roomsData.length / roomsPerPage)}
+                                        </span>
+                                        <button
+                                            onClick={() => setRoomsPage(prev => Math.min(prev + 1, Math.ceil(roomsData.length / roomsPerPage)))}
+                                            disabled={roomsPage === Math.ceil(roomsData.length / roomsPerPage)}
+                                            className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-indigo-600 disabled:opacity-50"
+                                        >
+                                            Next <FiArrowRight />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* ────────────────────────────────────────────────────────
+                    PHASE 2: Repair Assessment
+                    ──────────────────────────────────────────────────────── */}
+                    {currentPage === 4 && (
+                        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+                            <h2 className="text-3xl font-black text-gray-800 tracking-tight leading-tight mb-2">
+                                Repair Assessment 🛠️
+                            </h2>
+                            <p className="text-gray-500 mb-6 font-medium">Assess rooms marked for repair during registration.</p>
+
+                            <div className="space-y-6">
+                                {roomsData.filter(r => r.condition === 'Repair').length === 0 ? (
+                                    <div className="bg-emerald-50 p-8 rounded-3xl border-2 border-emerald-100 text-center">
+                                        <p className="text-emerald-800 font-bold text-xl">✨ All rooms are in good shape!</p>
+                                        <p className="text-emerald-600 mt-2 font-medium">No rooms were marked for repair. You can proceed to the next step.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {roomsData.filter(r => r.condition === 'Repair').map(room => {
+                                            const building = allBuildings.find(b => b.id === room.building_local_id);
+                                            const bName = building?.building_name || building?.building_no || "";
+                                            const isAssessed = repairAssessments.some(a => a.building_name === bName && a.room_name === room.room_name);
+
+                                            return (
+                                                <div key={room.id} className="bg-white p-6 rounded-3xl shadow-sm border-2 border-gray-100">
+                                                    <div className="flex justify-between items-center">
+                                                        <div>
+                                                            <h4 className="font-black text-xl text-gray-800">{room.room_name}</h4>
+                                                            <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-widest">{bName || 'N/A'}</p>
+                                                            {isAssessed && <p className="text-xs font-black text-emerald-500 mt-2 uppercase flex items-center gap-1"><FiCheckCircle /> Assessment Recorded</p>}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => {
+                                                                const bName = building?.building_name || building?.building_no || "";
+                                                                setRepairRoomFormData({
+                                                                    building_name: bName,
+                                                                    room_name: room.room_name,
+                                                                    room_length: room.room_length || 9,
+                                                                    room_width: room.room_width || 7
+                                                                });
+
+                                                                // Populate previous assessments
+                                                                const existingItems = repairAssessments.filter(a =>
+                                                                    a.building_name === bName &&
+                                                                    a.room_name === room.room_name
+                                                                );
+
+                                                                const initialState = {};
+                                                                existingItems.forEach(item => {
+                                                                    initialState[item.item] = {
+                                                                        oms: item.oms || "",
+                                                                        condition: item.condition || "Repair",
+                                                                        damage_ratio: item.damage_ratio || 0,
+                                                                        recommend_action: item.recommend_action || "Routine Repair",
+                                                                        demo_justification: item.demo_justification || "",
+                                                                        remarks: item.remarks || ""
+                                                                    };
+                                                                });
+                                                                setRepairItemsState(initialState);
+
+                                                                setEditingRepairRoomId(bName + "-" + room.room_name);
+                                                                setShowRepairModal(true);
+                                                            }}
+                                                            className={`p-4 rounded-2xl shadow-lg transition-all active:scale-95 ${isAssessed ? 'bg-indigo-50 text-indigo-500 shadow-indigo-100' : 'bg-amber-500 text-white shadow-amber-100'}`}
+                                                        >
+                                                            {isAssessed ? <FiEdit2 className="w-6 h-6" /> : <FiPlus className="w-6 h-6" />}
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             );
                                         })}
                                     </div>
+                                )}
 
-                                    <button onClick={handleSaveRepairRoom}
-                                        className="w-full mt-6 py-4 rounded-2xl text-white font-black text-lg bg-amber-500 border-b-[6px] border-amber-700 active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-amber-200/50">
-                                        Save Room Assessment ✓
-                                    </button>
-                                </motion.div>
-                            )}
-                        </div>
+                                {showRepairModal && (
+                                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-[2rem] shadow-xl border-2 border-amber-100 mt-10">
+                                        <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
+                                            <h3 className="font-black text-2xl text-gray-800">Assessment: {repairRoomFormData.room_name}</h3>
+                                            <button onClick={() => setShowRepairModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full"><FiX className="w-6 h-6" /></button>
+                                        </div>
+
+                                        {/* Item Checklist */}
+                                        <h4 className="font-bold text-gray-700 mb-4 px-1">Checklist of Damaged Items</h4>
+                                        <div className="space-y-4 mb-8">
+                                            {REPAIR_CATEGORIES.map(category => {
+                                                const isChecked = !!repairItemsState[category];
+                                                const itemData = repairItemsState[category] || {};
+
+                                                return (
+                                                    <div key={category} className={`border-2 rounded-2xl overflow-hidden transition-all ${isChecked ? 'border-amber-400 bg-amber-50/30' : 'border-gray-100 bg-white'}`}>
+                                                        <label className="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50">
+                                                            <input type="checkbox" checked={isChecked} onChange={() => handleToggleRepairItem(category)}
+                                                                className="w-6 h-6 rounded text-amber-500 focus:ring-amber-500 border-gray-300" />
+                                                            <span className={`font-bold text-lg ${isChecked ? 'text-amber-800' : 'text-gray-600'}`}>{category}</span>
+                                                        </label>
+
+                                                        {isChecked && (
+                                                            <div className="p-4 pt-0 space-y-4 border-t border-amber-100 mt-2">
+                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                    <div>
+                                                                        <label className="text-xs font-bold text-gray-500">What it is made of</label>
+                                                                        <input type="text" value={itemData.oms} onChange={(e) => handleUpdateRepairItem(category, 'oms', e.target.value)}
+                                                                            className="w-full bg-white border-2 border-gray-200 mt-1 rounded-xl px-3 py-2 text-sm font-bold text-gray-700 outline-none focus:border-amber-500" placeholder="e.g. GI Sheet, Concrete, Wood" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-xs font-bold text-gray-500">Action</label>
+                                                                        <select value={itemData.recommend_action} onChange={(e) => handleUpdateRepairItem(category, 'recommend_action', e.target.value)}
+                                                                            className="w-full bg-white border-2 border-gray-200 mt-1 rounded-xl px-3 py-2 text-sm font-bold text-gray-700 outline-none focus:border-amber-500 appearance-none">
+                                                                            <option value="Routine Repair">Routine Repair</option>
+                                                                            <option value="Major Repair / Rehabilitation">Major Repair / Rehabilitation</option>
+                                                                            <option value="Structural Retrofit">Structural Retrofit</option>
+                                                                            <option value="Recommend for Condemnation">Recommend for Condemnation</option>
+                                                                            <option value="Recommend for Demolition">Recommend for Demolition</option>
+                                                                        </select>
+                                                                    </div>
+                                                                </div>
+
+                                                                {itemData.recommend_action === 'Recommend for Demolition' && (
+                                                                    <div className="bg-rose-50 p-3 rounded-xl border border-rose-100">
+                                                                        <label className="text-[10px] font-black uppercase tracking-wider text-rose-500 mb-1 block">Demolition Justification</label>
+                                                                        <select value={itemData.demo_justification} onChange={(e) => handleUpdateRepairItem(category, 'demo_justification', e.target.value)}
+                                                                            className="w-full bg-white border-2 border-rose-200 rounded-lg px-3 py-2 text-sm font-bold text-rose-700 outline-none focus:border-rose-500">
+                                                                            <option value="">-- Select Justification --</option>
+                                                                            <option value="Beyond repair due to age and lifecycle">Beyond repair due to age and lifecycle</option>
+                                                                            <option value="Structural or safety issues">Structural or safety issues</option>
+                                                                            <option value="Severe damage due to calamity">Severe damage due to calamity</option>
+                                                                            <option value="MGB‑declared hazard‑prone area">MGB‑declared hazard‑prone area</option>
+                                                                            <option value="Site relocation or right-of-way">Site relocation or right-of-way</option>
+                                                                        </select>
+                                                                    </div>
+                                                                )}
+
+                                                                <div className="flex gap-4">
+                                                                    <div className="flex-1">
+                                                                        <label className="text-xs font-bold text-gray-500">Estimated Damage</label>
+                                                                        <input type="range" min="0" max="100" step="10" value={itemData.damage_ratio} onChange={(e) => handleUpdateRepairItem(category, 'damage_ratio', parseInt(e.target.value))}
+                                                                            className="w-full mt-2 accent-amber-500 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                                                                        <div className="text-right text-xs font-black text-amber-600 mt-1">{itemData.damage_ratio}%</div>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div>
+                                                                    <label className="text-[10px] font-bold text-gray-400 ml-1">REMARKS</label>
+                                                                    <input type="text" value={itemData.remarks} onChange={(e) => handleUpdateRepairItem(category, 'remarks', e.target.value)}
+                                                                        className="w-full bg-white border-2 border-gray-100 mt-0.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 outline-none focus:border-amber-400" />
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        <button onClick={handleSaveRepairRoom}
+                                            className="w-full mt-6 py-4 rounded-2xl text-white font-black text-lg bg-amber-500 border-b-[6px] border-amber-700 active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-amber-200/50">
+                                            Save Room Assessment ✓
+                                        </button>
+                                    </motion.div>
+                                )}
+                            </div>
 
 
-                    </motion.div>
-                )}
+                        </motion.div>
+                    )}
 
-            </main>
+                </main>
             )}
 
             {/* Wizard Navigation Buttons */}
@@ -2199,13 +2427,13 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                         </button>
 
                         {currentPage === 4 ? (
-                            <button 
-                                onClick={handleMasterSubmit} 
+                            <button
+                                onClick={handleMasterSubmit}
                                 disabled={loading || roomsData.filter(r => r.condition === 'Repair').some(room => {
                                     const building = buildings.find(b => b.id === room.building_local_id);
                                     const bName = building ? (building.building_name || building.building_no) : "";
-                                    return !repairAssessments.some(a => 
-                                        (a.building_name === bName || a.building_no === bName) && 
+                                    return !repairAssessments.some(a =>
+                                        (a.building_name === bName || a.building_no === bName) &&
                                         (a.room_name === room.room_name || a.room_no === room.room_name)
                                     );
                                 })}
@@ -2296,7 +2524,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                             </div>
                             <h2 className="text-2xl font-black text-gray-900 text-center leading-tight px-4">Local Secure: Unit 7 Saved!</h2>
                             <p className="text-gray-500 text-center font-medium mt-3 px-6">Your infrastructure layout, building inventory, and facility assessments have been saved locally. We will automatically sync your school's physical profile once you're back online.</p>
-                            
+
                             <div className="mt-10">
                                 <button onClick={() => navigate("/modular-dashboard")}
                                     className="w-full py-5 rounded-[2rem] bg-orange-600 text-white font-black text-lg shadow-xl shadow-orange-100 active:scale-95 transition-all outline-none">
@@ -2310,4 +2538,4 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             </AnimatePresence>
         </div>
     );
-}
+};
