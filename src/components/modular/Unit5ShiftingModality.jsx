@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiArrowLeft, FiCheckCircle, FiEdit2, FiCheck, FiClock, FiAlertTriangle, FiMonitor, FiRadio, FiBook, FiLayers, FiUnlock, FiSave } from "react-icons/fi";
+import { FiX, FiArrowLeft, FiCheckCircle, FiEdit2, FiCheck, FiClock, FiAlertTriangle, FiMonitor, FiRadio, FiBook, FiLayers, FiUnlock, FiSave, FiWifiOff } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
-import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, getModularOutbox } from "../../db";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_CHAPTERS = 4; // 1: Gatekeeper, 2: Grade Loop, 3: ADM, 4: Review
@@ -66,6 +66,8 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     const [isReviewMode, setIsReviewMode] = useState(false);
     const [curricularOffering, setCurricularOffering] = useState("");
     const [showDraftModal, setShowDraftModal] = useState(false);
+    const [showOfflineSuccess, setShowOfflineSuccess] = useState(false);
+    const [pendingOutboxId, setPendingOutboxId] = useState(null);
 
     // ── Dynamic grades based on curricular offering ──────────────────────
 
@@ -99,162 +101,167 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             setSchoolId(storedId);
 
             try {
+                // 1. GATHER ALL LOCAL SOURCES
+                const outbox = await getModularOutbox().catch(() => []);
+                const pendingUnit1 = outbox.find(e => e.unitId === 1 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const pendingUnit2 = outbox.find(e => e.unitId === 2 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const pendingUnit3 = outbox.find(e => e.unitId === 3 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const pendingUnit5 = outbox.find(e => e.unitId === 5 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
                 const draft = await getUnitDraft(5, storedId);
-                const res = await fetch(`/api/ph_schools/${storedId}?t=${Date.now()}`);
+
+                // 2. RECONSTRUCT SCHOOL BASELINE
+                let baseline = { iern: "", total_enrollment: 0, curricular_offering: "" };
+                try {
+                    const res = await fetch(`/api/ph_schools/${storedId}?t=${Date.now()}`);
+                    if (res.ok) {
+                        const saved = await res.json();
+                        if (saved.exists && saved.data) baseline = { ...baseline, ...saved.data };
+                    }
+                } catch (e) {
+                    console.log("📍 [Unit5] Offline: Using local sources for baseline.");
+                }
+
+                // Overlay Unit 1 Sync Center Data
+                if (pendingUnit1) baseline.curricular_offering = pendingUnit1.payload?.curricular_offering || baseline.curricular_offering;
                 
-                if (res.ok) {
-                    const saved = await res.json();
-                    let d = (saved.exists && saved.data) ? saved.data : {};
-                    if (d.iern) setIern(d.iern);
-
-                    // Fallback to local quest progress for curricular offering
-                    if (!d.curricular_offering) {
-                        try {
-                            const qp = JSON.parse(localStorage.getItem('quest_progress') || '{}');
-                            d.curricular_offering = qp.curricular_offering || "";
-                        } catch (e) {}
-                    }
-
-                    setCurricularOffering(d.curricular_offering || "");
+                // Overlay Unit 2 Sync Center Data
+                if (pendingUnit2) {
+                    baseline.unit2_simplified_enrollment = pendingUnit2.payload?.unit2_simplified_enrollment;
+                    baseline.total_enrollment = pendingUnit2.payload?.total_enrollment || baseline.total_enrollment;
                     
-                    const expectedGrades = [];
-                    const co = (d.curricular_offering || "").toLowerCase();
-                    let hasKinder = false; let hasElem = false; let hasJHS = false; let hasSHS = false;
-                    if (co === "purely elementary") { hasKinder = true; hasElem = true; }
-                    else if (co === "elementary school and junior high school (k-10)") { hasKinder = true; hasElem = true; hasJHS = true; }
-                    else if (co === "junior high and senior high") { hasJHS = true; hasSHS = true; }
-                    else if (co === "all offering (k to 12)") { hasKinder = true; hasElem = true; hasJHS = true; hasSHS = true; }
-                    else if (co === "purely junior high school") { hasJHS = true; }
-                    else if (co === "purely senior high school") { hasSHS = true; }
-                    else {
-                        hasKinder = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("kinder");
-                        hasElem = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
-                        hasJHS = co.includes("junior high") || co.includes("jhs") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
-                        hasSHS = co.includes("senior high") || co.includes("shs") || co.includes("k to 12") || co.includes("k-12");
-                    }
-                    let parsedSections = [];
-                    if (d.unit3_simplified_counts) {
-                        try { parsedSections = typeof d.unit3_simplified_counts === 'string' ? JSON.parse(d.unit3_simplified_counts) : d.unit3_simplified_counts; } catch (e) {}
-                    }
-                    let u2Parsed = [];
-                    if (d.unit2_simplified_enrollment) {
-                        try {
-                            const raw = typeof d.unit2_simplified_enrollment === 'string' ? JSON.parse(d.unit2_simplified_enrollment) : d.unit2_simplified_enrollment;
-                            u2Parsed = Array.isArray(raw) ? raw : (raw.array || []);
-                        } catch (e) { console.warn("U2 Parse Error", e); }
-                    }
-                    const getEnrollmentForGrade = (gradeId) => {
-                        const found = u2Parsed.find(x => x.grade_level === gradeId);
-                        if (found) return parseInt(found.total || 0);
-                        const colKey = `enroll_${gradeId}`;
-                        if (d[colKey] !== undefined) return parseInt(d[colKey] || 0);
-                        return 0;
-                    };
-                    const getCountForGrade = (gradeId) => {
-                        const found = parsedSections.find(sec => sec.grade_level === gradeId);
-                        if (found) return parseInt(found.total_sections || 0);
-                        if (gradeId.startsWith('mg_')) {
-                            const idx = gradeId.replace('mg_', '');
-                            return parseInt(d[`multigrade_sections_${idx}`] || 0);
-                        }
-                        const sectKey = `sections_${gradeId}`;
-                        if (d[sectKey] !== undefined) return parseInt(d[sectKey] || 0);
-                        return 0;
-                    };
-                    const isGradeActive = (gradeId) => {
-                        if (!u2Parsed.length) return true;
-                        const found = u2Parsed.find(x => x.grade_level === gradeId);
-                        return found ? found.is_active !== false : true;
-                    };
-                    const ALL_POSSIBLE_GRADES = [
-                        { id: "kinder", label: "Kinder" },
-                        ...['1','2','3','4','5','6','7','8','9','10','11','12'].map(lvl => ({ id: `g${lvl}`, label: `Grade ${lvl}` }))
-                    ];
-                    ALL_POSSIBLE_GRADES.forEach(pg => {
-                        let isOffered = false;
-                        const nid = pg.id.replace('g', '');
-                        if (pg.id === 'kinder') isOffered = hasKinder;
-                        else if (['1','2','3','4','5','6'].includes(nid)) isOffered = hasElem;
-                        else if (['7','8','9','10'].includes(nid)) isOffered = hasJHS;
-                        else if (['11','12'].includes(nid)) isOffered = hasSHS;
-                        const enrollment = getEnrollmentForGrade(pg.id) || parseInt(d[`enroll_${pg.id}`] || 0);
-                        const sections = getCountForGrade(pg.id) || parseInt(d[`sections_${pg.id}`] || 0);
-                        const isActive = isGradeActive(pg.id);
-                        if (enrollment > 0 || sections > 0 || (isOffered && isActive)) {
-                            expectedGrades.push({ id: pg.id, label: pg.label });
-                        }
-                    });
-                    const multigradeGrades = [];
-                    for (let nIdx = 1; nIdx <= 3; nIdx++) {
-                        const groupName = d[`multigrade_groupings_${nIdx}`];
-                        const groupSections = getCountForGrade(`mg_${nIdx}`) || parseInt(d[`multigrade_sections_${nIdx}`] || 0);
-                        if (groupName && groupSections > 0) {
-                            const labelStr = groupName.toLowerCase();
-                            let gradeNums = [];
-                            if (labelStr.includes("-") || labelStr.includes(" to ")) {
-                                const numbers = labelStr.match(/\d+/g);
-                                if (numbers && numbers.length >= 2) {
-                                    const start = parseInt(numbers[0]);
-                                    const end = parseInt(numbers[1]);
-                                    for (let n = start; n <= end; n++) gradeNums.push(`${n}`);
-                                }
-                            } else {
-                                gradeNums = labelStr.replace(/\D/g, " ").trim().split(/\s+/).filter(x => x);
-                            }
-                            const gradeIds = gradeNums.map(n => `g${n}`);
-                            if (labelStr.includes("kinder") || labelStr.includes(" k ")) gradeIds.push("kinder");
-                            multigradeGrades.push({ id: `mg_${nIdx}`, label: groupName, pairs: gradeIds });
-                        }
-                    }
-                    const finalExpectedGrades = expectedGrades.filter(eg => {
-                        const isPaired = multigradeGrades.some(mg => mg.pairs.includes(eg.id));
-                        return !isPaired;
-                    });
-                    finalExpectedGrades.push(...multigradeGrades);
-                    const getSortOrder = (id) => {
-                        if (id === "kinder") return 0;
-                        if (id.startsWith("g")) return parseInt(id.replace("g", ""));
-                        if (id.startsWith("mg_")) {
-                            const mg = multigradeGrades.find(x => x.id === id);
-                            if (mg && mg.pairs.length > 0) {
-                                const first = mg.pairs[0];
-                                if (first === "kinder") return 0.5;
-                                return parseInt(first.replace("g", "")) + 0.1;
-                            }
-                            return 99;
-                        }
-                        return 200;
-                    };
-                    finalExpectedGrades.sort((a,b) => getSortOrder(a.id) - getSortOrder(b.id));
-                    const finalGrades = finalExpectedGrades.map(g => ({ key: g.id, label: g.label }));
-                    setFilteredGrades(finalGrades);
+                    // Also multigrade groupings for Unit 5 reconstruction
+                    baseline.multigrade_groupings_1 = pendingUnit2.payload?.multigrade_groupings_1;
+                    baseline.multigrade_groupings_2 = pendingUnit2.payload?.multigrade_groupings_2;
+                    baseline.multigrade_groupings_3 = pendingUnit2.payload?.multigrade_groupings_3;
+                }
 
-                    // MASTER PRECEDENCE: Draft > Database
-                    if (draft && !propReadOnly) {
-                        setCurrentChapter(draft.currentChapter || 1);
-                        setHasStandardShifting(draft.hasStandardShifting);
-                        setGradeIdx(draft.gradeIdx || 0);
-                        setMapData(draft.mapData || {});
-                        setHasAdms(draft.hasAdms);
-                        setAdmData(draft.admData || { adm_mdl: false, adm_odl: false, adm_tvi: false, adm_blended: false });
-                        setIsReviewMode(false); // Force edit mode for drafts
-                        setShowWelcomeBack(true);
-                        setTimeout(() => setShowWelcomeBack(false), 3000);
-                    } else if (d.unit5_completed || propReadOnly) {
-                        setSavedData(d);
-                        setHasStandardShifting(d.has_standard_shifting);
-                        const prefillMap = {};
-                        finalGrades.forEach(g => {
-                            prefillMap[`shift_${g.key}`] = d[`shift_${g.key}`] || "";
-                            prefillMap[`mode_${g.key}`] = d[`mode_${g.key}`] || "";
-                        });
-                        setMapData(prefillMap);
-                        setHasAdms(d.adm_mdl || d.adm_odl || d.adm_tvi || d.adm_blended);
-                        setAdmData({
-                            adm_mdl: !!d.adm_mdl, adm_odl: !!d.adm_odl, adm_tvi: !!d.adm_tvi, adm_blended: !!d.adm_blended
-                        });
-                        setIsReviewMode(true);
+                // Overlay Unit 3 Sync Center Data
+                if (pendingUnit3) {
+                    baseline.unit3_simplified_counts = pendingUnit3.payload?.unit3_simplified_counts;
+                }
+
+                if (baseline.iern) setIern(baseline.iern);
+                setSavedData(baseline);
+
+                const co = (baseline.curricular_offering || "").toLowerCase();
+                setCurricularOffering(co);
+                
+                const expectedGrades = [];
+                let hasKinder = false; let hasElem = false; let hasJHS = false; let hasSHS = false;
+                if (co === "purely elementary") { hasKinder = true; hasElem = true; }
+                else if (co === "elementary school and junior high school (k-10)") { hasKinder = true; hasElem = true; hasJHS = true; }
+                else if (co === "junior high and senior high") { hasJHS = true; hasSHS = true; }
+                else if (co === "all offering (k to 12)") { hasKinder = true; hasElem = true; hasJHS = true; hasSHS = true; }
+                else if (co === "purely junior high school") { hasJHS = true; }
+                else if (co === "purely senior high school") { hasSHS = true; }
+                else {
+                    hasKinder = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("kinder");
+                    hasElem = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
+                    hasJHS = co.includes("junior high") || co.includes("jhs") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
+                    hasSHS = co.includes("senior high") || co.includes("shs") || co.includes("k to 12") || co.includes("k-12");
+                }
+
+                // [FIX] Robust grade detection from Unit 2/3 payload
+                let parsedSections = [];
+                if (baseline.unit3_simplified_counts) {
+                    try { parsedSections = typeof baseline.unit3_simplified_counts === 'string' ? JSON.parse(baseline.unit3_simplified_counts) : (baseline.unit3_simplified_counts.array || baseline.unit3_simplified_counts); } catch (e) {}
+                }
+                let u2Parsed = [];
+                if (baseline.unit2_simplified_enrollment) {
+                    try {
+                        const raw = typeof baseline.unit2_simplified_enrollment === 'string' ? JSON.parse(baseline.unit2_simplified_enrollment) : baseline.unit2_simplified_enrollment;
+                        u2Parsed = Array.isArray(raw) ? raw : (raw.array || []);
+                    } catch (e) { console.warn("U2 Parse Error", e); }
+                }
+
+                const getEnrollmentForGrade = (gradeId) => {
+                    const found = u2Parsed.find(x => x.grade_level === gradeId);
+                    if (found) return parseInt(found.total || 0);
+                    return 0;
+                };
+                const getCountForGrade = (gradeId) => {
+                    const found = Array.isArray(parsedSections) ? parsedSections.find(sec => sec.grade_level === gradeId) : null;
+                    if (found) return parseInt(found.total_sections || 0);
+                    return 0;
+                };
+
+                const ALL_POSSIBLE_GRADES = [
+                    { id: "kinder", label: "Kinder" },
+                    ...['1','2','3','4','5','6','7','8','9','10','11','12'].map(lvl => ({ id: `g${lvl}`, label: `Grade ${lvl}` }))
+                ];
+
+                ALL_POSSIBLE_GRADES.forEach(pg => {
+                    let isOffered = false;
+                    const nid = pg.id.replace('g', '');
+                    if (pg.id === 'kinder') isOffered = hasKinder;
+                    else if (['1','2','3','4','5','6'].includes(nid)) isOffered = hasElem;
+                    else if (['7','8','9','10'].includes(nid)) isOffered = hasJHS;
+                    else if (['11','12'].includes(nid)) isOffered = hasSHS;
+                    
+                    const enrollment = getEnrollmentForGrade(pg.id);
+                    const sections = getCountForGrade(pg.id);
+                    if (enrollment > 0 || sections > 0 || isOffered) {
+                        expectedGrades.push({ id: pg.id, label: pg.label });
                     }
+                });
+
+                const multigradeGrades = [];
+                for (let nIdx = 1; nIdx <= 3; nIdx++) {
+                    const groupName = baseline[`multigrade_groupings_${nIdx}`];
+                    if (groupName) {
+                        const labelStr = groupName.toLowerCase();
+                        let gradeNums = labelStr.match(/\d+/g) || [];
+                        const gradeIds = gradeNums.map(n => `g${n}`);
+                        if (labelStr.includes("kinder")) gradeIds.push("kinder");
+                        multigradeGrades.push({ id: `mg_${nIdx}`, label: groupName, pairs: gradeIds });
+                    }
+                }
+
+                const finalExpectedGrades = expectedGrades.filter(eg => !multigradeGrades.some(mg => mg.pairs.includes(eg.id)));
+                finalExpectedGrades.push(...multigradeGrades);
+
+                finalExpectedGrades.sort((a,b) => {
+                    const getSortOrder = (id) => (id === "kinder" ? 0 : id.startsWith("g") ? parseInt(id.replace("g", "")) : 99);
+                    return getSortOrder(a.id) - getSortOrder(b.id);
+                });
+
+                const finalGrades = finalExpectedGrades.map(g => ({ key: g.id, label: g.label }));
+                setFilteredGrades(finalGrades);
+
+                // 5. MASTER PRECEDENCE: SYNC CENTER > DRAFT > DATABASE
+                if (pendingUnit5) {
+                    const p = pendingUnit5.payload;
+                    setHasStandardShifting(p.has_standard_shifting);
+                    setMapData(p.mapData || {});
+                    setAdmData(p.admData || { adm_mdl: false, adm_odl: false, adm_tvi: false, adm_blended: false });
+                    setHasAdms(p.has_adms);
+                    setPendingOutboxId(pendingUnit5.id);
+                    setSavedData({ ...baseline, ...p });
+                    setIsReviewMode(true);
+                } else if (draft && !propReadOnly) {
+                    setCurrentChapter(draft.currentChapter || 1);
+                    setHasStandardShifting(draft.hasStandardShifting);
+                    setGradeIdx(draft.gradeIdx || 0);
+                    setMapData(draft.mapData || {});
+                    setHasAdms(draft.hasAdms);
+                    setAdmData(draft.admData || { adm_mdl: false, adm_odl: false, adm_tvi: false, adm_blended: false });
+                    setIsReviewMode(false);
+                    setShowWelcomeBack(true);
+                    setTimeout(() => setShowWelcomeBack(false), 3000);
+                } else if (baseline.unit5_completed || propReadOnly) {
+                    setSavedData(baseline);
+                    setHasStandardShifting(baseline.has_standard_shifting);
+                    const prefillMap = {};
+                    finalGrades.forEach(g => {
+                        prefillMap[`shift_${g.key}`] = baseline[`shift_${g.key}`] || "";
+                        prefillMap[`mode_${g.key}`] = baseline[`mode_${g.key}`] || "";
+                    });
+                    setMapData(prefillMap);
+                    setHasAdms(baseline.adm_mdl || baseline.adm_odl || baseline.adm_tvi || baseline.adm_blended);
+                    setAdmData({
+                        adm_mdl: !!baseline.adm_mdl, adm_odl: !!baseline.adm_odl, adm_tvi: !!baseline.adm_tvi, adm_blended: !!baseline.adm_blended
+                    });
+                    setIsReviewMode(true);
                 }
             } catch (e) {
                 console.warn("Could not fetch Unit 5 data", e);
@@ -359,9 +366,38 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 iern,
                 has_standard_shifting: hasStandardShifting,
                 ...mapData,
-                ...finalAdm
+                ...finalAdm,
+                // Metadata for Reconstruction
+                mapData,
+                admData: finalAdm,
+                has_adms: hasAdms
             };
             
+            if (!navigator.onLine) {
+                // OFFLINE SAVE
+                await addModularToOutbox({
+                    unitId: 5,
+                    label: "Unit 5: Shifting & Modality",
+                    url: `/api/ph_schools/unit5/${schoolId}`,
+                    method: 'PUT',
+                    payload: payload,
+                    schoolId: schoolId
+                });
+                await clearUnitDraft(5, schoolId);
+
+                // Update local quest progress
+                const stored = localStorage.getItem("quest_progress");
+                let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+                if (!progress.completedUnits.includes(5)) {
+                    progress.completedUnits.push(5);
+                    progress.xp += 300;
+                    localStorage.setItem("quest_progress", JSON.stringify(progress));
+                }
+
+                setShowOfflineSuccess(true);
+                return;
+            }
+
             const res = await fetch(`/api/ph_schools/unit5/${schoolId}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -378,7 +414,7 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
             if (!progress.completedUnits.includes(5)) {
                 progress.completedUnits.push(5);
-                progress.xp += 300; // Big reward for Unit 5
+                progress.xp += 300;
                 localStorage.setItem("quest_progress", JSON.stringify(progress));
             }
 
@@ -396,7 +432,21 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             await clearUnitDraft(5, schoolId);
             setShowSuccess(true);
         } catch (err) {
-            alert("Failed to save data. " + err.message);
+            console.error("UNIT 5 SUBMIT ERROR:", err);
+            if (!navigator.onLine || err.message.includes('fetch') || err.message.includes('Network error')) {
+                await addModularToOutbox({
+                    unitId: 5,
+                    label: "Unit 5: Shifting & Modality",
+                    url: `/api/ph_schools/unit5/${schoolId}`,
+                    method: 'PUT',
+                    payload: { iern, has_standard_shifting: hasStandardShifting, ...mapData, ...finalAdm, mapData, admData: finalAdm, has_adms: hasAdms },
+                    schoolId: schoolId
+                });
+                await clearUnitDraft(5, schoolId);
+                setShowOfflineSuccess(true);
+            } else {
+                alert("Failed to save data. " + err.message);
+            }
         } finally {
             setLoading(false);
         }
@@ -892,6 +942,30 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 message="You've successfully mapped out your Shifting and Modalities. Units synced!" 
                 redirectUrl="/modular-dashboard" 
             />
+
+            <AnimatePresence>
+                {showOfflineSuccess && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full rounded-t-[3rem] p-10 pb-12 shadow-2xl relative max-w-md">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-orange-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-orange-200 mb-6 font-bold text-white">
+                                <FiWifiOff />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight px-4">Local Secure: Unit 5 Saved!</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-6">Your shifting models and delivery modalities have been saved locally. We will automatically sync your operational data once you're back online.</p>
+                            
+                            <div className="mt-10">
+                                <button onClick={() => navigate("/modular-dashboard")}
+                                    className="w-full py-5 rounded-[2rem] bg-orange-600 text-white font-black text-lg shadow-xl shadow-orange-100 active:scale-95 transition-all outline-none">
+                                    Return to Modules Dashboard
+                                </button>
+                                <p className="text-[10px] text-orange-500 font-bold uppercase text-center mt-6 tracking-widest leading-loose">✓ Offline Mode • Auto-Sync Enabled ✓</p>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

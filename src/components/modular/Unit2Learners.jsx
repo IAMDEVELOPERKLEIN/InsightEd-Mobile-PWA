@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowRight, FiCheckCircle, FiChevronLeft, FiAlertTriangle, FiUnlock, FiSave, FiArrowLeft, FiCheck } from 'react-icons/fi';
+import { FiArrowRight, FiCheckCircle, FiChevronLeft, FiAlertTriangle, FiUnlock, FiSave, FiArrowLeft, FiCheck, FiWifiOff, FiEdit2 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import SuccessModal from '../SuccessModal';
-import { saveUnitDraft, getUnitDraft, clearUnitDraft } from '../../db';
+import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, getModularOutbox } from '../../db';
 import { useAuth } from "../../context/AuthContext";
 
 // --- Shared Styles ---
@@ -39,8 +39,10 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [showSuccess, setShowSuccess] = useState(false);
     const [isReadOnly, setIsReadOnly] = useState(propReadOnly || false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
+    const [pendingOutboxId, setPendingOutboxId] = useState(null); 
+    const [showOfflineSuccess, setShowOfflineSuccess] = useState(false);
 
-    const { user } = useAuth();
+    const { user, authLoading } = useAuth();
     const [isReviewMode, setIsReviewMode] = useState(false); 
     const [showWelcomeBack, setShowWelcomeBack] = useState(false);
     const [showDraftModal, setShowDraftModal] = useState(false);
@@ -177,136 +179,52 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     // --- Init / Fetch Data ---
     useEffect(() => {
         const initData = async () => {
-            const storedId = targetSchoolId || localStorage.getItem('schoolId');
+            if (authLoading) return;
+            const storedId = targetSchoolId || user?.school_id || localStorage.getItem('schoolId');
             if (!storedId) {
                 setLoading(false);
                 return;
             }
 
             try {
-                const res = await fetch(`/api/ph_schools/${storedId}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.exists && data.data) {
-                        const d = data.data;
-                        if (d.iern) setIern(d.iern);
-                        
-                        // Check for Drafts
-                        const [draft2, draft1] = await Promise.all([
-                            getUnitDraft(2, storedId),
-                            getUnitDraft(1, storedId)
-                        ]);
+                // 1. Gather all local sources
+                const outbox = await getModularOutbox().catch(() => []);
+                const pendingUnit1 = outbox.find(e => e.unitId === 1 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const pendingUnit2 = outbox.find(e => e.unitId === 2 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const [draft2, draft1] = await Promise.all([
+                    getUnitDraft(2, storedId),
+                    getUnitDraft(1, storedId)
+                ]);
 
-                        // Prioritization: Unit 1 Draft Cache (nested in formData) -> localStorage -> Database
-                        const storedOffering = draft1?.formData?.curricular_offering 
-                            || localStorage.getItem('schoolOffering') 
-                            || d.curricular_offering
-                            || "";
-                        
-                        setSchoolOffering(storedOffering);
-
-                        if (draft2) {
-                            setKinderEnrollment(draft2.kinderEnrollment || "");
-                            setOrgType(draft2.orgType || null);
-                            setMgCombinations(draft2.mgCombinations || []);
-                            setGradeTotals(draft2.gradeTotals || {});
-                            setGradeAvailability(draft2.gradeAvailability || {});
-                            setHasSNED(draft2.hasSNED);
-                            setSnedTotalCount(draft2.snedTotalCount || "");
-                            setSnedProgramType(draft2.snedProgramType || null);
-                            setSnedOrganizedClassCount(draft2.snedOrganizedClassCount || "");
-                            setHasAralMath(draft2.hasAralMath);
-                            setAralMath(draft2.aralMath || {});
-                            setHasAralReading(draft2.hasAralReading);
-                            setAralReading(draft2.aralReading || {});
-                            setHasAralScience(draft2.hasAralScience);
-                            setAralScience(draft2.aralScience || {});
-                            setGradeGenderMap(draft2.gradeGenderMap || {});
-                            setCurrentStep(draft2.step || 1);
-                            setCurrentGradeIndex(draft2.currentGradeIndex || 0);
+                // 2. Resolve Offering (Sync Center > Unit 1 Draft > LS)
+                let resolvedOffering = pendingUnit1?.payload?.curricular_offering 
+                    || draft1?.formData?.curricular_offering 
+                    || localStorage.getItem('schoolOffering') 
+                    || "";
+                
+                // 3. Attempt Server Sync for existing data
+                try {
+                    const res = await fetch(`/api/ph_schools/${storedId}`);
+                    if (res.ok) {
+                        const sData = await res.json();
+                        if (sData.exists && sData.data) {
+                            const d = sData.data;
+                            if (d.iern) setIern(d.iern);
+                            // Fallback offering from DB if nothing local
+                            if (!resolvedOffering) resolvedOffering = d.curricular_offering || "";
                             
-                            setShowWelcomeBack(true);
-                            setTimeout(() => setShowWelcomeBack(false), 3000);
-                        }
-
-                        // --- Calculate Available Grades based on Offering ---
-                        const text = storedOffering.toLowerCase();
-                        let filteredIds = [];
-
-                        if (text === "purely elementary") {
-                            filteredIds = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
-                        } else if (text === "elementary school and junior high school (k-10)") {
-                            filteredIds = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10'];
-                        } else if (text === "junior high and senior high") {
-                            filteredIds = ['g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
-                        } else if (text === "all offering (k to 12)") {
-                            filteredIds = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
-                        } else if (text === "purely junior high school") {
-                            filteredIds = ['g7', 'g8', 'g9', 'g10'];
-                        } else if (text === "purely senior high school") {
-                            filteredIds = ['g11', 'g12'];
-                        } else {
-                            // Fallback for legacy data or partial matches
-                            if (text.includes("elementary") || text.includes("primary")) {
-                                filteredIds.push('kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6');
-                            }
-                            if (text.includes("jhs") || text.includes("junior") || text.includes("high school")) {
-                                filteredIds.push('g7', 'g8', 'g9', 'g10');
-                            }
-                            if (text.includes("shs") || text.includes("senior")) {
-                                filteredIds.push('g11', 'g12');
-                            }
-                        }
-
-                        filteredIds = [...new Set(filteredIds)];
-                        const uniqueObj = ALL_GRADES.filter(g => filteredIds.includes(g.id));
-                        
-                        setAvailableGrades(uniqueObj);
-                        const hasK = uniqueObj.some(g => g.id === 'kinder');
-                        const hasE = uniqueObj.some(g => g.type === 'elem' && g.id !== 'kinder');
-                        setHasKinder(hasK);
-                        setHasElementary(hasE);
-
-                        // 2. Auto-advance if Kinder/Elementary is not offered AND no draft exists
-                        if (!draft2) {
-                            if (!hasK) {
-                                if (hasE) {
-                                    setCurrentStep(2);
-                                } else if (uniqueObj.length > 0) {
-                                    setOrgType('nano');
-                                    setCurrentStep(4);
-                                }
-                            }
-                        } else {
-                            // Ensure the restored grade index is still valid
-                            const lockedG = new Set();
-                            (draft2.mgCombinations || []).forEach(c => c.grades.forEach(gg => lockedG.add(gg)));
-                            const monogrades = uniqueObj.filter(g => g.id !== 'kinder' && !lockedG.has(g.id));
-                            
-                            if (draft2.step === 4 && monogrades.length > 0) {
-                                const clampedIndex = Math.min(draft2.currentGradeIndex || 0, monogrades.length - 1);
-                                setCurrentGradeIndex(clampedIndex);
-                            } else if (draft2.step === 4 && monogrades.length === 0) {
-                                setCurrentStep(5); 
-                            }
-                        }
-
-                        // 3. Restore Backend Data if finalized
-                        if (d.unit2_simplified_enrollment) {
-                            setHasSubmitted(true);
-                            
-                            // If no draft exists, we load the backend data as the starting point in Read Only mode.
-                            // If a draft DOES exist, we skip this so the fresh draft (loaded above) isn't overwritten, 
-                            // and we ensure the form is in Edit Mode.
-                            if (!draft2) {
+                            // If Unit 2 is already completed on server, and we have no local changes, set to read-only
+                            if (d.unit2_completed && !draft2 && !pendingUnit2) {
+                                setHasSubmitted(true);
                                 setIsReadOnly(true);
-                                try {
-                                    const parsed = typeof d.unit2_simplified_enrollment === 'string' 
-                                        ? JSON.parse(d.unit2_simplified_enrollment) 
-                                        : d.unit2_simplified_enrollment;
-                                    
-                                    if (parsed.questionnaire) {
-                                        const q = parsed.questionnaire;
+                                
+                                if (d.unit2_simplified_enrollment) {
+                                    try {
+                                        const parsed = typeof d.unit2_simplified_enrollment === 'string' 
+                                            ? JSON.parse(d.unit2_simplified_enrollment) 
+                                            : d.unit2_simplified_enrollment;
+                                        
+                                        const q = parsed.questionnaire || parsed;
                                         setKinderEnrollment(q.kinderEnrollment || "");
                                         setGradeTotals(q.gradeTotals || {});
                                         setGradeAvailability(q.gradeAvailability || {});
@@ -322,24 +240,132 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                         setAralScience(q.aralScience || {});
                                         setGradeGenderMap(q.gradeGenderMap || {});
                                         if (q.orgType) setOrgType(q.orgType);
-                                        if (q.mgCombinations) setMgCombinations(q.mgCombinations);
-                                    }
-                                } catch (e) { console.warn("Parse error", e); }
-                            } else {
-                                // Draft exists: strictly ensure we are in edit mode
-                                setIsReadOnly(false);
+                                        if (q.mgCombinations) setMgCombinations(q.mgCombinations || []);
+                                    } catch (e) { console.warn("Unit 2 Parse error", e); }
+                                }
                             }
                         }
                     }
+                } catch (e) {
+                    console.log("📍 [Unit2] Offline: Skipping server record check.");
                 }
-            } catch (e) {
-                console.error("Error fetching Unit 2 data:", e);
+
+                // 4. Set the offering (triggers the availableGrades Effect)
+                setSchoolOffering(resolvedOffering || "");
+
+                // 5. Apply Pending Changes (Sync Center)
+                if (pendingUnit2) {
+                    const p = pendingUnit2.payload;
+                    const q = p.unit2_simplified_enrollment?.questionnaire || p.unit2_simplified_enrollment;
+                    if (q) {
+                        setKinderEnrollment(q.kinderEnrollment || "");
+                        setGradeTotals(q.gradeTotals || {});
+                        setGradeAvailability(q.gradeAvailability || {});
+                        setHasSNED(q.hasSNED);
+                        setSnedTotalCount(q.snedTotalCount || "");
+                        setSnedProgramType(q.snedProgramType || null);
+                        setSnedOrganizedClassCount(q.snedOrganizedClassCount || "");
+                        setHasAralMath(q.hasAralMath);
+                        setAralMath(q.aralMath || {});
+                        setHasAralReading(q.hasAralReading);
+                        setAralReading(q.aralReading || {});
+                        setHasAralScience(q.hasAralScience);
+                        setAralScience(q.aralScience || {});
+                        setGradeGenderMap(q.gradeGenderMap || p.gradeGenderMap || {});
+                        setOrgType(q.orgType);
+                        setMgCombinations(q.mgCombinations || []);
+                    }
+                    setPendingOutboxId(pendingUnit2.id);
+                    setIsReviewMode(true);
+                    setIsReadOnly(true);
+                } 
+                // 6. Apply Draft Changes if no pending outbox
+                else if (draft2) {
+                    setKinderEnrollment(draft2.kinderEnrollment || "");
+                    setOrgType(draft2.orgType || null);
+                    setMgCombinations(draft2.mgCombinations || []);
+                    setGradeTotals(draft2.gradeTotals || {});
+                    setGradeAvailability(draft2.gradeAvailability || {});
+                    setHasSNED(draft2.hasSNED);
+                    setSnedTotalCount(draft2.snedTotalCount || "");
+                    setSnedProgramType(draft2.snedProgramType || null);
+                    setSnedOrganizedClassCount(draft2.snedOrganizedClassCount || "");
+                    setHasAralMath(draft2.hasAralMath);
+                    setAralMath(draft2.aralMath || {});
+                    setHasAralReading(draft2.hasAralReading);
+                    setAralReading(draft2.aralReading || {});
+                    setHasAralScience(draft2.hasAralScience);
+                    setAralScience(draft2.aralScience || {});
+                    setGradeGenderMap(draft2.gradeGenderMap || {});
+                    setCurrentStep(draft2.step || 1);
+                    setCurrentGradeIndex(draft2.currentGradeIndex || 0);
+                    
+                    setIsReadOnly(false);
+                    setShowWelcomeBack(true);
+                    setTimeout(() => setShowWelcomeBack(false), 3000);
+                }
+
+            } catch (err) {
+                console.error("Critical Unit 2 Initialization Error:", err);
             } finally {
                 setLoading(false);
             }
         };
         initData();
-    }, []);
+    }, [targetSchoolId, user?.school_id, authLoading]);
+    
+    // OFFLINE GRADE SELECTOR: Recalculate available grades as soon as schoolOffering changes
+    useEffect(() => {
+        if (!schoolOffering) {
+            setAvailableGrades([]);
+            return;
+        }
+
+        const text = schoolOffering.toLowerCase();
+        let filteredIds = [];
+
+        if (text === "purely elementary") {
+            filteredIds = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
+        } else if (text.includes("k-10") || text.includes("elementary school and junior high school")) {
+            filteredIds = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10'];
+        } else if (text.includes("junior high and senior high")) {
+            filteredIds = ['g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+        } else if (text.includes("all offering") || text.includes("k-12")) {
+            filteredIds = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+        } else if (text === "purely junior high school") {
+            filteredIds = ['g7', 'g8', 'g9', 'g10'];
+        } else if (text === "purely senior high school") {
+            filteredIds = ['g11', 'g12'];
+        } else {
+            // Fallback for legacy data or partial matches
+            if (text.includes("elementary") || text.includes("primary")) {
+                filteredIds.push('kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6');
+            }
+            if (text.includes("jhs") || text.includes("junior") || text.includes("high school")) {
+                filteredIds.push('g7', 'g8', 'g9', 'g10');
+            }
+            if (text.includes("shs") || text.includes("senior")) {
+                filteredIds.push('g11', 'g12');
+            }
+        }
+
+        const uniqueIds = [...new Set(filteredIds)];
+        const uniqueObj = ALL_GRADES.filter(g => uniqueIds.includes(g.id));
+        setAvailableGrades(uniqueObj);
+
+        const hasK = uniqueObj.some(g => g.id === 'kinder');
+        const hasE = uniqueObj.some(g => g.type === 'elem' && g.id !== 'kinder');
+        setHasKinder(hasK);
+        setHasElementary(hasE);
+        
+        if (uniqueObj.length > 0 && !loading) {
+             const stored = localStorage.getItem(`unit2_draft_${user?.school_id}`);
+             if (!stored && currentStep === 1 && !hasK) {
+                 if (hasE) setCurrentStep(2);
+                 else setCurrentStep(4);
+             }
+        }
+    }, [schoolOffering, loading, user?.school_id]);
 
     // ── Safety Guard: Ensure currentGradeIndex stays in bounds ──────────────────
     useEffect(() => {
@@ -702,6 +728,36 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             const mg_2_enrollment = mgCombinations.length > 1 ? mgCombinations[1].grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0) : null;
             const mg_3_enrollment = mgCombinations.length > 2 ? mgCombinations[2].grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0) : null;
 
+            if (!navigator.onLine) {
+                // OFFLINE SAVE
+                await addModularToOutbox({
+                    unitId: 2,
+                    label: "Unit 2: Learner Profile",
+                    url: `/api/ph_schools/unit2/${storedId}`,
+                    method: 'PUT',
+                    payload: { 
+                        iern,
+                        unit2_simplified_enrollment: payload,
+                        has_sned: hasSNED,
+                        sned_total_count: parseInt(snedTotalCount) || 0,
+                        sned_program_type: snedProgramType,
+                        sned_organized_class_count: parseInt(snedOrganizedClassCount) || 0,
+                        multigrade_groupings_1: mg_1,
+                        multigrade_groupings_2: mg_2,
+                        multigrade_groupings_3: mg_3,
+                        multigrade_enrollment_1: mg_1_enrollment,
+                        multigrade_enrollment_2: mg_2_enrollment,
+                        multigrade_enrollment_3: mg_3_enrollment,
+                        gradeGenderMap 
+                    },
+                    schoolId: storedId
+                });
+
+                await clearUnitDraft(2, storedId);
+                setShowOfflineSuccess(true);
+                return;
+            }
+
             const res = await fetch(`/api/ph_schools/unit2/${storedId}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -746,9 +802,33 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             }
         } catch (e) {
             console.error(e);
-            alert("An error occurred during save.");
+            if (!navigator.onLine || e.message.includes('fetch')) {
+                // FALLBACK TO OUTBOX
+                await addModularToOutbox({
+                    unitId: 2,
+                    label: "Unit 2: Learner Profile",
+                    url: `/api/ph_schools/unit2/${storedId}`,
+                    method: 'PUT',
+                    payload: { iern, unit2_simplified_enrollment: payload, has_sned: hasSNED, sned_total_count: parseInt(snedTotalCount) || 0, sned_program_type: snedProgramType, sned_organized_class_count: parseInt(snedOrganizedClassCount) || 0, multigrade_groupings_1: mg_1, multigrade_groupings_2: mg_2, multigrade_groupings_3: mg_3, multigrade_enrollment_1: mg_1_enrollment, multigrade_enrollment_2: mg_2_enrollment, multigrade_enrollment_3: mg_3_enrollment, gradeGenderMap },
+                    schoolId: storedId
+                });
+                await clearUnitDraft(2, storedId);
+                setShowOfflineSuccess(true);
+            } else {
+                alert("An error occurred during save.");
+            }
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleEditPending = async () => {
+        if (!pendingOutboxId) return;
+        if (window.confirm("Do you want to move this data back to 'Draft' mode to make changes? It will be removed from the Sync Center for now.")) {
+            await deleteModularFromOutbox(pendingOutboxId);
+            setPendingOutboxId(null);
+            setIsReadOnly(false);
+            setIsReviewMode(false);
         }
     };
 
@@ -801,6 +881,22 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     </span>
                     <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight">Enrollment Overview</h1>
                     <p className="text-slate-500 font-medium mt-2 italic">Verified via ESF7 Parity Registry</p>
+
+                    {pendingOutboxId && (
+                        <div className="mt-8 flex flex-col items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+                            <div className="inline-flex items-center gap-2 px-6 py-3 bg-amber-50 border-2 border-amber-100 rounded-full shadow-sm">
+                                <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                                <span className="text-[10px] font-black text-amber-700 uppercase tracking-[0.2em]">Pending Sync • Local Storage Ready</span>
+                            </div>
+                            <button 
+                                onClick={handleEditPending}
+                                className="px-8 py-4 bg-white border-2 border-slate-200 rounded-[2rem] text-[11px] font-black text-slate-600 uppercase tracking-widest hover:border-blue-300 hover:text-blue-600 active:scale-95 transition-all shadow-sm flex items-center gap-2 group"
+                            >
+                                <FiEdit2 className="w-4 h-4 text-slate-400 group-hover:text-blue-500" />
+                                Pull Back to Edit
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Grand Total Hero Card */}
@@ -2099,6 +2195,29 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     className="py-5 rounded-[2rem] bg-blue-600 text-white font-black text-lg shadow-xl shadow-blue-100 active:scale-95 transition-all">
                                     Save & Exit
                                 </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+            <AnimatePresence>
+                {showOfflineSuccess && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full rounded-t-[3rem] p-10 pb-12 shadow-2xl relative">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-amber-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-amber-200 mb-6 font-bold text-white">
+                                <FiWifiOff />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight px-4">Local Secure: Unit 2 Saved!</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-6">Your Learner Profile has been saved to the <strong>Sync Center</strong>. We will automatically update your school's official registry once your internet is restored.</p>
+                            
+                            <div className="mt-10">
+                                <button onClick={() => navigate("/modular-dashboard")}
+                                    className="w-full py-5 rounded-[2rem] bg-amber-600 text-white font-black text-lg shadow-xl shadow-amber-100 active:scale-95 transition-all">
+                                    Return to Modules Dashboard
+                                </button>
+                                <p className="text-[10px] text-amber-500 font-bold uppercase text-center mt-6 tracking-widest leading-loose">✓ Offline Mode • Auto-Sync Enabled ✓</p>
                             </div>
                         </motion.div>
                     </div>

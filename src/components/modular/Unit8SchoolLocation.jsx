@@ -7,6 +7,7 @@ import SchoolLocation from '../../forms/SchoolLocation';
 import SuccessModal from '../SuccessModal';
 import BottomNav from '../../modules/BottomNav';
 import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
+import { useAuth } from "../../context/AuthContext";
 
 const Unit8SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const navigate = useNavigate();
@@ -21,7 +22,8 @@ const Unit8SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [isReadOnly, setIsReadOnly] = React.useState(propReadOnly || false);
     const [loading, setLoading] = React.useState(true);
 
-    const schoolId = targetSchoolId || localStorage.getItem('schoolId');
+    const { user, authLoading } = useAuth();
+    const schoolId = targetSchoolId || user?.school_id || localStorage.getItem('schoolId');
 
     useEffect(() => {
         if (propReadOnly !== undefined) {
@@ -33,6 +35,7 @@ const Unit8SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
     useEffect(() => {
         const init = async () => {
+            if (authLoading) return;
             if (!schoolId) {
                 setLoading(false);
                 return;
@@ -88,7 +91,7 @@ const Unit8SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             }
         };
         init();
-    }, [schoolId, propReadOnly, isReadOnly]);
+    }, [schoolId, propReadOnly, isReadOnly, authLoading]);
 
     const handleBack = () => {
         navigate('/modular-dashboard');

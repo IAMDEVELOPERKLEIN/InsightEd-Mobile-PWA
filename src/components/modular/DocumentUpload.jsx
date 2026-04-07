@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { FiUploadCloud, FiFile, FiCheckCircle, FiLoader, FiAlertCircle, FiX, FiEdit2, FiTrash2 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { resolveDocUrl } from "../../utils/assetHelper";
+import { saveOfflineFile, getOfflineFile, deleteOfflineFile } from "../../db";
 
 const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null, initialDocId = null, initialFileSize = null }) => {
     const [file, setFile] = useState(null);
@@ -16,13 +17,34 @@ const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null, in
 
     // Sync initial props if they change (e.g. on mount/load)
     useEffect(() => {
-        if (initialFile) {
-            setUploadedPath(initialFile);
-            setDocumentId(initialDocId);
-            setUploadedFileSize(initialFileSize);
-            setStatus("success");
-        }
-    }, [initialFile, initialDocId, initialFileSize]);
+        let activeBlobUrl = null;
+
+        const hydrateLocalFile = async () => {
+            if (initialFile?.startsWith('local:')) {
+                const entry = await getOfflineFile(iern);
+                if (entry?.file) {
+                    activeBlobUrl = URL.createObjectURL(entry.file);
+                    setUploadedPath(activeBlobUrl);
+                    setUploadedFileName(entry.fileName);
+                    setUploadedFileSize(entry.file.size);
+                    setDocumentId("local_" + entry.id);
+                    setStatus("success");
+                }
+            } else if (initialFile) {
+                setUploadedPath(initialFile);
+                setDocumentId(initialDocId);
+                setUploadedFileSize(initialFileSize);
+                setStatus("success");
+            }
+        };
+
+        hydrateLocalFile();
+
+        // Cleanup on unmount or re-run
+        return () => {
+            if (activeBlobUrl) URL.revokeObjectURL(activeBlobUrl);
+        };
+    }, [initialFile, initialDocId, initialFileSize, iern]);
 
     const handleFileChange = (e) => {
         const selectedFile = e.target.files[0];
@@ -86,8 +108,34 @@ const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null, in
 
         } catch (err) {
             console.error("Upload error:", err);
-            setStatus("error");
-            setErrorMessage(err.message);
+            
+            // OFFLINE FALLBACK
+            if (err.message.includes("fetch") || !window.navigator.onLine) {
+                setStatus("optimizing");
+                try {
+                    const localId = await saveOfflineFile(iern, file, docType);
+                    const localUrl = URL.createObjectURL(file);
+                    setUploadedPath(localUrl);
+                    setUploadedFileName(file.name);
+                    setUploadedFileSize(file.size);
+                    setDocumentId("local_" + localId);
+                    
+                    onUploadSuccess(`local:${file.name}`, localId, file.name, file.size);
+                    
+                    setTimeout(() => {
+                        setStatus("success");
+                    }, 1500);
+                    setUploading(false);
+                    return; // Early return for success!
+                } catch (dbErr) {
+                    console.error("Local Save Error:", dbErr);
+                    setStatus("error");
+                    setErrorMessage("Offline storage failed: " + dbErr.message);
+                }
+            } else {
+                setStatus("error");
+                setErrorMessage(err.message);
+            }
         } finally {
             setUploading(false);
         }
@@ -110,6 +158,14 @@ const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null, in
         }
 
         if (!window.confirm("Are you sure you want to permanently delete this document and its record?")) return;
+
+        // LOCAL DELETE
+        if (String(documentId).startsWith('local_')) {
+            const rawId = Number(String(documentId).split('_')[1]);
+            await deleteOfflineFile(rawId);
+            clearFile();
+            return;
+        }
 
         setUploading(true);
         setStatus("uploading"); // Reusing for consistency

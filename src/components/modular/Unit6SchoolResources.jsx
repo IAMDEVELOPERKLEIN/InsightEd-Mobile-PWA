@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiChevronRight, FiCheck, FiArrowLeft, FiTrash2, FiPlus, FiUnlock, FiMonitor, FiDroplet, FiSave, FiAlertTriangle, FiAlertCircle } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiChevronRight, FiCheck, FiArrowLeft, FiTrash2, FiPlus, FiUnlock, FiMonitor, FiDroplet, FiSave, FiAlertTriangle, FiAlertCircle, FiWifiOff } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
-import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, getModularOutbox } from "../../db";
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const chunkyInput = "w-full p-4 mt-2 bg-gray-50 border-2 border-gray-200 rounded-2xl text-lg font-black text-gray-700 focus:outline-none focus:border-indigo-500 focus:bg-indigo-50 transition-colors shadow-sm text-center";
@@ -71,10 +71,12 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [isReviewMode, setIsReviewMode] = useState(false);
     const [showDraftModal, setShowDraftModal] = useState(false);
     const [iern, setIern] = useState("");
+    const [savedData, setSavedData] = useState(null);
 
     // Core Workflow State
     const [currentPhase, setCurrentPhase] = useState(1); 
     const [showSuccess, setShowSuccess] = useState(false);
+    const [showOfflineSuccess, setShowOfflineSuccess] = useState(false);
     // PHASE 1 State
     const [gradesData, setGradesData] = useState([]);
     const [selectedGradeId, setSelectedGradeId] = useState(null);
@@ -173,337 +175,176 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             }
 
             try {
+                // 1. GATHER ALL LOCAL SOURCES
+                const outbox = await getModularOutbox().catch(() => []);
+                const pendingUnit1 = outbox.find(e => e.unitId === 1 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const pendingUnit2 = outbox.find(e => e.unitId === 2 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const pendingUnit3 = outbox.find(e => e.unitId === 3 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const pendingUnit6 = outbox.find(e => e.unitId === 6 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
                 const draft = await getUnitDraft(6, storedId);
-                const res = await fetch(`/api/ph_schools/${storedId}?t=${Date.now()}`);
+
+                // 2. RECONSTRUCT SCHOOL BASELINE
+                let baseline = { iern: "", total_enrollment: 0, curricular_offering: "" };
+                try {
+                    const res = await fetch(`/api/ph_schools/${storedId}?t=${Date.now()}`);
+                    if (res.ok) {
+                        const saved = await res.json();
+                        if (saved.exists && saved.data) baseline = { ...baseline, ...saved.data };
+                    }
+                } catch (e) {
+                    console.log("📍 [Unit6] Offline: Using local sources for baseline.");
+                }
+
+                // Overlay Unit 1 Sync Center Data
+                if (pendingUnit1) baseline.curricular_offering = pendingUnit1.payload?.curricular_offering || baseline.curricular_offering;
                 
-                if (res.ok) {
-                    const saved = await res.json();
-                    if (saved.exists && saved.data && saved.data.iern) {
-                        setIern(saved.data.iern);
+                // Overlay Unit 2 Sync Center Data
+                if (pendingUnit2) {
+                    baseline.unit2_simplified_enrollment = pendingUnit2.payload?.unit2_simplified_enrollment;
+                    baseline.total_enrollment = pendingUnit2.payload?.total_enrollment || baseline.total_enrollment;
+                    
+                    // Also multigrade groupings for Unit 6 reconstruction
+                    baseline.multigrade_groupings_1 = pendingUnit2.payload?.multigrade_groupings_1;
+                    baseline.multigrade_groupings_2 = pendingUnit2.payload?.multigrade_groupings_2;
+                    baseline.multigrade_groupings_3 = pendingUnit2.payload?.multigrade_groupings_3;
+                    
+                    // Specific SPED/ALS counts
+                    baseline.sped_learners_count = pendingUnit2.payload?.sped_learners_count;
+                    baseline.als_community_centers_count = pendingUnit2.payload?.als_community_centers_count;
+                }
+
+                // Overlay Unit 3 Sync Center Data
+                if (pendingUnit3) {
+                    baseline.unit3_simplified_counts = pendingUnit3.payload?.unit3_simplified_counts;
+                }
+
+                if (baseline.iern) setIern(baseline.iern);
+
+                // 5. MASTER PRECEDENCE: SYNC CENTER > DRAFT > DATABASE
+                let d = baseline; // working copy
+                if (pendingUnit6) d = { ...baseline, ...pendingUnit6.payload };
+
+                // Reconstruct Grades Data
+                const expectedGrades = [];
+                const co = (d.curricular_offering || "").toLowerCase();
+                let hasKinder = false, hasElem = false, hasJHS = false, hasSHS = false;
+                if (co === "purely elementary") { hasKinder = true; hasElem = true; }
+                else if (co === "elementary school and junior high school (k-10)") { hasKinder = true; hasElem = true; hasJHS = true; }
+                else if (co === "junior high and senior high") { hasJHS = true; hasSHS = true; }
+                else if (co === "all offering (k to 12)") { hasKinder = true; hasElem = true; hasJHS = true; hasSHS = true; }
+                else if (co === "purely junior high school") { hasJHS = true; }
+                else if (co === "purely senior high school") { hasSHS = true; }
+                else {
+                    hasKinder = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("kinder");
+                    hasElem = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
+                    hasJHS = co.includes("junior high") || co.includes("jhs") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
+                    hasSHS = co.includes("senior high") || co.includes("shs") || co.includes("k to 12") || co.includes("k-12");
+                }
+
+                let parsedSections = [];
+                if (d.unit3_simplified_counts) {
+                    try { parsedSections = typeof d.unit3_simplified_counts === 'string' ? JSON.parse(d.unit3_simplified_counts) : (d.unit3_simplified_counts.array || d.unit3_simplified_counts); } catch (e) {}
+                }
+                let u2Parsed = [];
+                if (d.unit2_simplified_enrollment) {
+                    try {
+                        const raw = typeof d.unit2_simplified_enrollment === 'string' ? JSON.parse(d.unit2_simplified_enrollment) : d.unit2_simplified_enrollment;
+                        u2Parsed = Array.isArray(raw) ? raw : (raw.array || []);
+                    } catch (e) { console.warn("U2 Parse Error", e); }
+                }
+
+                const getEnrollmentForGrade = (gradeId) => {
+                    const found = u2Parsed.find(x => x.grade_level === gradeId);
+                    if (found) return parseInt(found.total || 0);
+                    return parseInt(d[`enroll_${gradeId}`] || 0);
+                };
+                const getCountForGrade = (gradeId) => {
+                    const found = Array.isArray(parsedSections) ? parsedSections.find(sec => sec.grade_level === gradeId) : null;
+                    if (found) return parseInt(found.total_sections || 0);
+                    return parseInt(d[`sections_${gradeId}`] || 0);
+                };
+
+                const ALL_POSSIBLE_GRADES = [
+                    { id: "kinder", label: "Kinder" },
+                    ...['1','2','3','4','5','6','7','8','9','10','11','12'].map(lvl => ({ id: `g${lvl}`, label: `Grade ${lvl}` }))
+                ];
+
+                ALL_POSSIBLE_GRADES.forEach(pg => {
+                    let isOffered = false;
+                    const nid = pg.id.replace('g', '');
+                    if (pg.id === 'kinder') isOffered = hasKinder;
+                    else if (['1','2','3','4','5','6'].includes(nid)) isOffered = hasElem;
+                    else if (['7','8','9','10'].includes(nid)) isOffered = hasJHS;
+                    else if (['11','12'].includes(nid)) isOffered = hasSHS;
+                    
+                    const enrollment = getEnrollmentForGrade(pg.id);
+                    const sections = getCountForGrade(pg.id);
+                    if (enrollment > 0 || sections > 0 || isOffered) {
+                        expectedGrades.push({ id: pg.id, grade_level: pg.label, enrolled: enrollment, sections: sections, isVerified: false });
                     }
-                    let d = (saved.exists && saved.data) ? saved.data : {};
+                });
 
-                    // MASTER PRECEDENCE: Draft > Database
-                    if (draft) {
-                        setCurrentPhase(draft.currentPhase || 1);
-                        setGeneralRoomsData(draft.generalRoomsData || {});
-                        setIctData(draft.ictData || {});
-                        setHasEcart(draft.hasEcart);
-                        setECarts(draft.eCarts || []);
-                        setWashData(draft.washData || {});
-                        setUtilitiesData(draft.utilitiesData || {});
-                        setIsReviewMode(false); // Force edit mode for drafts
-                        setShowWelcomeBack(true);
-                        setTimeout(() => setShowWelcomeBack(false), 3000);
-                        // We continue into the database fetching logic to reconcile the draft with current Unit 3 structure
+                const multigradeGrades = [];
+                for (let i = 1; i <= 3; i++) {
+                    const groupName = d[`multigrade_groupings_${i}`];
+                    const groupSections = getCountForGrade(`mg_${i}`) || parseInt(d[`multigrade_sections_${i}`] || 0);
+                    if (groupName && groupSections > 0) {
+                        const label = groupName.toLowerCase();
+                        let gradeNums = label.match(/\d+/g) || [];
+                        const gradeIds = gradeNums.map(n => `g${n}`);
+                        if (label.includes("kinder")) gradeIds.push("kinder");
+                        let totalMgEnrollment = 0;
+                        gradeIds.forEach(gid => { totalMgEnrollment += getEnrollmentForGrade(gid); });
+                        multigradeGrades.push({ id: `mg_${i}`, grade_level: groupName, enrolled: totalMgEnrollment, sections: groupSections, isVerified: false, isMultigrade: true, pairs: gradeIds });
                     }
-                    if (saved.exists && saved.data) {
-                        
-                        // Check SPED/ALS
-                        let speedAlsCountTotal = 0;
-                        if (d.als_community_centers_count > 0 || d.sped_learners_count > 0) {
-                             speedAlsCountTotal = parseInt(d.sped_learners_count || 0);
-                        }
+                }
 
-                        // Pre-calculate expected grades based on Unit 1 Curricular Offering
-                        const expectedGrades = [];
-                        
-                        const co = (d.curricular_offering || "").toLowerCase();
-                        let hasKinder = false;
-                        let hasElem = false;
-                        let hasJHS = false;
-                        let hasSHS = false;
+                let mergedExpectedGrades = expectedGrades.filter(eg => !multigradeGrades.some(mg => mg.pairs.includes(eg.id)));
+                mergedExpectedGrades.push(...multigradeGrades);
+                const spedAlsCount = parseInt(d.sped_learners_count || 0);
+                if (spedAlsCount > 0 || d.als_community_centers_count > 0) {
+                    mergedExpectedGrades.push({ id: "sped_als", grade_level: "SPED/ALS", enrolled: spedAlsCount, sections: Math.max(1, parseInt(d.als_community_centers_count || 0)), isVerified: false });
+                }
+                mergedExpectedGrades.sort((a,b) => {
+                    const getSortOrder = (id) => (id === "kinder" ? 0 : id.startsWith("g") ? parseInt(id.replace("g", "")) : id.startsWith("mg_") ? 0.5 : 100);
+                    return getSortOrder(a.id) - getSortOrder(b.id);
+                });
 
-                        if (co === "purely elementary") {
-                            hasKinder = true; hasElem = true;
-                        } else if (co === "elementary school and junior high school (k-10)") {
-                            hasKinder = true; hasElem = true; hasJHS = true;
-                        } else if (co === "junior high and senior high") {
-                            hasJHS = true; hasSHS = true;
-                        } else if (co === "all offering (k to 12)") {
-                            hasKinder = true; hasElem = true; hasJHS = true; hasSHS = true;
-                        } else if (co === "purely junior high school") {
-                            hasJHS = true;
-                        } else if (co === "purely senior high school") {
-                            hasSHS = true;
-                        } else {
-                            // Fallback for legacy data
-                            hasKinder = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("kinder");
-                            hasElem = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
-                            hasJHS = co.includes("junior high") || co.includes("jhs") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
-                            hasSHS = co.includes("senior high") || co.includes("shs") || co.includes("k to 12") || co.includes("k-12");
-                        }
-
-                        // Parse Unit 3 to get section counts
-                        let parsedSections = [];
-                        if (d.unit3_simplified_counts) {
-                            try {
-                                parsedSections = typeof d.unit3_simplified_counts === 'string' ? JSON.parse(d.unit3_simplified_counts) : d.unit3_simplified_counts;
-                            } catch (e) {}
-                        }
-
-                        // Parse Unit 2 Enrollment (STRICT FIX: Must parse string if present)
-                        let u2Parsed = [];
-                        if (d.unit2_simplified_enrollment) {
-                            try {
-                                const raw = typeof d.unit2_simplified_enrollment === 'string' ? JSON.parse(d.unit2_simplified_enrollment) : d.unit2_simplified_enrollment;
-                                u2Parsed = Array.isArray(raw) ? raw : (raw.array || []);
-                            } catch (e) { console.warn("U2 Parse Error", e); }
-                        }
-                        
-                        const getEnrollmentForGrade = (gradeId) => {
-                            // Layer 1: Simplified JSON Array (Modern)
-                            const found = u2Parsed.find(x => x.grade_level === gradeId);
-                            if (found) return parseInt(found.total || 0);
-                            
-                            // Layer 2: Flat Columns (Legacy/Guaranteed Integer)
-                            // Note: gradeId is 'kinder', 'g1', 'g2', etc.
-                            const colKey = `enroll_${gradeId}`;
-                            if (d[colKey] !== undefined) return parseInt(d[colKey] || 0);
-                            
-                            return 0;
-                        };
-
-                        const getCountForGrade = (gradeId) => {
-                            // Layer 1: Simplified JSON Array (Modern)
-                            const found = parsedSections.find(sec => sec.grade_level === gradeId);
-                            if (found) return parseInt(found.total_sections || 0);
-                            
-                            // Layer 2: Multigrade Flat Columns
-                            if (gradeId.startsWith('mg_')) {
-                                const idx = gradeId.replace('mg_', '');
-                                return parseInt(d[`multigrade_sections_${idx}`] || 0);
-                            }
-
-                            // Layer 3: Monograde Flat Sections (if they exist in some schemas)
-                            const sectKey = `sections_${gradeId}`;
-                            if (d[sectKey] !== undefined) return parseInt(d[sectKey] || 0);
-
-                            // Layer 4: Parse grade_X_size text from Unit 3 (e.g. "3 (30-35 learners)")
-                            const nid = gradeId.replace('g', '');
-                            const sizeKey = gradeId === 'kinder' ? 'grade_kinder_size' : `grade_${nid}_size`;
-                            const sizeVal = d[sizeKey] || "";
-                            if (sizeVal && typeof sizeVal === 'string') {
-                                const match = sizeVal.match(/^(\d+)/); // Extracts leading number
-                                if (match) return parseInt(match[1]);
-                            }
-                            
-                            return 0;
-                        };
-
-                        const isGradeActive = (gradeId) => {
-                            if (!u2Parsed.length) return true; // Permissive fallback
-                            const found = u2Parsed.find(x => x.grade_level === gradeId);
-                            return found ? found.is_active !== false : true;
-                        };
-                        // --- AGGRESSIVE GRADE DETECTION (Data-First) ---
-                        const ALL_POSSIBLE_GRADES = [
-                            { id: "kinder", label: "Kinder" },
-                            ...['1','2','3','4','5','6','7','8','9','10','11','12'].map(lvl => ({ id: `g${lvl}`, label: `Grade ${lvl}` }))
-                        ];
-
-                        ALL_POSSIBLE_GRADES.forEach(pg => {
-                            // Check if grade is in standard curricular offering
-                            let isOffered = false;
-                            const nid = pg.id.replace('g', '');
-                            if (pg.id === 'kinder') isOffered = hasKinder;
-                            else if (['1','2','3','4','5','6'].includes(nid)) isOffered = hasElem;
-                            else if (['7','8','9','10'].includes(nid)) isOffered = hasJHS;
-                            else if (['11','12'].includes(nid)) isOffered = hasSHS;
-
-                            const enrollment = getEnrollmentForGrade(pg.id) || parseInt(d[`enroll_${pg.id}`] || 0);
-                            const sections = getCountForGrade(pg.id) || parseInt(d[`sections_${pg.id}`] || 0);
-                            const isActive = isGradeActive(pg.id);
-                            
-                            // Include if it has DATA (even if outside offering) OR if it is OFFERED and ACTIVE
-                            if (enrollment > 0 || sections > 0 || (isOffered && isActive)) {
-                                expectedGrades.push({
-                                    id: pg.id, grade_level: pg.label,
-                                    enrolled: enrollment,
-                                    sections: sections, 
-                                    isVerified: false,
-                                });
-                            }
-                        });
-
-                        // --- MULTIGRADE PAIRING SUPPORT ---
-                        // 1. Identify multigrade groups from Unit 3
-                        const multigradeGrades = [];
-                        for (let i = 1; i <= 3; i++) {
-                            const groupName = d[`multigrade_groupings_${i}`];
-                            const groupSections = getCountForGrade(`mg_${i}`) || parseInt(d[`multigrade_sections_${i}`] || 0);
-
-                            if (groupName && groupSections > 0) {
-                                // Extract grade numbers from label (e.g. "Grade 1 & 2", "Grade 1-3", "Kinder & Grade 1")
-                                const label = groupName.toLowerCase();
-                                let gradeNums = [];
-                                
-                                if (label.includes("-") || label.includes(" to ")) {
-                                    // Handle ranges like "4-6" or "1 to 3"
-                                    const numbers = label.match(/\d+/g);
-                                    if (numbers && numbers.length >= 2) {
-                                        const start = parseInt(numbers[0]);
-                                        const end = parseInt(numbers[1]);
-                                        for (let n = start; n <= end; n++) gradeNums.push(`${n}`);
-                                    }
-                                } else {
-                                    // Handle discrete lists "1, 2 & 3"
-                                    gradeNums = label.replace(/\D/g, " ").trim().split(/\s+/).filter(x => x);
-                                }
-
-                                const gradeIds = gradeNums.map(n => `g${n}`);
-                                if (label.includes("kinder") || label.includes(" k ")) gradeIds.push("kinder");
-
-                                let totalMgEnrollment = 0;
-                                gradeIds.forEach(gid => {
-                                    totalMgEnrollment += getEnrollmentForGrade(gid);
-                                });
-
-                                multigradeGrades.push({
-                                    id: `mg_${i}`, 
-                                    grade_level: groupName,
-                                    enrolled: totalMgEnrollment,
-                                    sections: groupSections,
-                                    isVerified: false,
-                                    isMultigrade: true,
-                                    pairs: gradeIds
-                                });
-                            }
-                        }
-
-                        // 2. Filter out single grades that are part of a multigrade pairing
-                        const finalExpectedGrades = expectedGrades.filter(eg => {
-                            // Don't remove Kinder or SPED/ALS from base list unless specifically paired (rare)
-                            if (eg.id === "kinder" || eg.id === "sped_als") return true;
-                            
-                            // Check if this grade ID is in any multigrade pair
-                            const isPaired = multigradeGrades.some(mg => mg.pairs.includes(eg.id));
-                            return !isPaired;
-                        });
-
-                        // 3. Add multigrade groups to the final list
-                        finalExpectedGrades.push(...multigradeGrades);
-
-                        if (speedAlsCountTotal > 0 || d.als_community_centers_count > 0) {
-                            finalExpectedGrades.push({
-                                id: "sped_als", grade_level: "SPED/ALS",
-                                enrolled: speedAlsCountTotal,
-                                sections: Math.max(1, parseInt(d.als_community_centers_count || 0)), isVerified: false,
+                // Phase 1 Restoration
+                if (d.unit7_furniture) {
+                    try {
+                        const parsed = typeof d.unit7_furniture === 'string' ? JSON.parse(d.unit7_furniture) : d.unit7_furniture;
+                        if (parsed.grades) {
+                            parsed.grades.forEach(sg => {
+                                const idx = mergedExpectedGrades.findIndex(eg => eg.id === sg.id);
+                                if (idx >= 0) mergedExpectedGrades[idx] = { ...mergedExpectedGrades[idx], ...sg, isVerified: true };
                             });
                         }
+                        setGradesData(mergedExpectedGrades);
+                        if (parsed.general) setGeneralRoomsData(parsed.general);
+                    } catch (e) { setGradesData(mergedExpectedGrades); }
+                } else {
+                    setGradesData(mergedExpectedGrades);
+                }
 
-                        // Replace base expectedGrades with the multigrade-aware list
-                        let mergedExpectedGrades = finalExpectedGrades;
-
-                        // --- SORTING LOGIC ---
-                        const getSortOrder = (id) => {
-                            if (id === "kinder") return 0;
-                            if (id.startsWith("g")) return parseInt(id.replace("g", ""));
-                            if (id.startsWith("mg_")) {
-                                // Sort multigrade by its first grade member
-                                const mg = multigradeGrades.find(x => x.id === id);
-                                if (mg && mg.pairs.length > 0) {
-                                    const first = mg.pairs[0];
-                                    if (first === "kinder") return 0.5;
-                                    return parseInt(first.replace("g", "")) + 0.1;
-                                }
-                                return 99;
-                            }
-                            if (id === "sped_als") return 100;
-                            return 200;
-                        };
-                        mergedExpectedGrades.sort((a,b) => getSortOrder(a.id) - getSortOrder(b.id));
-
-                        // Reconcile with DRAFT if present
-                        if (draft && draft.gradesData) {
-                            mergedExpectedGrades = mergedExpectedGrades.map(eg => {
-                                const draftMatch = draft.gradesData.find(dg => dg.id === eg.id);
-                                return draftMatch ? { ...eg, ...draftMatch } : eg;
-                            });
-                        }
-
-                        // Load Phase 1
-                        if (d.unit7_furniture) {
-                            try {
-                                const parsed = typeof d.unit7_furniture === 'string' ? JSON.parse(d.unit7_furniture) : d.unit7_furniture;
-                                
-                                // Merge saved furniture data into expected grades
-                                if (parsed.grades) {
-                                    parsed.grades.forEach(savedGrade => {
-                                        const expectedIdx = mergedExpectedGrades.findIndex(eg => eg.id === savedGrade.id);
-                                        if (expectedIdx >= 0) {
-                                            mergedExpectedGrades[expectedIdx] = { ...mergedExpectedGrades[expectedIdx], ...savedGrade, isVerified: true };
-                                        } else {
-                                            // Handle edge case where section existed before but was removed or was filtered out
-                                            // STRICT FIX: If this saved grade is now part of a multigrade pair, do NOT resurrect it as an individual grade
-                                            const isPairedNow = multigradeGrades.some(mg => mg.pairs.includes(savedGrade.id));
-                                            if (!isPairedNow) {
-                                                mergedExpectedGrades.push({ ...savedGrade, isVerified: true });
-                                            }
-                                        }
-                                    });
-                                }
-                                setGradesData(mergedExpectedGrades);
-                                if (parsed.general) setGeneralRoomsData(parsed.general);
-                            } catch (e) {
-                                console.warn(e);
-                                setGradesData(mergedExpectedGrades);
-                            }
-                        } else {
-                            setGradesData(mergedExpectedGrades);
-                        }
-
-                        // Load Phase 2
-                        if (d.unit7_ict) {
-                            try {
-                                const parsed = typeof d.unit7_ict === 'string' ? JSON.parse(d.unit7_ict) : d.unit7_ict;
-                                setIctData(prev => ({ ...prev, ...parsed }));
-                            } catch (e) { console.warn(e); }
-                        }
-
-                        // Load Phase 3
-                        if (d.unit7_has_ecart !== undefined) setHasEcart(d.unit7_has_ecart);
-                        if (d.unit7_ecarts) {
-                            try {
-                                const parsed = typeof d.unit7_ecarts === 'string' ? JSON.parse(d.unit7_ecarts) : d.unit7_ecarts;
-                                setECarts(Array.isArray(parsed) ? parsed : []);
-                            } catch (e) { console.warn(e); }
-                        }
-
-                        // Load Phase 4
-                        if (d.unit7_wash) {
-                            try {
-                                const parsed = typeof d.unit7_wash === 'string' ? JSON.parse(d.unit7_wash) : d.unit7_wash;
-                                setWashData(prev => ({ 
-                                    ...prev, 
-                                    ...parsed,
-                                    confirm_no_piped: d.u7_confirm_no_piped !== undefined ? d.u7_confirm_no_piped : (parsed.confirm_no_piped || false)
-                                }));
-                            } catch (e) { console.warn(e); }
-                        }
-
-                        // Load Phase 5
-                        if (d.unit7_utilities) {
-                            try {
-                                const parsed = typeof d.unit7_utilities === 'string' ? JSON.parse(d.unit7_utilities) : d.unit7_utilities;
-                                setUtilitiesData(prev => ({ 
-                                    ...prev, 
-                                    ...parsed,
-                                    confirm_no_grid: d.u7_confirm_no_grid !== undefined ? d.u7_confirm_no_grid : (parsed.confirm_no_grid || false),
-                                    confirm_no_wired: d.u7_confirm_no_wired !== undefined ? d.u7_confirm_no_wired : (parsed.confirm_no_wired || false),
-                                    utility_internet_type: d.u7_utility_internet_type || parsed.utility_internet_type || ""
-                                }));
-                            } catch (e) { console.warn(e); }
-                        }
-
-                        if (d.has_multigrade) {
-                            setHasMultigradeContext(true);
-                        }
-
-                        if (d.unit7_completed || propReadOnly) {
-                            setIsReviewMode(true);
-                        }
-                    }
+                // Phase 2,3,4,5 Restoration
+                if (d.unit7_ict) { try { setIctData(prev => ({ ...prev, ...(typeof d.unit7_ict === 'string' ? JSON.parse(d.unit7_ict) : d.unit7_ict) })); } catch (e) {} }
+                if (d.unit7_has_ecart !== undefined) setHasEcart(d.unit7_has_ecart);
+                if (d.unit7_ecarts) { try { setECarts(typeof d.unit7_ecarts === 'string' ? JSON.parse(d.unit7_ecarts) : d.unit7_ecarts); } catch (e) {} }
+                if (d.unit7_wash) { try { setWashData(prev => ({ ...prev, ...(typeof d.unit7_wash === 'string' ? JSON.parse(d.unit7_wash) : d.unit7_wash) })); } catch (e) {} }
+                if (d.unit7_utilities) { try { setUtilitiesData(prev => ({ ...prev, ...(typeof d.unit7_utilities === 'string' ? JSON.parse(d.unit7_utilities) : d.unit7_utilities) })); } catch (e) {} }
+                
+                if (pendingUnit6) {
+                    setSavedData(d);
+                    setIsReviewMode(true);
+                } else if (draft && !propReadOnly) {
+                    setCurrentPhase(draft.currentPhase || 1);
+                    setIsReviewMode(false);
+                    setShowWelcomeBack(true);
+                    setTimeout(() => setShowWelcomeBack(false), 3000);
+                } else if (d.unit7_completed || propReadOnly) {
+                    setSavedData(d);
+                    setIsReviewMode(true);
                 }
             } catch (e) {
                 console.warn("Could not fetch data for Unit 6", e);
@@ -512,8 +353,7 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             }
         };
         init();
-    }, []);
-
+    }, [targetSchoolId, propReadOnly]);
     const handleGradeFormChange = (e) => {
         const { name, value } = e.target;
         // Strip leading zeros unless it's just "0"
@@ -799,16 +639,14 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         const storedId = localStorage.getItem("schoolId");
         
         try {
-            // Compile payload — includes unit7_completed flag so backend marks it done
             const payload = {
                 unit7_furniture: JSON.stringify({ grades: gradesData.filter(g => g.isVerified), general: generalRoomsData }),
                 unit7_ict: JSON.stringify(ictData),
                 unit7_has_ecart: hasEcart,
-                unit7_ecarts: JSON.stringify(eCarts), // kept for backwards compatibility
+                unit7_ecarts: JSON.stringify(eCarts),
                 unit7_wash: JSON.stringify(washData),
                 unit7_utilities: JSON.stringify(utilitiesData),
                 unit7_completed: true,
-                // SYNC CORE COLUMNS
                 u7_ict_smart_tv_cond: ictData.smart_tvs_cond,
                 u7_ict_projector_cond: ictData.projectors_cond,
                 u7_ict_printer_cond: ictData.printers_cond,
@@ -817,7 +655,6 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 u7_wash_common_seats_cond: washData.common_seats_cond,
                 u7_wash_pwd_seats_cond: washData.pwd_seats_cond,
                 u7_wash_faucets_cond: washData.faucets_cond,
-                // STATUS CONFIRMATIONS (Derived from text input)
                 u7_confirm_no_grid: (utilitiesData.confirm_no_grid_text || "").toLowerCase() === "confirm",
                 u7_confirm_no_piped: (washData.confirm_no_piped_text || "").toLowerCase() === "confirm",
                 u7_confirm_zero_wash: (washData.confirm_zero_wash_text || "").toLowerCase() === "confirm",
@@ -826,62 +663,86 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 iern: iern
             };
 
+            if (!navigator.onLine) {
+                await addModularToOutbox({
+                    unitId: 6,
+                    label: "Unit 6: School Resources (Furniture, ICT, WASH)",
+                    url: `/api/ph_schools/${storedId}`,
+                    method: 'PUT',
+                    payload: payload,
+                    schoolId: storedId
+                });
+                await clearUnitDraft(6, storedId);
+                
+                // Update local quest progress
+                const stored = localStorage.getItem('quest_progress');
+                let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+                if (!progress.completedUnits.includes(6)) {
+                    progress.completedUnits.push(6);
+                    progress.xp = (progress.xp || 0) + 500;
+                    localStorage.setItem('quest_progress', JSON.stringify(progress));
+                }
+                
+                setShowOfflineSuccess(true);
+                return;
+            }
+
             const res = await fetch(`/api/ph_schools/${storedId}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
             });
 
-            const stored = localStorage.getItem('quest_progress');
-            let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
-            if (!progress.completedUnits.includes(6)) {
-                progress.completedUnits.push(6);
-                progress.xp = (progress.xp || 0) + 400; // Corrected XP for Unit 6
-                localStorage.setItem('quest_progress', JSON.stringify(progress));
-            }
-
-            // Mandatory Sync to backend on every successful save to update timestamp
-            fetch('/api/user/progress', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ unitId: 6, schoolId: storedId })
-            }).catch(e => console.error("[Unit 6 Sync Error]:", e));
-
             if (res.ok) {
-                // Perform secondary syncs in parallel to speed up UI response
-                const syncPromises = [
-                    fetch(`/api/ph_schools/unit9/${storedId}/ecarts`, {
+                // Perform secondary syncs in parallel
+                try {
+                    await fetch(`/api/ph_schools/unit9/${storedId}/ecarts`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ ecarts: eCarts })
-                    }).catch(e => console.warn("Relational eCart sync failed", e))
-                ];
+                    });
+                } catch (e) { console.warn("Relational eCart sync failed", e); }
 
-                // Update local quest progress immediately
-                try {
-                    const stored = localStorage.getItem('quest_progress');
-                    let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
-                    if (!progress.completedUnits.includes(6)) {
-                        progress.completedUnits.push(6);
-                        progress.xp = (progress.xp || 0) + 500;
-                        localStorage.setItem('quest_progress', JSON.stringify(progress));
-                    }
-                } catch (e) {
-                    console.warn("Local progress update failed", e);
+                // Update local quest progress
+                const stored = localStorage.getItem('quest_progress');
+                let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+                if (!progress.completedUnits.includes(6)) {
+                    progress.completedUnits.push(6);
+                    progress.xp = (progress.xp || 0) + 500;
+                    localStorage.setItem('quest_progress', JSON.stringify(progress));
                 }
 
+                // Sync progress to dashboard
+                try {
+                    await fetch('/api/user/progress', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ unitId: 6, schoolId: storedId })
+                    });
+                } catch (e) { console.warn("Progress sync failed", e); }
+
                 await clearUnitDraft(6, storedId);
-                await Promise.allSettled(syncPromises);
-                
                 setShowSuccess(true);
-                setLoading(false);
             } else {
-                alert("Failed to save. Please check your connection.");
-                setLoading(false);
+                throw new Error("Failed to save data on server");
             }
         } catch (e) {
-            console.error(e);
-            alert("Error saving resources.");
+            console.error("UNIT 6 SUBMIT ERROR:", e);
+            if (!navigator.onLine || e.message.includes('fetch') || e.message.includes('Network error')) {
+                await addModularToOutbox({
+                    unitId: 6,
+                    label: "Unit 6: School Resources (Furniture, ICT, WASH)",
+                    url: `/api/ph_schools/${storedId}`,
+                    method: 'PUT',
+                    payload: { ...payload, unit7_completed: true },
+                    schoolId: storedId
+                });
+                await clearUnitDraft(6, storedId);
+                setShowOfflineSuccess(true);
+            } else {
+                alert("Error saving resources: " + e.message);
+            }
+        } finally {
             setLoading(false);
         }
     };
@@ -2143,6 +2004,30 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 message="Your school resources and utility profile have been synced to the registry. Brilliant!" 
                 redirectUrl="/modular-dashboard" 
             />
+
+            <AnimatePresence>
+                {showOfflineSuccess && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full rounded-t-[3rem] p-10 pb-12 shadow-2xl relative max-w-md">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-orange-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-orange-200 mb-6 font-bold text-white">
+                                <FiWifiOff />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight px-4">Local Secure: Unit 6 Saved!</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-6">Your classroom furniture audits, ICT inventory, and utility reports have been saved locally. We will automatically sync your resources once you're back online.</p>
+                            
+                            <div className="mt-10">
+                                <button onClick={() => navigate("/modular-dashboard")}
+                                    className="w-full py-5 rounded-[2rem] bg-orange-600 text-white font-black text-lg shadow-xl shadow-orange-100 active:scale-95 transition-all outline-none">
+                                    Return to Modules Dashboard
+                                </button>
+                                <p className="text-[10px] text-orange-500 font-bold uppercase text-center mt-6 tracking-widest leading-loose">✓ Offline Mode • Auto-Sync Enabled ✓</p>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

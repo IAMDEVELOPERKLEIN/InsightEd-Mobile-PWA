@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft, FiUnlock, FiInfo, FiMaximize2, FiSave } from "react-icons/fi";
-import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
+import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft, FiUnlock, FiInfo, FiMaximize2, FiSave, FiWifiOff } from "react-icons/fi";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, deleteModularFromOutbox, saveSchoolToCache, getCachedSchool, getModularOutbox } from "../../db";
 import { useAuth } from "../../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
@@ -59,11 +59,13 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [showWelcomeBack, setShowWelcomeBack] = useState(false);
+    const [showOfflineSuccess, setShowOfflineSuccess] = useState(false);
     const [showIernModal, setShowIernModal] = useState(false);
     const [fetchedIern, setFetchedIern] = useState(null);
     const [isReviewMode, setIsReviewMode] = useState(false);
     const [isModeLoading, setIsModeLoading] = useState(true);
-    const { isReadOnly: hookIsReadOnly, isSuperUser: hookIsSuperUser } = useReadOnly(); // Added
+    const [pendingOutboxId, setPendingOutboxId] = useState(null); // Track if data is in outbox
+    const { isReadOnly: hookIsReadOnly, isSuperUser: hookIsSuperUser } = useReadOnly();
     const isReadOnly = propReadOnly ?? hookIsReadOnly;
 
     const [formData, setFormData] = useState({
@@ -138,24 +140,40 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
         const init = async () => {
             const storedId = targetSchoolId || user?.school_id || localStorage.getItem("schoolId");
-            if (!storedId) {
-                const draft = await getUnitDraft(1, "anonymous"); // Fallback or global draft
-                if (draft && draft.formData) {
-                    setFormData(prev => ({ ...prev, ...draft.formData }));
-                    setCurrentStep(Math.min(draft.step, TOTAL_STEPS - 1));
-                    setShowWelcomeBack(true);
-                    setTimeout(() => setShowWelcomeBack(false), 3000);
+            console.log("🔄 [Unit1] Starting Initialization for:", storedId);
+            
+            try {
+                // PRIORITY 1: Check Sync Center (Outbox) for pending submission
+                const outbox = await getModularOutbox().catch(err => {
+                    console.error("Outbox fetch failed:", err);
+                    return [];
+                });
+                
+                const pendingEntry = outbox.find(entry => entry.unitId === 1 && (entry.schoolId === storedId || entry.payload?.school_id === storedId));
+                
+                if (pendingEntry) {
+                    console.log("📍 [Unit1] Found pending submission in Sync Center.");
+                    setFormData(prev => ({ ...prev, ...pendingEntry.payload }));
+                    setPendingOutboxId(pendingEntry.id);
+                    setIsReviewMode(true);
+                    return;
                 }
-                setIsModeLoading(false);
-                return;
-            }
 
-            // Kick off all fetches simultaneously
-            const [savedRes, iernRes, draft] = await Promise.all([
-                fetch(`/api/ph_schools/${storedId}`).catch(() => null),
-                fetch(`/api/schools_iern/${storedId}`).catch(() => null),
-                getUnitDraft(1, storedId)
-            ]);
+                if (!storedId) {
+                    const draft = await getUnitDraft(1, "anonymous").catch(() => null);
+                    if (draft && draft.formData) {
+                        setFormData(prev => ({ ...prev, ...draft.formData }));
+                        setCurrentStep(Math.min(draft.step, TOTAL_STEPS - 1));
+                    }
+                    return;
+                }
+
+                // Normal load path
+                const [savedRes, iernRes, draft] = await Promise.all([
+                    fetch(`/api/ph_schools/${storedId}`).catch(() => null),
+                    fetch(`/api/schools_iern/${storedId}`).catch(() => null),
+                    getUnitDraft(1, storedId).catch(() => null)
+                ]);
 
             let d = null;
             let iernRow = null;
@@ -171,77 +189,88 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             }
             if (iernRes?.ok) {
                 const j = await iernRes.json();
-                if (j.exists && j.data) iernRow = j.data;
+                if (j.exists && j.data) {
+                    iernRow = j.data;
+                    // Cache for offline use
+                    saveSchoolToCache({ ...iernRow, school_id: storedId });
+                }
+            } else if (!navigator.onLine || !iernRes) {
+                // Offline fallback: Pull from local cache
+                const cached = await getCachedSchool(storedId);
+                if (cached) {
+                    console.log("💾 [Unit1] Offline Fallback: Loading IERN from Cache.");
+                    iernRow = cached;
+                }
             }
 
             // Start with base data from backend or empty state
-            let merged = { ...formData, school_id: storedId };
+            // Start with base data from backend or empty state
+            let merged = { ...formData, school_id: String(storedId) };
 
+            const takeValue = (preferred, fallback, original) => {
+                if (preferred !== undefined && preferred !== null && String(preferred).trim() !== "" && String(preferred).trim().toLowerCase() !== "null") return String(preferred).trim();
+                const fb = (fallback !== undefined && fallback !== null && String(fallback).trim() !== "" && String(fallback).trim().toLowerCase() !== "null") ? String(fallback).trim() : (original || "");
+                return fb;
+            };
+
+            // Merge logic: iernRow (Registry) has high authority for profile fields
             if (iernRow) {
-                merged = {
-                    ...merged,
-                    school_name: iernRow.School_Name || "",
-                    region: iernRow.Region || "",
-                    province: iernRow.Province || "",
-                    municipality: iernRow.Municipality || iernRow.City || "",
-                    barangay: iernRow.Barangay || "",
-                    division: iernRow.Division || "",
-                    district: iernRow.District || "",
-                    leg_district: iernRow.Legislative_District || "",
-                    latitude: iernRow.Latitude || "",
-                    longitude: iernRow.Longitude || "",
-                    iern: iernRow.iern || ""
-                };
+                merged.school_name = takeValue(iernRow.School_Name, iernRow.school_name, merged.school_name);
+                merged.region = takeValue(iernRow.Region, iernRow.region, merged.region);
+                merged.province = takeValue(iernRow.Province, iernRow.province, merged.province);
+                merged.municipality = takeValue(iernRow.Municipality, iernRow.municipality, iernRow.City || iernRow.city || merged.municipality);
+                merged.barangay = takeValue(iernRow.Barangay, iernRow.barangay, merged.barangay);
+                merged.division = takeValue(iernRow.Division, iernRow.division, iernRow.Schools_Division_Office || iernRow.SDO || merged.division);
+                merged.district = takeValue(iernRow.District, iernRow.district, iernRow.Schools_District || merged.district);
+                merged.leg_district = takeValue(iernRow.Legislative_District, iernRow.Leg_District, iernRow.leg_district || merged.leg_district);
+                merged.latitude = iernRow.Latitude || iernRow.latitude || merged.latitude;
+                merged.longitude = iernRow.Longitude || iernRow.longitude || merged.longitude;
+                merged.iern = iernRow.iern || iernRow.IERN || merged.iern;
             }
 
+            // ph_schools (Alternative Data/Master) - Only fill GAPS
             if (d) {
-                merged = {
-                    ...merged,
-                    school_name: d.school_name || merged.school_name,
-                    region: d.region || merged.region,
-                    province: d.province || merged.province,
-                    municipality: d.municipality || merged.municipality,
-                    barangay: d.barangay || merged.barangay,
-                    division: d.division || merged.division,
-                    district: d.district || merged.district,
-                    leg_district: d.leg_district || merged.leg_district,
-                    curricular_offering: normalizeOffering(d.curricular_offering) || merged.curricular_offering,
-                    latitude: d.latitude || merged.latitude,
-                    longitude: d.longitude || merged.longitude,
-                    iern: d.iern || merged.iern,
-                    school_head: d.school_head || merged.school_head,
-                    contact_number: d.contact_number || merged.contact_number,
-                    ownership: d.ownership === "deped owned" ? "deped" : (d.ownership || merged.ownership),
-                    google_drive_link: d.google_drive_link || merged.google_drive_link,
-                    google_drive_file_id: d.google_drive_file_id || merged.google_drive_file_id,
-                    google_drive_file_name: d.google_drive_file_name || merged.google_drive_file_name,
-                    google_drive_thumbnail_url: d.google_drive_thumbnail_url || merged.google_drive_thumbnail_url,
-                    school_type: d.school_type || merged.school_type,
-                    mother_school_id: d.mother_school_id || merged.mother_school_id,
-                    extension_mother_school_name: d.extension_mother_school_name || merged.extension_mother_school_name,
-                    ownership_document_type: d.ownership_document_type || merged.ownership_document_type,
-                    local_file_path: d.local_file_path || merged.local_file_path,
-                    local_file_name: d.local_file_name || merged.local_file_name,
-                    head_position_title: d.head_position_title || merged.head_position_title,
-                    ...(() => {
-                        const hiredVal = (d.head_date_hired) ? d.head_date_hired.split('T')[0] : merged.head_date_hired;
-                        const hiredParts = hiredVal ? hiredVal.split('-') : [];
-                        
-                        return {
-                            head_date_hired: hiredVal,
-                            head_hired_year: hiredParts[0] || "",
-                            head_hired_month: hiredParts[1] ? new Date(hiredVal).toLocaleString('default', { month: 'short' }).replace('.', '') : "",
-                            head_hired_day: hiredParts[2] ? parseInt(hiredParts[2]).toString() : "",
-                        };
-                    })(),
-                    head_first_name: d.head_first_name || merged.head_first_name,
-                    head_middle_name: d.head_middle_name || merged.head_middle_name,
-                    head_last_name: d.head_last_name || merged.head_last_name,
-                    head_sex: d.head_sex || merged.head_sex,
-                    established_month: d.established_month || merged.established_month,
-                    established_year: d.established_year || merged.established_year,
-                    ownership_doc_id: d.ownership_doc_id || merged.ownership_doc_id,
-                };
+                merged.school_name = takeValue(merged.school_name, d.school_name, "");
+                merged.region = takeValue(merged.region, d.region, "");
+                merged.province = takeValue(merged.province, d.province, "");
+                merged.municipality = takeValue(merged.municipality, d.municipality, "");
+                merged.barangay = takeValue(merged.barangay, d.barangay, "");
+                merged.division = takeValue(merged.division, d.division, "");
+                merged.district = takeValue(merged.district, d.district, "");
+                merged.leg_district = takeValue(merged.leg_district, d.leg_district, "");
+                merged.curricular_offering = takeValue(merged.curricular_offering, normalizeOffering(d.curricular_offering), "");
+                merged.latitude = merged.latitude || d.latitude;
+                merged.longitude = merged.longitude || d.longitude;
+                merged.iern = merged.iern || d.iern;
+                merged.school_head = takeValue(merged.school_head, d.school_head, "");
+                merged.contact_number = takeValue(merged.contact_number, d.contact_number, "");
+                merged.ownership = takeValue(merged.ownership, d.ownership === "deped owned" ? "deped" : d.ownership, "");
+                merged.google_drive_link = takeValue(merged.google_drive_link, d.google_drive_link, "");
+                merged.google_drive_file_id = takeValue(merged.google_drive_file_id, d.google_drive_file_id, "");
+                merged.google_drive_file_name = takeValue(merged.google_drive_file_name, d.google_drive_file_name, "");
+                merged.school_type = takeValue(merged.school_type, d.school_type, "");
+                merged.mother_school_id = takeValue(merged.mother_school_id, d.mother_school_id, "");
+                merged.extension_mother_school_name = takeValue(merged.extension_mother_school_name, d.extension_mother_school_name, "");
+                merged.ownership_document_type = takeValue(merged.ownership_document_type, d.ownership_document_type, "");
+                merged.local_file_path = takeValue(merged.local_file_path, d.local_file_path, "");
+                merged.local_file_name = takeValue(merged.local_file_name, d.local_file_name, "");
+                merged.head_position_title = takeValue(merged.head_position_title, d.head_position_title, "");
+                merged.head_first_name = takeValue(merged.head_first_name, d.head_first_name, "");
+                merged.head_middle_name = takeValue(merged.head_middle_name, d.head_middle_name, "");
+                merged.head_last_name = takeValue(merged.head_last_name, d.head_last_name, "");
+                merged.head_sex = takeValue(merged.head_sex, d.head_sex, "");
+                merged.established_month = takeValue(merged.established_month, d.established_month, "");
+                merged.established_year = takeValue(merged.established_year, d.established_year, "");
+                merged.ownership_doc_id = merged.ownership_doc_id || d.ownership_doc_id;
+
+                if (d.head_date_hired) {
+                    const hiredVal = d.head_date_hired.split('T')[0];
+                    const hiredParts = hiredVal.split('-');
+                    merged.head_date_hired = hiredVal;
+                    merged.head_hired_year = hiredParts[0] || "";
+                    merged.head_hired_month = hiredParts[1] ? new Date(hiredVal).toLocaleString('default', { month: 'short' }).replace('.', '') : "";
+                    merged.head_hired_day = hiredParts[2] ? parseInt(hiredParts[2]).toString() : "";
+                }
             }
 
             // Also handle initial parsing from iernRow if d doesn't exist
@@ -252,6 +281,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             // Draft explicitly overrides everything
             if (draft && draft.formData) {
                 merged = { ...merged, ...draft.formData };
+                merged.school_id = String(storedId); // Re-force ID integrity
             }
 
             // ── Auto-Fill Logic for School Head ──────────────────────────────────
@@ -269,32 +299,6 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             }
 
             setFormData(merged);
-
-            // Pre-populate location dropdowns based on merged state
-            if (merged.region) {
-                const provRes = await fetch(`/api/locations/provinces?region=${encodeURIComponent(merged.region)}`).catch(() => null);
-                if (provRes?.ok) setProvinceOptions(await provRes.json());
-                if (merged.province) {
-                    const cityRes = await fetch(`/api/locations/municipalities-by-province?region=${encodeURIComponent(merged.region)}&province=${encodeURIComponent(merged.province)}`).catch(() => null);
-                    if (cityRes?.ok) setCityOptions(await cityRes.json());
-                    if (merged.municipality) {
-                        const brgyRes = await fetch(`/api/locations/barangays?region=${encodeURIComponent(merged.region)}&province=${encodeURIComponent(merged.province)}&municipality=${encodeURIComponent(merged.municipality)}`).catch(() => null);
-                        if (brgyRes?.ok) setBarangayOptions(await brgyRes.json());
-                    }
-                }
-            }
-            if (merged.region) {
-                const [divRes, legRes] = await Promise.all([
-                    fetch(`/api/locations/divisions?region=${encodeURIComponent(merged.region)}`).catch(() => null),
-                    fetch(`/api/locations/leg-districts?region=${encodeURIComponent(merged.region)}`).catch(() => null),
-                ]);
-                if (divRes?.ok) setDivisionOptions(await divRes.json());
-                if (legRes?.ok) setLegDistrictOptions(await legRes.json());
-                if (merged.division) {
-                    const distRes = await fetch(`/api/locations/districts?region=${encodeURIComponent(merged.region)}&division=${encodeURIComponent(merged.division)}`).catch(() => null);
-                    if (distRes?.ok) setDistrictOptions(await distRes.json());
-                }
-            }
 
             if (iernRow && !d) {
                 setFetchedIern(iernRow.iern || "");
@@ -326,10 +330,14 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 });
             }
 
+        } catch (err) {
+            console.error("[Unit 1 Init Error]:", err);
+        } finally {
             setIsModeLoading(false);
-        };
-        init();
-    }, []);
+        }
+    };
+    init();
+    }, [targetSchoolId, user?.school_id, authLoading]);
 
     // ── Logic sync ───────────────────────────────────────────────────────────
     useEffect(() => {
@@ -337,36 +345,56 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         fetch(`/api/locations/provinces?region=${encodeURIComponent(formData.region)}`)
             .then(r => r.json())
             .then(data => {
-                const options = data || [];
+                let options = Array.isArray(data) ? data : [];
                 if (formData.region === 'Blank Region' && !options.includes('Blank Province')) options.unshift('Blank Province');
-                setProvinceOptions(options);
+                
+                // Ensure current value is in list (Offline fix)
+                if (formData.province && !options.includes(formData.province)) {
+                    options.push(formData.province);
+                }
+                setProvinceOptions(options.filter(Boolean));
             })
-            .catch(() => {});
-    }, [formData.region]);
+            .catch(() => {
+                // If offline and we have a value, show it
+                if (formData.province) setProvinceOptions([formData.province]);
+            });
+    }, [formData.region, formData.province]);
 
     useEffect(() => {
         if (!formData.region || !formData.province) { setCityOptions([]); return; }
         fetch(`/api/locations/municipalities-by-province?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(formData.province)}`)
             .then(r => r.json())
             .then(data => {
-                const options = data || [];
+                let options = Array.isArray(data) ? data : [];
                 if (formData.province === 'Blank Province' && !options.includes('Blank Municipality')) options.unshift('Blank Municipality');
-                setCityOptions(options);
+                
+                if (formData.municipality && !options.includes(formData.municipality)) {
+                    options.push(formData.municipality);
+                }
+                setCityOptions(options.filter(Boolean));
             })
-            .catch(() => {});
-    }, [formData.region, formData.province]);
+            .catch(() => {
+                if (formData.municipality) setCityOptions([formData.municipality]);
+            });
+    }, [formData.region, formData.province, formData.municipality]);
 
     useEffect(() => {
         if (!formData.region || !formData.province || !formData.municipality) { setBarangayOptions([]); return; }
         fetch(`/api/locations/barangays?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(formData.province)}&municipality=${encodeURIComponent(formData.municipality)}`)
             .then(r => r.json())
             .then(data => {
-                const options = data || [];
+                let options = Array.isArray(data) ? data : [];
                 if (formData.municipality === 'Blank Municipality' && !options.includes('Blank Barangay')) options.unshift('Blank Barangay');
-                setBarangayOptions(options);
+                
+                if (formData.barangay && !options.includes(formData.barangay)) {
+                    options.push(formData.barangay);
+                }
+                setBarangayOptions(options.filter(Boolean));
             })
-            .catch(() => {});
-    }, [formData.region, formData.province, formData.municipality]);
+            .catch(() => {
+                if (formData.barangay) setBarangayOptions([formData.barangay]);
+            });
+    }, [formData.region, formData.province, formData.municipality, formData.barangay]);
 
     useEffect(() => {
         if (!formData.region) { setDivisionOptions([]); setLegDistrictOptions([]); return; }
@@ -374,39 +402,56 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             fetch(`/api/locations/divisions?region=${encodeURIComponent(formData.region)}`).then(r => r.json()).catch(() => []),
             fetch(`/api/locations/leg-districts?region=${encodeURIComponent(formData.region)}`).then(r => r.json()).catch(() => []),
         ]).then(([divs, legs]) => { 
-            const dOptions = divs || [];
-            const lOptions = legs || [];
+            let dOptions = Array.isArray(divs) ? divs : [];
+            let lOptions = Array.isArray(legs) ? legs : [];
+            
             if (formData.region === 'Blank Region') {
                 if (!dOptions.includes('Blank Division')) dOptions.unshift('Blank Division');
                 if (!lOptions.includes('Blank District')) lOptions.unshift('Blank District');
             }
-            setDivisionOptions(dOptions); 
-            setLegDistrictOptions(lOptions); 
+            
+            if (formData.division && !dOptions.includes(formData.division)) dOptions.push(formData.division);
+            if (formData.leg_district && !lOptions.includes(formData.leg_district)) lOptions.push(formData.leg_district);
+
+            setDivisionOptions(dOptions.filter(Boolean)); 
+            setLegDistrictOptions(lOptions.filter(Boolean)); 
         });
-    }, [formData.region]);
+    }, [formData.region, formData.division, formData.leg_district]);
 
     useEffect(() => {
         if (!formData.region || !formData.division) { setDistrictOptions([]); return; }
         fetch(`/api/locations/districts?region=${encodeURIComponent(formData.region)}&division=${encodeURIComponent(formData.division)}`)
             .then(r => r.json())
             .then(data => {
-                const options = data || [];
+                let options = Array.isArray(data) ? data : [];
                 if (formData.division === 'Blank Division' && !options.includes('Blank District')) options.unshift('Blank District');
-                setDistrictOptions(options);
+                
+                if (formData.district && !options.includes(formData.district)) {
+                    options.push(formData.district);
+                }
+                setDistrictOptions(options.filter(Boolean));
             })
-            .catch(() => {});
-    }, [formData.region, formData.division]);
+            .catch(() => {
+                if (formData.district) setDistrictOptions([formData.district]);
+            });
+    }, [formData.region, formData.division, formData.district]);
 
     useEffect(() => {
         fetch('/api/locations/regions')
             .then(r => r.json())
             .then(data => {
-                const options = data || [];
+                let options = Array.isArray(data) ? data : [];
                 if (!options.includes('Blank Region')) options.unshift('Blank Region');
-                setRegionOptions(options);
+                
+                if (formData.region && !options.includes(formData.region)) {
+                    options.push(formData.region);
+                }
+                setRegionOptions(options.filter(Boolean));
             })
-            .catch(() => {});
-    }, []);
+            .catch(() => {
+                if (formData.region) setRegionOptions([formData.region]);
+            });
+    }, [formData.region]);
 
     // ── Date Sync Logic ──────────────────────────────────────────────────────
 
@@ -423,7 +468,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     }, [formData.head_hired_month, formData.head_hired_day, formData.head_hired_year]);
 
     useEffect(() => {
-        if (!formData.school_name) {
+        if (formData.school_name) {
             setSchoolNameWarning("");
             return;
         }
@@ -441,6 +486,47 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     }, [formData.school_name]);
 
     useEffect(() => {
+        if (formData.school_id && String(formData.school_id).length === 6 && /^\d+$/.test(String(formData.school_id))) {
+            const pullIern = async () => {
+                const sid = String(formData.school_id);
+                try {
+                    let iernRow = null;
+                    
+                    const res = await fetch(`/api/schools_iern/${sid}`).catch(() => null);
+                    if (res?.ok) {
+                        const j = await res.json();
+                        if (j.exists && j.data) {
+                            iernRow = j.data;
+                            saveSchoolToCache({ ...iernRow, school_id: sid });
+                        }
+                    } else if (!navigator.onLine || !res) {
+                        // Offline fallback
+                        iernRow = await getCachedSchool(sid);
+                        if (iernRow) console.log("💾 [Unit1] Offline Watcher: Loading from Cache.");
+                    }
+
+                    if (iernRow) {
+                        setFormData(prev => ({
+                            ...prev,
+                            school_name: iernRow.School_Name || iernRow.school_name || prev.school_name,
+                            region: iernRow.Region || iernRow.region || prev.region,
+                            province: iernRow.Province || iernRow.province || prev.province,
+                            municipality: iernRow.Municipality || iernRow.municipality || iernRow.City || prev.municipality,
+                            division: iernRow.Division || iernRow.division || prev.division,
+                            district: iernRow.District || iernRow.district || prev.district,
+                            leg_district: iernRow.Legislative_District || iernRow.leg_district || prev.leg_district,
+                            iern: iernRow.iern || iernRow.IERN || prev.iern
+                        }));
+                    }
+                } catch (e) {
+                    console.error("IERN pull failed:", e);
+                }
+            };
+            pullIern();
+        }
+    }, [formData.school_id]);
+
+    useEffect(() => {
         if (!isModeLoading && !isReviewMode) {
             const storedId = user?.school_id || localStorage.getItem("schoolId") || "anonymous";
             saveUnitDraft(1, storedId, { formData, step: currentStep });
@@ -448,7 +534,17 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     }, [formData, currentStep, isModeLoading, isReviewMode, user]);
 
     // ── Handlers ─────────────────────────────────────────────────────────────
-    const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        if (name === "school_id") {
+            // Force numeric string only, limit 6
+            if (/^\d{0,6}$/.test(value)) {
+                setFormData(prev => ({ ...prev, [name]: value }));
+            }
+        } else {
+            setFormData(prev => ({ ...prev, [name]: value }));
+        }
+    };
     const handleRegionChange = (e) => setFormData(prev => ({ ...prev, region: e.target.value, province: "", municipality: "", barangay: "", division: "", district: "" }));
     const handleProvinceChange = (e) => setFormData(prev => ({ ...prev, province: e.target.value, municipality: "", barangay: "" }));
     const handleCityChange = (e) => setFormData(prev => ({ ...prev, municipality: e.target.value, barangay: "" }));
@@ -636,6 +732,27 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 local_file_size: formData.local_file_size,
             };
             
+            const isCompleted = missing.length === 0;
+            
+            if (!navigator.onLine) {
+                // OFFLINE SAVE TO OUTBOX
+                await addModularToOutbox({
+                    unitId: 1,
+                    label: "Unit 1: School Identity",
+                    url: "/api/ph_schools/unit1",
+                    payload: dataToSend,
+                    isCompleted: isCompleted,
+                    schoolId: formData.school_id
+                });
+
+                await clearUnitDraft(1, formData.school_id);
+                localStorage.setItem("schoolId", formData.school_id);
+                localStorage.setItem("schoolOffering", formData.curricular_offering); // Broadcast to other units
+                
+                setShowOfflineSuccess(true);
+                return;
+            }
+
             const res = await fetch("/api/ph_schools/unit1", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -652,7 +769,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             const stored = localStorage.getItem("quest_progress");
             let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
             
-            const isCompleted = missing.length === 0;
+            
             if (isCompleted && !progress.completedUnits.includes(1)) { 
                 progress.completedUnits.push(1); 
                 progress.xp += 150; 
@@ -680,10 +797,35 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             setShowSuccess(true);
         } catch (err) {
             console.error("Submit error details:", err);
-            const errorMsg = err.message || "Unknown error";
-            alert(`Failed to sync: ${errorMsg}\n\nProgress saved locally.`);
+            
+            if (!navigator.onLine || err.message.includes('Failed to fetch')) {
+                // Second check if we lost connection mid-flight
+                await addModularToOutbox({
+                    unitId: 1,
+                    label: "Unit 1: School Identity",
+                    url: "/api/ph_schools/unit1",
+                    payload: dataToSend,
+                    isCompleted: isCompleted,
+                    schoolId: formData.school_id
+                });
+                await clearUnitDraft(1, formData.school_id);
+                setShowOfflineSuccess(true);
+            } else {
+                const errorMsg = err.message || "Unknown error";
+                alert(`Failed to sync: ${errorMsg}\n\nProgress saved locally.`);
+            }
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleEditPending = async () => {
+        if (!pendingOutboxId) return;
+        if (window.confirm("Do you want to move this data back to 'Draft' mode to make changes? It will be removed from the Sync Center for now.")) {
+            await deleteModularFromOutbox(pendingOutboxId);
+            setPendingOutboxId(null);
+            setIsReviewMode(false);
+            // The formData is already in local state, so it will persist as a draft automatically
         }
     };
 
@@ -776,6 +918,22 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 </span>
                                 <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight px-4">{formData.school_name || "Official School Name"}</h1>
                                 <p className="text-slate-500 font-medium mt-2">ID: <span className="font-black text-slate-800 tracking-wider">{formData.school_id}</span> • IERN: <span className="font-black text-slate-800 tracking-wider">{formData.iern || "PENDING"}</span></p>
+
+                                {pendingOutboxId && (
+                                    <div className="mt-8 flex flex-col items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+                                        <div className="inline-flex items-center gap-2 px-6 py-3 bg-amber-50 border-2 border-amber-100 rounded-full shadow-sm">
+                                            <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                                            <span className="text-[10px] font-black text-amber-700 uppercase tracking-[0.2em]">Pending Sync • Local Storage Ready</span>
+                                        </div>
+                                        <button 
+                                            onClick={handleEditPending}
+                                            className="px-8 py-4 bg-white border-2 border-slate-200 rounded-[2rem] text-[11px] font-black text-slate-600 uppercase tracking-widest hover:border-blue-300 hover:text-blue-600 active:scale-95 transition-all shadow-sm flex items-center gap-2 group"
+                                        >
+                                            <FiEdit2 className="w-4 h-4 text-slate-400 group-hover:text-blue-500" />
+                                            Pull Back to Edit
+                                        </button>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Core Stats Bar */}
@@ -1620,6 +1778,30 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             )}
 
             <SuccessModal isOpen={showSuccess} onClose={() => setShowSuccess(false)} message="School identity profile has been successfully saved to our cloud registry! ✓" redirectUrl="/modular-dashboard" />
+
+            <AnimatePresence>
+                {showOfflineSuccess && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full rounded-t-[3rem] p-10 pb-12 shadow-2xl relative">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-amber-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-amber-200 mb-6 font-bold text-white">
+                                <FiWifiOff />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight px-4">Offline Access: Unit 1 Secured Locally!</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-6">Unit 1 has been saved to your phone's <strong>Sync Center</strong>. Once you are back online, your official profile will be automatically restored to the cloud.</p>
+                            
+                            <div className="mt-10">
+                                <button onClick={() => navigate("/modular-dashboard")}
+                                    className="w-full py-5 rounded-[2rem] bg-amber-600 text-white font-black text-lg shadow-xl shadow-amber-100 active:scale-95 transition-all">
+                                    Return to Modules Dashboard
+                                </button>
+                                <p className="text-[10px] text-amber-500 font-bold uppercase text-center mt-6 tracking-widest leading-loose">✓ Offline Mode • Auto-Sync Enabled ✓</p>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
 
             <AnimatePresence>
                 {showDraftModal && (

@@ -11,11 +11,13 @@ const DRAFT_SPACES_STORE = 'buildable_spaces_drafts'; // New store for draft spa
 const REPAIRS_STORE = 'facility_repairs'; // Store for offline facility repairs
 const UNIT_1_DRAFT_STORE = 'unit_1_draft_store'; // New store for Unit 1 School Head drafts
 const UNIT_DRAFTS_STORE = 'unit_drafts'; // Generic store for all unit drafts
+const MODULAR_OUTBOX_STORE = 'modular_outbox'; // Outbox for completed modular units (Sync Center)
 
 const SCHOOLS_STORE = 'schools_cache'; // Define constant at top
 
 // UNIFIED DB VERSION — all functions must use THIS version 
-const DB_VERSION = 12;
+const DB_VERSION = 13;
+const OFFLINE_FILES_STORE = 'offline_files'; // Persistent local binaries
 
 // 1. Initialize the Database
 export async function initDB() {
@@ -64,6 +66,14 @@ export async function initDB() {
       if (!db.objectStoreNames.contains(UNIT_DRAFTS_STORE)) {
         db.createObjectStore(UNIT_DRAFTS_STORE, { keyPath: 'id' });
       }
+      // Create Modular Outbox store
+      if (!db.objectStoreNames.contains(MODULAR_OUTBOX_STORE)) {
+        db.createObjectStore(MODULAR_OUTBOX_STORE, { keyPath: 'id', autoIncrement: true });
+      }
+      // Create Offline Files store
+      if (!db.objectStoreNames.contains(OFFLINE_FILES_STORE)) {
+        db.createObjectStore(OFFLINE_FILES_STORE, { keyPath: 'id', autoIncrement: true });
+      }
     },
   });
 }
@@ -89,6 +99,48 @@ export async function getOutbox() {
 export async function deleteFromOutbox(id) {
   const db = await initDB();
   return db.delete(SH_STORE, id);
+}
+
+// ==========================================
+//        MODULAR OUTBOX FUNCTIONS (Sync Center)
+// ==========================================
+
+/**
+ * Adds a completed unit submission to the modular outbox
+ */
+export async function addModularToOutbox(payload) {
+  const db = await initDB();
+  return db.add(MODULAR_OUTBOX_STORE, {
+    ...payload,
+    timestamp: new Date().toISOString(),
+    status: 'pending'
+  });
+}
+
+/**
+ * Gets all pending units from the modular outbox
+ */
+export async function getModularOutbox() {
+  const db = await initDB();
+  return db.getAll(MODULAR_OUTBOX_STORE);
+}
+
+/**
+ * Deletes a unit from the outbox after successful sync
+ */
+export async function deleteModularFromOutbox(id) {
+  const db = await initDB();
+  return db.delete(MODULAR_OUTBOX_STORE, id);
+}
+
+/**
+ * Clears the modular outbox
+ */
+export async function clearModularOutbox() {
+  const db = await initDB();
+  const tx = db.transaction(MODULAR_OUTBOX_STORE, 'readwrite');
+  await tx.objectStore(MODULAR_OUTBOX_STORE).clear();
+  return tx.done;
 }
 
 // ==========================================
@@ -211,6 +263,17 @@ export async function cacheSchools(schools) {
 
   await tx.done;
   console.log(`✅ [db.js] Cached ${schools.length} schools to IndexedDB.`);
+}
+
+/**
+ * Saves or updates a single school record in the cache
+ * @param {Object} school - The school object with school_id
+ */
+export async function saveSchoolToCache(school) {
+  const db = await initDB();
+  const tx = db.transaction(SCHOOLS_STORE, 'readwrite');
+  await tx.objectStore(SCHOOLS_STORE).put(school);
+  return tx.done;
 }
 
 /**
@@ -366,4 +429,40 @@ export async function clearUnitDraft(unitId, schoolId) {
   const db = await initDB();
   const id = `unit_${unitId}_school_${schoolId}`;
   return db.delete(UNIT_DRAFTS_STORE, id);
+}
+
+// ==========================================
+//        OFFLINE FILE STORAGE
+// ==========================================
+
+/**
+ * Saves a binary file locally for offline access
+ */
+export async function saveOfflineFile(iern, file, docType) {
+    const db = await initDB();
+    return db.put(OFFLINE_FILES_STORE, {
+        iern,
+        file, // Stores the File/Blob object
+        fileName: file.name,
+        fileType: file.type,
+        docType,
+        timestamp: Date.now()
+    });
+}
+
+/**
+ * Retrieves latest offline file for a specific IERN
+ */
+export async function getOfflineFile(iern) {
+    const db = await initDB();
+    const all = await db.getAll(OFFLINE_FILES_STORE);
+    return all.filter(f => f.iern === iern).sort((a,b) => b.timestamp - a.timestamp)[0];
+}
+
+/**
+ * Deletes local offline file
+ */
+export async function deleteOfflineFile(id) {
+    const db = await initDB();
+    return db.delete(OFFLINE_FILES_STORE, id);
 }

@@ -8,6 +8,7 @@ import {
 } from 'react-icons/fa';
 import { FiSave, FiClock, FiMapPin } from 'react-icons/fi';
 import PageTransition from '../components/PageTransition';
+import { addModularToOutbox } from "../db";
 
 const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSaveDraft, isReadOnly = false, initialValues = null }, ref) => {
     const [loading, setLoading] = useState(false);
@@ -129,10 +130,26 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
         }
         setLoading(true);
         try {
+            const payload = { ...data, school_id: schoolId, iern };
+
+            if (!navigator.onLine) {
+                await addModularToOutbox({
+                    unitId: 8,
+                    label: "Unit 8: School Terrain & Location Profile",
+                    url: '/api/school-location',
+                    method: 'POST',
+                    payload: payload,
+                    schoolId: schoolId
+                });
+                if (onSaveSuccess) onSaveSuccess({ ...data, risk_index: 'Pending Sync' });
+                setLoading(false);
+                return;
+            }
+
             const res = await fetch('/api/school-location', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...data, school_id: schoolId, iern })
+                body: JSON.stringify(payload)
             });
             const result = await res.json();
             console.log("Save Result:", result);
@@ -145,7 +162,20 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
                 alert(`Error saving: Validation failed (Status ${res.status})\n\n${details}`);
             }
         } catch (err) {
-            alert("Network error saving profile.");
+            console.error("UNIT 8 SUBMIT ERROR:", err);
+            if (!navigator.onLine || err.message.includes('fetch')) {
+                await addModularToOutbox({
+                    unitId: 8,
+                    label: "Unit 8: School Terrain & Location Profile",
+                    url: '/api/school-location',
+                    method: 'POST',
+                    payload: { ...data, school_id: schoolId, iern },
+                    schoolId: schoolId
+                });
+                if (onSaveSuccess) onSaveSuccess({ ...data, risk_index: 'Pending Sync' });
+            } else {
+                alert("Network error saving profile.");
+            }
         } finally {
             setLoading(false);
         }

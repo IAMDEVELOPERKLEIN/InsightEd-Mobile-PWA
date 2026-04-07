@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiCheck, FiChevronRight, FiChevronLeft, FiLayers, FiUsers, FiUnlock, FiSave, FiArrowLeft, FiAlertTriangle } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiCheck, FiChevronRight, FiChevronLeft, FiLayers, FiUsers, FiUnlock, FiSave, FiArrowLeft, FiAlertTriangle, FiWifiOff } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
-import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, getModularOutbox } from "../../db";
+import { useAuth } from "../../context/AuthContext";
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const chunkyInput = "w-full p-4 mt-2 bg-gray-50 border-2 border-slate-200 rounded-2xl text-xl font-black text-slate-700 text-center focus:outline-none focus:border-indigo-500 focus:bg-indigo-50 hover:border-slate-300 transition-colors shadow-sm disabled:opacity-50 disabled:bg-slate-100";
@@ -90,6 +91,9 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     const [iern, setIern] = useState("");
     const [showWelcomeBack, setShowWelcomeBack] = useState(false);
     const [showDraftModal, setShowDraftModal] = useState(false);
+    const [showOfflineSuccess, setShowOfflineSuccess] = useState(false);
+    const [pendingOutboxId, setPendingOutboxId] = useState(null);
+    const [isReviewMode, setIsReviewMode] = useState(false);
 
     const [isFetching, setIsFetching] = useState(true);
     const [fetchError, setFetchError] = useState(null);
@@ -105,6 +109,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     const [currentStep, setCurrentStep] = useState(0);
     const [mgSubStep, setMgSubStep] = useState('overview'); // 'overview' | 'distribution' — for multigrade grade steps
 
+    const { user, authLoading } = useAuth();
     // Form State
     const [sectionData, setSectionData] = useState({});
 
@@ -271,10 +276,11 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
 
     useEffect(() => {
         const init = async () => {
+            if (authLoading) return;
             setIsFetching(true);
             setFetchError(null);
             
-            const storedId = targetSchoolId || localStorage.getItem("schoolId");
+            const storedId = targetSchoolId || user?.school_id || localStorage.getItem("schoolId");
             if (!storedId) {
                 setFetchError("School ID not found. Please re-login.");
                 setIsFetching(false);
@@ -283,90 +289,116 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             setSchoolId(storedId);
 
             try {
-                // Check for Draft First
+                // 1. Gather all local sources
+                const outbox = await getModularOutbox().catch(() => []);
+                const pendingUnit1 = outbox.find(e => e.unitId === 1 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const pendingUnit2 = outbox.find(e => e.unitId === 2 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const pendingUnit3 = outbox.find(e => e.unitId === 3 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
                 const draft = await getUnitDraft(3, storedId);
 
-                const res = await fetch(`/api/ph_schools/${storedId}`);
-                if (!res.ok) {
-                    throw new Error("Failed to fetch. Please check your connection.");
+                // 2. Reconstruct school baseline
+                let baseline = { iern: "", total_enrollment: 0, curricular_offering: "" };
+                try {
+                    const res = await fetch(`/api/ph_schools/${storedId}`);
+                    if (res.ok) {
+                        const saved = await res.json();
+                        if (saved.exists && saved.data) baseline = { ...baseline, ...saved.data };
+                    }
+                } catch (e) {
+                    console.log("📍 [Unit3] Offline: Using local sources for baseline.");
                 }
-                
-                const saved = await res.json();
-                if (saved.exists && saved.data) {
-                    const d = saved.data;
-                    if (d.iern) setIern(d.iern);
-                    setTotalEnrollment(d.total_enrollment || 0);
-                    
-                    // --- New Fixed-Column Hydration ---
-                    const { activeClasses, parsedData, isActuallySaved } = parseClassStructure(d);
-                    setAvailableGrades(activeClasses);
 
-                    // If unit3 counts are saved, restore them into sectionData
-                    let sectionCounts = {};
-                    if (d.unit3_simplified_counts) {
-                        try {
-                            const raw = typeof d.unit3_simplified_counts === 'string'
-                                ? JSON.parse(d.unit3_simplified_counts)
-                                : d.unit3_simplified_counts;
-                            const arr = Array.isArray(raw) ? raw : (raw.array || []);
-                            
-                            arr.forEach(item => {
-                                sectionCounts[item.grade_level] = {
-                                    total_sections: item.total_sections || 0,
-                                    col_below: item.col_below || 0,
-                                    col_within: item.col_within || 0,
-                                    col_above: item.col_above || 0,
-                                    selectedSize: item.class_size || item.selectedSize || null
-                                };
-                            });
-                        } catch (e) { console.warn("Unit3 parse err", e); }
+                // Overlay Sync Center Data
+                if (pendingUnit1) baseline.curricular_offering = pendingUnit1.payload?.curricular_offering || baseline.curricular_offering;
+                if (pendingUnit2) {
+                    const p = pendingUnit2.payload;
+                    const q = p.unit2_simplified_enrollment?.questionnaire || p.unit2_simplified_enrollment;
+                    if (q) {
+                        let sum = parseInt(q.kinderEnrollment) || 0;
+                        if (q.gradeTotals) Object.values(q.gradeTotals).forEach(v => sum += (parseInt(v) || 0));
+                        baseline.total_enrollment = sum;
+                        baseline.unit2_simplified_enrollment = p.unit2_simplified_enrollment;
                     }
+                    baseline.multigrade_groupings_1 = p.multigrade_groupings_1;
+                    baseline.multigrade_groupings_2 = p.multigrade_groupings_2;
+                    baseline.multigrade_groupings_3 = p.multigrade_groupings_3;
+                    baseline.multigrade_enrollment_1 = p.multigrade_enrollment_1;
+                    baseline.multigrade_enrollment_2 = p.multigrade_enrollment_2;
+                    baseline.multigrade_enrollment_3 = p.multigrade_enrollment_3;
+                }
 
-                    // Merge parsed structure with saved counts
-                    let mergedData = {};
-                    activeClasses.forEach(ac => {
-                        mergedData[ac.id] = {
-                            selectedSize: parsedData[ac.id]?.selectedSize || sectionCounts[ac.id]?.selectedSize || null,
-                            total_sections: sectionCounts[ac.id]?.total_sections || 0,
-                            col_below: sectionCounts[ac.id]?.col_below || 0,
-                            col_within: sectionCounts[ac.id]?.col_within || 0,
-                            col_above: sectionCounts[ac.id]?.col_above || 0
-                        };
-                    });
+                if (pendingUnit3) {
+                    baseline.unit3_simplified_counts = pendingUnit3.payload?.unit3_simplified_counts;
+                    // Also flag as completed to trigger Read Only if needed
+                    baseline.unit3_completed = true; 
+                }
 
-                    // MASTER DATA PRECEDENCE: Draft > Database
-                    if (draft) {
-                        setSectionData(draft.sectionData || mergedData);
-                        setCurrentStep(draft.step !== undefined ? draft.step : 1);
-                        setIsReadOnly(false); // Force edit mode for drafts
-                        setShowWelcomeBack(true);
-                        setTimeout(() => setShowWelcomeBack(false), 3000);
-                    } else {
-                        setSectionData(mergedData);
-                        if (isActuallySaved || d.unit3_completed || propReadOnly) {
-                            setIsReadOnly(true);
-                            setCurrentStep(1);
-                        } else {
-                            setIsReadOnly(false);
-                            setCurrentStep(1);
-                            if (activeClasses.length === 0) {
-                                setFetchError("No active classes found. Please complete Unit 2.");
-                            }
-                        }
-                    }
-                    
-                    setIsFetching(false);
+                if (baseline.iern) setIern(baseline.iern);
+                setTotalEnrollment(baseline.total_enrollment || 0);
+
+                // 3. Resolve Form Structure
+                const { activeClasses, parsedData, isActuallySaved } = parseClassStructure(baseline);
+                setAvailableGrades(activeClasses);
+
+                let sectionCounts = {};
+                if (baseline.unit3_simplified_counts) {
+                    try {
+                        const raw = typeof baseline.unit3_simplified_counts === 'string' ? JSON.parse(baseline.unit3_simplified_counts) : baseline.unit3_simplified_counts;
+                        const arr = Array.isArray(raw) ? raw : (raw.array || []);
+                        arr.forEach(item => {
+                            sectionCounts[item.grade_level] = {
+                                total_sections: item.total_sections || 0,
+                                col_below: item.col_below || 0,
+                                col_within: item.col_within || 0,
+                                col_above: item.col_above || 0,
+                                selectedSize: item.class_size || item.selectedSize || null
+                            };
+                        });
+                    } catch (e) { console.warn("Unit3 baseline parse err", e); }
+                }
+
+                let mergedData = {};
+                activeClasses.forEach(ac => {
+                    mergedData[ac.id] = {
+                        selectedSize: parsedData[ac.id]?.selectedSize || sectionCounts[ac.id]?.selectedSize || null,
+                        total_sections: sectionCounts[ac.id]?.total_sections || 0,
+                        col_below: sectionCounts[ac.id]?.col_below || 0,
+                        col_within: sectionCounts[ac.id]?.col_within || 0,
+                        col_above: sectionCounts[ac.id]?.col_above || 0
+                    };
+                });
+
+                // 4. APPLY SYNC CENTER (UNIT 3)
+                if (pendingUnit3) {
+                    setSectionData(pendingUnit3.payload?.sectionData || mergedData);
+                    setPendingOutboxId(pendingUnit3.id);
+                    setIsReviewMode(true);
+                    setIsReadOnly(true);
+                } 
+                // 5. APPLY DRAFT
+                else if (draft) {
+                    setSectionData(draft.sectionData || mergedData);
+                    setCurrentStep(draft.step !== undefined ? draft.step : 1);
+                    setIsReadOnly(false);
+                    setShowWelcomeBack(true);
+                    setTimeout(() => setShowWelcomeBack(false), 3000);
                 } else {
-                    throw new Error("Invalid data format received.");
+                    setSectionData(mergedData);
+                    setCurrentStep(1);
+                    if (isActuallySaved || baseline.unit3_completed || propReadOnly) {
+                        setIsReadOnly(true);
+                    }
                 }
+
             } catch (e) {
-                console.warn("Could not fetch Unit 3 data", e);
-                setFetchError(e.message || "An unexpected error occurred while loading class data.");
+                console.warn("Could not fetch/init Unit 3 data", e);
+                setFetchError("An error occurred while loading class data. Please try again.");
+            } finally {
                 setIsFetching(false);
             }
         };
         init();
-    }, []);
+    }, [targetSchoolId, user?.school_id, authLoading]);
 
     const handleChange = (gradeId, field, value) => {
         let val = value;
@@ -459,7 +491,9 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 has_multigrade: availableGrades.some(g => g.id.startsWith("mg_")),
                 multigrade_sections_count: 0,
                 multigrade_groups: null,
-                unit3_simplified_counts: JSON.stringify(payloadArray)
+                unit3_simplified_counts: JSON.stringify(payloadArray),
+                sectionData: sectionData, // IMPORTANT: needed for offline summary reconstruction
+                totalSteps: availableGrades.length
             };
 
             // Extract the strings cleanly for API routing
@@ -483,6 +517,31 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                     payload[`multigrade_size_${idx}`] = sSize;
                 }
             });
+
+            if (!navigator.onLine) {
+                // OFFLINE SAVE
+                await addModularToOutbox({
+                    unitId: 3,
+                    label: "Unit 3: Section Organization",
+                    url: `/api/ph_schools/unit3/${schoolId}`,
+                    method: 'PUT',
+                    payload: payload,
+                    schoolId: schoolId
+                });
+                await clearUnitDraft(3, schoolId);
+                
+                // Update local visual progress
+                const stored = localStorage.getItem('quest_progress');
+                let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+                if (!progress.completedUnits.includes(3)) {
+                    progress.completedUnits.push(3);
+                    progress.xp = (progress.xp || 0) + 200;
+                }
+                localStorage.setItem('quest_progress', JSON.stringify(progress));
+
+                setShowOfflineSuccess(true);
+                return;
+            }
 
             const res = await fetch(`/api/ph_schools/unit3/${schoolId}`, {
                 method: "PUT",
@@ -513,7 +572,21 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             await clearUnitDraft(3, schoolId);
             setShowSuccess(true);
         } catch (err) {
-            alert(err.message);
+            console.error("Unit 3 Submit error:", err);
+            if (!navigator.onLine || err.message.includes('fetch')) {
+                await addModularToOutbox({
+                    unitId: 3,
+                    label: "Unit 3: Section Organization",
+                    url: `/api/ph_schools/unit3/${schoolId}`,
+                    method: 'PUT',
+                    payload: payload,
+                    schoolId: schoolId
+                });
+                await clearUnitDraft(3, schoolId);
+                setShowOfflineSuccess(true);
+            } else {
+                alert(err.message);
+            }
         }
         setLoading(false);
     };
@@ -1112,6 +1185,30 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                                     className="py-5 rounded-[2rem] bg-blue-600 text-white font-black text-lg shadow-xl shadow-blue-100 active:scale-95 transition-all outline-none">
                                     Save & Exit
                                 </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {showOfflineSuccess && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full rounded-t-[3rem] p-10 pb-12 shadow-2xl relative">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-amber-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-amber-200 mb-6 font-bold text-white">
+                                <FiWifiOff />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight px-4">Local Secure: Unit 3 Saved!</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-6">Your Section Registry has been saved locally. We will automatically update your school's official records once your internet is restored.</p>
+                            
+                            <div className="mt-10">
+                                <button onClick={() => navigate("/modular-dashboard")}
+                                    className="w-full py-5 rounded-[2rem] bg-amber-600 text-white font-black text-lg shadow-xl shadow-amber-100 active:scale-95 transition-all outline-none">
+                                    Return to Modules Dashboard
+                                </button>
+                                <p className="text-[10px] text-amber-500 font-bold uppercase text-center mt-6 tracking-widest leading-loose">✓ Offline Mode • Auto-Sync Enabled ✓</p>
                             </div>
                         </motion.div>
                     </div>

@@ -6,12 +6,13 @@ import {
 } from 'recharts';
 import { 
     FiCheckCircle, FiClock, FiTrendingUp, FiPlay, FiLock, FiActivity,
-    FiZap, FiAward, FiTarget, FiStar, FiShield
+    FiZap, FiAward, FiTarget, FiStar, FiShield, FiRefreshCcw, FiWifiOff
 } from 'react-icons/fi';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { DASHBOARD_METADATA } from '../config/dashboardMetadata';
 import { useAuth } from '../context/AuthContext';
+import { getModularOutbox } from '../db';
 
 // --- Circular Progress Ring ---
 const ProgressRing = ({ percentage = 0, size = 160, strokeWidth = 10 }) => {
@@ -97,6 +98,8 @@ const MyActivityDashboard = () => {
     
     const [loading, setLoading] = useState(true);
     const [targetSchoolId, setTargetSchoolId] = useState(null);
+    const [pendingCount, setPendingCount] = useState(0);
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
 
     const unitMap = useMemo(() => DASHBOARD_METADATA.units.map(u => ({
         id: u.id,
@@ -114,12 +117,10 @@ const MyActivityDashboard = () => {
                 
                 // --- SUPER USER IMPERSONATION ---
                 if (user?.role === 'Super User' && impersonatedUid) {
-                    console.log(`[MyActivity] Impersonating UID: ${impersonatedUid}`);
                     const profileRes = await fetch(`/api/school-by-user/${impersonatedUid}`);
                     const profileJson = await profileRes.json();
                     if (profileJson.exists && profileJson.data.school_id) {
                         schoolId = profileJson.data.school_id;
-                        console.log(`[MyActivity] Found impersonated School ID: ${schoolId}`);
                     }
                 }
 
@@ -134,8 +135,6 @@ const MyActivityDashboard = () => {
                 if (response.ok) {
                     const json = await response.json();
                     setData(json.data);
-                    
-                    // Only cache if not impersonating
                     if (!impersonatedUid) {
                         localStorage.setItem('activity_data', JSON.stringify(json.data));
                     }
@@ -146,10 +145,25 @@ const MyActivityDashboard = () => {
                 setLoading(false);
             }
         };
+
+        const handleStatus = () => {
+             const status = navigator.onLine;
+             setIsOnline(status);
+             if (status) fetchData();
+        };
+        window.addEventListener('online', handleStatus);
+        window.addEventListener('offline', handleStatus);
         
         if (user) {
             fetchData();
+            // Fetch pending outbox count
+            getModularOutbox().then(items => setPendingCount(items.length));
         }
+
+        return () => {
+            window.removeEventListener('online', handleStatus);
+            window.removeEventListener('offline', handleStatus);
+        };
     }, [user, impersonatedUid]);
 
     const xp = useMemo(() => getXPForUnits(data?.progress?.flags), [data]);
@@ -204,6 +218,19 @@ const MyActivityDashboard = () => {
     return (
         <PageTransition>
             <div className="min-h-screen bg-[#f8faff] font-sans pb-28 relative overflow-hidden text-slate-900">
+                <AnimatePresence>
+                    {!isOnline && (
+                        <motion.div 
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="bg-rose-500 text-white px-6 py-2 flex items-center justify-center gap-2 overflow-hidden z-[100] sticky top-0"
+                        >
+                            <FiWifiOff className="w-4 h-4" />
+                            <span className="text-[10px] font-black uppercase tracking-widest italic">Offline Mode Active • Progress will save to Sync Center</span>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
                 {/* Ambient background effects - lighter and softer */}
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-emerald-100/30 rounded-full blur-[120px] pointer-events-none" />
                 <div className="absolute bottom-1/3 right-0 w-[400px] h-[400px] bg-indigo-100/30 rounded-full blur-[100px] pointer-events-none" />
@@ -227,9 +254,15 @@ const MyActivityDashboard = () => {
                             initial={{ scale: 0 }}
                             animate={{ scale: 1 }}
                             transition={{ type: "spring", bounce: 0.5 }}
-                            className="bg-white p-3 rounded-2xl border border-slate-100 shadow-lg shadow-indigo-100/50"
+                            onClick={() => navigate('/sync-center')}
+                            className="bg-white p-3 rounded-2xl border border-slate-100 shadow-lg shadow-indigo-100/50 relative cursor-pointer active:scale-95 group transition-all"
                         >
-                            <FiActivity className="text-emerald-500 text-2xl" />
+                            <FiRefreshCcw className={`text-emerald-500 text-2xl transition-transform duration-700 ${pendingCount > 0 ? 'animate-spin-slow' : 'group-hover:rotate-180'}`} />
+                            {pendingCount > 0 && (
+                                <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                                    {pendingCount}
+                                </span>
+                            )}
                         </motion.div>
                     </div>
 

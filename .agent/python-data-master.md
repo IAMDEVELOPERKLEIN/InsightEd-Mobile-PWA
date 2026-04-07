@@ -1,4 +1,5 @@
-# Comprehensive Technical & Data Skills Matrix
+# ⚙️ Data Engineering & Python Implementation Engine 
+*(Technical Backbone for the Antigravity Data Analyst)*
 
 ## 1. System Architecture & Brainstorming
 * **System Architecture:** Designing scalable, high-availability backends for progressive web apps and mobile applications.
@@ -17,10 +18,10 @@
 * **Managing Volume:** Handling millions of rows efficiently through archiving strategies, connection pooling (e.g., PgBouncer), and resource optimization.
 * **ETL/ELT Pipelines:** Designing automated workflows to extract, clean, and load large datasets from disparate sources into central, highly available repositories.
 
-## 4. Python for Data Management & Analysis
-* **Data Wrangling:** Utilizing `pandas` and `numpy` for comprehensive cleaning, transforming, deduplication, and aggregation of messy data sets prior to database insertion.
-* **Database Interfacing:** Leveraging ORMs like `SQLAlchemy` and drivers like `psycopg2` or `asyncpg` for secure, programmatic interactions between Python services and PostgreSQL.
-* **Data Analysis & Scripting:** Performing exploratory data analysis (EDA), generating summary statistics, and writing automation scripts to handle repetitive data formatting tasks.
+## 4. Python Data Engineering & Processing
+* **Technical Implementation:** Utilizing `pandas` and `numpy` for high-performance cleaning and transformation.
+* **Database Interfacing:** Leveraging ORMs (`SQLAlchemy`) and drivers (`psycopg2`) for robust system-level integration.
+* **Note:** For strategic analysis, probabilistic audits, and row-level forensics, refer to the [Antigravity Data Analyst](file:///c:/Users/KleinZebastianCatapa/Documents/INSIGHTEDCODES2026/.agent/antigravity-data-analyst.md).
 
 ## 5. Core Development & Deployment Ecosystem
 * **Toolchain:** Mastery of VS Code, Git/GitHub for version control, Docker for consistent containerization, and Google Antigravity for streamlined environment management and deployment.
