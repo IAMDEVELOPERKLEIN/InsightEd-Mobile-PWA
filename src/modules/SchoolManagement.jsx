@@ -139,6 +139,13 @@ const SchoolManagement = () => {
 
     useEffect(() => {
         if (user) {
+            // ROLE PROTECTION: Only School Division Office can access this module
+            if (user.role !== 'School Division Office') {
+                console.warn(`🚫 Access Denied: User role ${user.role} is not authorized for School Management.`);
+                navigate('/monitoring-dashboard');
+                return;
+            }
+
             setUserData(user);
             // Pre-set map center based on region if possible (simplified)
             if (user.region === 'NCR') {
@@ -154,9 +161,6 @@ const SchoolManagement = () => {
             fetchPendingSchools();
             setLoading(false);
         } else {
-            // If strictly loading and no user, we might wait or redirect
-            // But usually AuthContext handles the redirect if protected.
-            // For safety:
             // navigate('/login');
         }
     }, [user, navigate]);
