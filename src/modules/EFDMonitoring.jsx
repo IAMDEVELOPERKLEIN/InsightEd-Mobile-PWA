@@ -21,10 +21,18 @@ const EFDMonitoring = () => {
     const [loading, setLoading] = useState(!sessionStorage.getItem('efd_cached_projects'));
     const [userData, setUserData] = useState(null);
     const [viewMode, setViewMode] = useState('card'); // 'table' or 'card'
-    const [currentPage, setCurrentPage] = useState(() => Number(localStorage.getItem('efd_currentPage')) || 1);
+    const [currentPage, setCurrentPage] = useState(() => {
+        const saved = sessionStorage.getItem('efd_currentPage');
+        return saved ? parseInt(saved, 10) : 1;
+    });
     const [searchQuery, setSearchQuery] = useState(() => localStorage.getItem('efd_searchQuery') || '');
     const [selectedRegions, setSelectedRegions] = useState(() => JSON.parse(localStorage.getItem('efd_selectedRegions') || '[]'));
     const [selectedCategories, setSelectedCategories] = useState(() => JSON.parse(localStorage.getItem('efd_selectedCategories') || '[]'));
+    const [selectedYears, setSelectedYears] = useState(() => JSON.parse(localStorage.getItem('efd_selectedYears') || '[]'));
+    const [selectedBatches, setSelectedBatches] = useState(() => JSON.parse(localStorage.getItem('efd_selectedBatches') || '[]'));
+    const [fundingYears, setFundingYears] = useState([]);
+    const [allBatches, setAllBatches] = useState([]);
+
     const [engineers, setEngineers] = useState([]);
     const [selectedProject, setSelectedProject] = useState(null);
     const [selectedEngineers, setSelectedEngineers] = useState([]);
@@ -45,7 +53,32 @@ const EFDMonitoring = () => {
     const [pagination, setPagination] = useState(() => JSON.parse(sessionStorage.getItem('efd_cached_pagination')) || { total: 0, page: 1, limit: 12, totalPages: 1 });
     const [summaryData, setSummaryData] = useState(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [globalTotal, setGlobalTotal] = useState(0); // fixed total inventory, never filtered
     
+    // Restore scroll position after the first data load completes
+    const scrollRestored = useRef(false);
+    useEffect(() => {
+        if (!loading && !scrollRestored.current) {
+            const savedY = sessionStorage.getItem('efd_scrollY');
+            if (savedY) {
+                scrollRestored.current = true;
+                const y = parseInt(savedY, 10);
+                // Triple rAF + small timeout to ensure PageTransition and DOM are fully settled
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            setTimeout(() => {
+                                window.scrollTo(0, y);
+                                // Clear only after we've actually scrolled
+                                sessionStorage.removeItem('efd_scrollY');
+                            }, 50);
+                        });
+                    });
+                });
+            }
+        }
+    }, [loading]);
+
     // Persistent Filter Sync
     useEffect(() => {
         localStorage.setItem('efd_selectedRegions', JSON.stringify(selectedRegions));
@@ -54,9 +87,11 @@ const EFDMonitoring = () => {
         localStorage.setItem('efd_selectedMunicipality', selectedMunicipality);
         localStorage.setItem('efd_selectedDistrict', selectedDistrict);
         localStorage.setItem('efd_selectedCategories', JSON.stringify(selectedCategories));
+        localStorage.setItem('efd_selectedYears', JSON.stringify(selectedYears));
+        localStorage.setItem('efd_selectedBatches', JSON.stringify(selectedBatches));
         localStorage.setItem('efd_searchQuery', searchQuery);
-        localStorage.setItem('efd_currentPage', currentPage);
-    }, [selectedRegions, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict, selectedCategories, searchQuery, currentPage]);
+        sessionStorage.setItem('efd_currentPage', currentPage.toString());
+    }, [selectedRegions, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict, selectedCategories, selectedYears, selectedBatches, searchQuery, currentPage]);
     
     // Debug Telemetry
     useEffect(() => {
@@ -89,13 +124,18 @@ const EFDMonitoring = () => {
             if (selectedRegions.length > 0) params.append('region', selectedRegions.join(','));
             if (selectedCategories.length > 0) params.append('category', selectedCategories.join(','));
             if (selectedDivision) params.append('division', selectedDivision);
+            if (selectedProvince) params.append('province', selectedProvince);
+            if (selectedMunicipality) params.append('municipality', selectedMunicipality);
+            if (selectedDistrict) params.append('district', selectedDistrict);
+            if (selectedYears.length > 0) params.append('year', selectedYears.join(','));
+            if (selectedBatches.length > 0) params.append('batch', selectedBatches.join(','));
 
             const res = await fetch(`/api/dashboard/efd-summary?${params.toString()}`);
             if (res.ok) setSummaryData(await res.json());
         } catch (error) {
             console.error("Error fetching summary:", error);
         }
-    }, [searchQuery, selectedRegions, selectedCategories, selectedDivision]);
+    }, [searchQuery, selectedRegions, selectedCategories, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict, selectedYears, selectedBatches]);
 
     const fetchProjectsPaged = useCallback(async (p = 1) => {
         setIsRefreshing(true);
@@ -108,6 +148,11 @@ const EFDMonitoring = () => {
             if (selectedRegions.length > 0) params.append('region', selectedRegions.join(','));
             if (selectedCategories.length > 0) params.append('category', selectedCategories.join(','));
             if (selectedDivision) params.append('division', selectedDivision);
+            if (selectedProvince) params.append('province', selectedProvince);
+            if (selectedMunicipality) params.append('municipality', selectedMunicipality);
+            if (selectedDistrict) params.append('district', selectedDistrict);
+            if (selectedYears.length > 0) params.append('year', selectedYears.join(','));
+            if (selectedBatches.length > 0) params.append('batch', selectedBatches.join(','));
 
             const res = await fetch(`/api/projects?${params.toString()}`);
             if (res.ok) {
@@ -126,17 +171,33 @@ const EFDMonitoring = () => {
             setIsRefreshing(false);
             setLoading(false);
         }
-    }, [searchQuery, selectedRegions, selectedCategories, selectedDivision]);
+    }, [searchQuery, selectedRegions, selectedCategories, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict, selectedYears, selectedBatches]);
 
     useEffect(() => {
         const fetchInitial = async () => {
             try {
-                const [engRes, locRes] = await Promise.all([
+                const [engRes, locRes, yearsRes, batchRes] = await Promise.all([
                     fetch('/api/engineers'),
-                    fetch('/api/reference/efd-locations')
+                    fetch('/api/reference/efd-locations'),
+                    fetch('/api/reference/funding-years'),
+                    fetch('/api/reference/batch-of-funds')
                 ]);
                 if (engRes.ok) setEngineers(await engRes.json());
                 if (locRes.ok) setEfdLocations(await locRes.json());
+                if (yearsRes.ok) setFundingYears(await yearsRes.json());
+                if (batchRes.ok) setAllBatches(await batchRes.json());
+
+                // One-time unfiltered total to lock in the inventory count
+                try {
+                    const globalRes = await fetch('/api/dashboard/efd-summary');
+                    if (globalRes.ok) {
+                        const globalData = await globalRes.json();
+                        if (globalData?.totalStats?.totalProjects != null) {
+                            setGlobalTotal(globalData.totalStats.totalProjects);
+                        }
+                    }
+                } catch (e) { /* non-critical */ }
+
             } catch (error) {
                 console.error("Error fetching initial monitoring references:", error);
             }
@@ -149,11 +210,6 @@ const EFDMonitoring = () => {
         fetchSummary();
         fetchProjectsPaged(currentPage);
     }, [fetchSummary, fetchProjectsPaged, currentPage]);
-
-    // Reset to page 1 on filter change
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [searchQuery, selectedRegions, selectedCategories, selectedDivision]);
 
     // Unique filter options
     const regions = useMemo(() => {
@@ -171,6 +227,27 @@ const EFDMonitoring = () => {
     const filteredProjects = projects;
     const totalPages = pagination.totalPages;
     const paginatedProjects = projects;
+
+    const allYears = useMemo(() => {
+        return [...new Set(fundingYears)].sort((a, b) => b - a);
+    }, [fundingYears]);
+
+    const handleNavigateToProject = useCallback((id) => {
+        sessionStorage.setItem('efd_scrollY', window.scrollY.toString());
+        navigate(`/project-details/${id}`);
+    }, [navigate]);
+
+    const handleFilterApply = useCallback((filters) => {
+        setSelectedRegions(filters.regions || []);
+        setSelectedDivision(filters.divisions?.[0] || '');
+        setSelectedProvince(filters.province || '');
+        setSelectedMunicipality(filters.municipality || '');
+        setSelectedDistrict(filters.district || '');
+        setSelectedCategories(filters.categories || []);
+        setSelectedYears(filters.years || []);
+        setSelectedBatches(filters.batches || []);
+        setCurrentPage(1);
+    }, []);
 
     const handleAssign = async () => {
         if (!selectedProject || selectedEngineers.length === 0) return;
@@ -315,8 +392,8 @@ const EFDMonitoring = () => {
 
                             <div className="flex flex-wrap gap-4">
                                 <div className="bg-white/10 backdrop-blur-md px-6 py-4 rounded-3xl border border-white/10 min-w-[140px]">
-                                    <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-1 opacity-80">Total Inventory</p>
-                                    <h2 className="text-2xl font-black">{summaryData?.totalStats?.totalProjects?.toLocaleString() || pagination.total.toLocaleString()}</h2>
+                                    <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-1 opacity-80">Total Projects</p>
+                                    <h2 className="text-2xl font-black">{(globalTotal || summaryData?.totalStats?.totalProjects || 0).toLocaleString()}</h2>
                                 </div>
                                 <div className="bg-white/10 backdrop-blur-md px-6 py-4 rounded-3xl border border-white/10 min-w-[140px]">
                                     <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-1 opacity-80">Filtered</p>
@@ -339,7 +416,10 @@ const EFDMonitoring = () => {
                                     type="text"
                                     placeholder="Quick search projects, schools, or IDs..."
                                     value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onChange={(e) => {
+                                        setSearchQuery(e.target.value);
+                                        setCurrentPage(1);
+                                    }}
                                     className="w-full pl-12 pr-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5 transition-all"
                                 />
                             </div>
@@ -372,7 +452,7 @@ const EFDMonitoring = () => {
 
                     {/* Content Area */}
                     <div className="min-h-[400px]">
-                        {(loading || isRefreshing) ? (
+                        {((loading || isRefreshing) && (!projects || projects.length === 0)) ? (
                             <div className="flex flex-col items-center justify-center py-20 animate-pulse">
                                 <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hydrating data stack...</p>
@@ -395,7 +475,7 @@ const EFDMonitoring = () => {
                                                 <tr 
                                                     key={p.id} 
                                                     className="hover:bg-blue-50/40 transition-colors group cursor-pointer"
-                                                    onClick={() => navigate(`/project-details/${p.id}`)}
+                                                    onClick={() => handleNavigateToProject(p.id)}
                                                 >
                                                     <td className="px-8 py-6">
                                                         <span className="text-xs font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100">{p.id}</span>
@@ -456,7 +536,7 @@ const EFDMonitoring = () => {
                                     return (
                                         <div 
                                             key={p.id} 
-                                            onClick={() => navigate(`/project-details/${p.id}`)}
+                                            onClick={() => handleNavigateToProject(p.id)}
                                             className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col group cursor-pointer relative"
                                         >
 
@@ -755,25 +835,19 @@ const EFDMonitoring = () => {
                 onClose={() => setIsLogOpen(false)} 
                 project={logProject} 
             />
-            <FilterDrawer 
+            <FilterDrawer
                 isOpen={isFilterOpen}
                 onClose={() => setIsFilterOpen(false)}
+                onApply={handleFilterApply}
                 projects={projects}
-                regions={regions}
-                categories={categories}
-                selectedRegions={selectedRegions}
-                setSelectedRegions={setSelectedRegions}
-                selectedCategories={selectedCategories}
-                setSelectedCategories={setSelectedCategories}
-                selectedDivision={selectedDivision}
-                setSelectedDivision={setSelectedDivision}
-                selectedProvince={selectedProvince}
-                setSelectedProvince={setSelectedProvince}
-                selectedMunicipality={selectedMunicipality}
-                setSelectedMunicipality={setSelectedMunicipality}
-                selectedDistrict={selectedDistrict}
-                setSelectedDistrict={setSelectedDistrict}
                 locations={efdLocations}
+                initialRegions={selectedRegions}
+                initialDivisions={selectedDivision ? [selectedDivision] : []}
+                initialCategories={selectedCategories}
+                initialYears={selectedYears}
+                initialBatches={selectedBatches}
+                yearOptions={allYears}
+                batchOptions={allBatches}
             />
         </PageTransition>
     );

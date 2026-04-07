@@ -48,3 +48,20 @@ tmp/
 production_debug_audit.cjs
 setup-ssh-key.*
 .claude/settings.local.json
+
+# Forensic Results and Data Snapshots (Sensitivity Protection)
+*_results.json
+*_report.json
+*_scan.mjs
+audit_*.json
+audit_*.mjs
+forensic_*.json
+forensic_*.mjs
+row_by_row_*.json
+dup_result.txt
+verify_*.mjs
+*.sql
+*.txt
+*.log
+!README.md
+!CLAUDE.md
