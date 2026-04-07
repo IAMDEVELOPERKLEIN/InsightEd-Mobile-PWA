@@ -84,6 +84,9 @@ const SchoolManagement = () => {
     const [documentPayload, setDocumentPayload] = useState(null); // Stores Base64 string
     const [compressionData, setCompressionData] = useState(null); // { original, compressed, hydra }
     const [isOptimizing, setIsOptimizing] = useState(false);
+    const [idExists, setIdExists] = useState(false);
+    const [checkingId, setCheckingId] = useState(false);
+    const [nameError, setNameError] = useState('');
 
     // Confirmation Modal State
     const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -105,6 +108,20 @@ const SchoolManagement = () => {
         }
         return () => clearInterval(interval);
     }, [showConfirmModal, confirmTimer]);
+
+    // Validation Check: Mandatory Fields + PDF
+    const isFormValid = useMemo(() => {
+        const requiredFields = [
+            'school_id', 'school_name', 'province', 'municipality', 
+            'district', 'barangay', 'street_address', 'curricular_offering'
+        ];
+        
+        const hasAllFields = requiredFields.every(field => formData[field] && formData[field].trim() !== '');
+        const hasPdf = !!documentPayload; // Must have the PDF stored in state
+        const hasNoErrors = !idExists && !nameError && !checkingId;
+
+        return hasAllFields && hasPdf && hasNoErrors;
+    }, [formData, documentPayload, idExists, nameError, checkingId]);
 
     // Location Options & Coordinates State
     const [locationOptions, setLocationOptions] = useState([]);
@@ -342,10 +359,47 @@ const SchoolManagement = () => {
     };
 
     const handleInputChange = (e) => {
-        const { name, value } = e.target;
+        let { name, value } = e.target;
 
-        // Limit school_id to 6 characters
-        if (name === 'school_id' && value.length > 6) return;
+        // Limit school_id to 6 characters and ONLY numbers
+        if (name === 'school_id') {
+            value = value.replace(/[^0-9]/g, ''); // Reassign to value to update state correctly
+            if (value.length > 6) return;
+            
+            // Real-time duplicate check for schools_IERN
+            if (value.length === 6) {
+                setCheckingId(true);
+                fetch(`/api/sdo/check-id/${value}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        setIdExists(data.exists);
+                        if (data.exists) {
+                            console.warn(`🛑 [SDO] School ID ${value} is already in the Master Record (schools_IERN).`);
+                        }
+                        setCheckingId(false);
+                    })
+                    .catch(err => {
+                        console.error("ID check failed", err);
+                        setCheckingId(false);
+                    });
+            } else {
+                setIdExists(false);
+            }
+        }
+
+        // Validate School Name Abbreviations
+        if (name === 'school_name') {
+            const forbidden = ["ES", "NHS", "PS", "CS", "CES", "HS", "IS", "SHS", "ELEM", "MNHS"];
+            // Use regex to find whole words only (case insensitive)
+            const regex = new RegExp(`\\b(${forbidden.join('|')})\\b`, 'i');
+            const match = value.match(regex);
+            
+            if (match) {
+                setNameError(`Abbreviations like "${match[0].toUpperCase()}" are not allowed. Please use the full name (e.g., Elementary School, National High School).`);
+            } else {
+                setNameError('');
+            }
+        }
 
         setFormData(prev => {
             const newData = { ...prev, [name]: value };
@@ -487,6 +541,18 @@ const SchoolManagement = () => {
         // Validate User Profile (Region/Division must be set)
         if (!userData.region || !userData.division) {
             alert('Your account profile is missing Region/Division information. Please update your profile before submitting a school.');
+            return;
+        }
+
+        // BLOCK IF ID ALREADY EXISTS
+        if (idExists) {
+            alert('Cannot submit: This School ID is already registered in the system (schools_IERN). Please verify the ID.');
+            return;
+        }
+
+        // BLOCK IF NAME HAS ABBREVIATIONS
+        if (nameError) {
+            alert('Cannot submit: ' + nameError);
             return;
         }
 
@@ -710,7 +776,7 @@ const SchoolManagement = () => {
                                 }`}
                         >
                             <FiList size={20} />
-                            Requests ({pendingSchools.length})
+                            My Submissions ({pendingSchools.length})
                         </button>
                     </div>
 
@@ -800,11 +866,21 @@ const SchoolManagement = () => {
                                         onChange={handleInputChange}
                                         maxLength="6"
                                         pattern="[0-9]{6}"
+                                        inputMode="numeric"
                                         placeholder="e.g. 100000"
                                         disabled={isConverting}
-                                        className={`w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-xl focus:border-blue-500 focus:outline-none dark:bg-slate-700 dark:text-white ${isConverting ? 'opacity-70 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : ''}`}
+                                        className={`w-full px-4 py-3 border-2 rounded-xl focus:border-blue-500 focus:outline-none dark:bg-slate-700 dark:text-white transition-colors ${
+                                            idExists ? 'border-rose-500 bg-rose-50 dark:bg-rose-900/10' : (isConverting ? 'opacity-70 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : 'border-slate-200 dark:border-slate-600')
+                                        }`}
                                         required
                                     />
+                                    {checkingId && <p className="text-[10px] text-blue-500 animate-pulse mt-1 font-bold">Verifying ID...</p>}
+                                    {idExists && (
+                                        <div className="mt-2 text-rose-600 dark:text-rose-400 text-xs font-black flex items-center gap-1 animate-in slide-in-from-top-1 duration-200">
+                                            <FiX size={14} />
+                                            SCHOOL ID ALREADY REGISTERED IN MASTER SYSTEM (IERN)
+                                        </div>
+                                    )}
                                     <p className="text-xs text-slate-500 mt-1">{formData.school_id.length}/6 characters</p>
                                 </div>
 
@@ -815,9 +891,17 @@ const SchoolManagement = () => {
                                         name="school_name"
                                         value={formData.school_name}
                                         onChange={handleInputChange}
-                                        className="w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-xl focus:border-blue-500 focus:outline-none dark:bg-slate-700 dark:text-white"
+                                        className={`w-full px-4 py-3 border-2 rounded-xl focus:border-blue-500 focus:outline-none dark:bg-slate-700 dark:text-white transition-colors ${
+                                            nameError ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/10' : 'border-slate-200 dark:border-slate-600'
+                                        }`}
                                         required
                                     />
+                                    {nameError && (
+                                        <div className="mt-2 text-amber-600 dark:text-amber-400 text-[10px] font-black flex items-start gap-1 p-2 bg-amber-50/50 dark:bg-amber-900/20 rounded-lg animate-in slide-in-from-top-1">
+                                            <FiClock className="mt-0.5 shrink-0" />
+                                            <span>{nameError}</span>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Province Dropdown */}
@@ -1108,33 +1192,44 @@ const SchoolManagement = () => {
                             {/* Submit Button */}
                             <button
                                 type="submit"
-                                disabled={submitting}
-                                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                disabled={submitting || !isFormValid}
+                                className={`w-full py-4 font-black rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-widest ${
+                                    submitting || !isFormValid
+                                        ? 'bg-slate-300 dark:bg-slate-700 text-slate-500 cursor-not-allowed opacity-60'
+                                        : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-xl transform hover:-translate-y-1 active:scale-95'
+                                }`}
                             >
                                 {submitting ? (
                                     <>
                                         <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                        Submitting...
+                                        Processing...
                                     </>
                                 ) : (
                                     <>
                                         <FiCheck size={20} />
-                                        Submit for Approval
+                                        {isFormValid ? 'Submit for Registration' : 'Complete Form to Submit'}
                                     </>
                                 )}
                             </button>
+                            {!isFormValid && !submitting && (
+                                <div className="text-center">
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                        {!documentPayload ? '⚠️ PDF Document Required' : '⚠️ Please fill all required fields (*)'}
+                                    </p>
+                                </div>
+                            )}
                         </form>
                     )}
 
-                    {/* Requests (formerly Pending Schools) List */}
+                    {/* My Submissions List */}
                     {activeView === 'requests' && (
                         <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl p-8">
-                            <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-6">Request Log</h2>
+                            <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-6">My Submissions</h2>
 
                             {pendingSchools.length === 0 ? (
                                 <div className="text-center py-12 text-slate-400">
                                     <FiClock size={48} className="mx-auto mb-4 opacity-50" />
-                                    <p className="text-lg font-bold">No requests found</p>
+                                    <p className="text-lg font-bold">No submissions found</p>
                                 </div>
                             ) : (
                                 <div className="space-y-4">
@@ -1293,8 +1388,8 @@ const SchoolManagement = () => {
                                 </div>
 
                                 <div className="flex items-center justify-center gap-2 pt-2">
-                                    <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
-                                    <span className="text-[10px] font-black text-amber-600 dark:text-amber-500 uppercase tracking-wider">Awaiting Admin Review</span>
+                                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                                    <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-wider">Registration Active</span>
                                 </div>
                             </div>
 
@@ -1305,7 +1400,7 @@ const SchoolManagement = () => {
                                 }}
                                 className="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-sm uppercase tracking-[0.2em] transition-all shadow-xl shadow-blue-500/20 transform hover:-translate-y-1 active:scale-95"
                             >
-                                Done
+                                View Submissions
                             </button>
                         </div>
                     </div>

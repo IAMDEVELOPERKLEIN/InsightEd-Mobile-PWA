@@ -169,6 +169,27 @@ pool.on('error', (err) => {
 // Inject pool into chatbot module
 setPool(pool);
 
+// --- DB INITIALIZATION & SCHEMA HARDENING ---
+(async () => {
+    try {
+        console.log('🏗️ [DB-Init] Verifying schools_IERN schema...');
+        
+        // Cleanup unintended lowercase columns
+        await pool.query('ALTER TABLE "schools_IERN" DROP COLUMN IF EXISTS latitude');
+        await pool.query('ALTER TABLE "schools_IERN" DROP COLUMN IF EXISTS longitude');
+        await pool.query('ALTER TABLE "schools_IERN" DROP COLUMN IF EXISTS mother_school_id');
+
+        // Ensure correct PascalCase columns exist
+        await pool.query('ALTER TABLE "schools_IERN" ADD COLUMN IF NOT EXISTS "Latitude" NUMERIC(10, 7)');
+        await pool.query('ALTER TABLE "schools_IERN" ADD COLUMN IF NOT EXISTS "Longitude" NUMERIC(10, 7)');
+        await pool.query('ALTER TABLE "schools_IERN" ADD COLUMN IF NOT EXISTS "Mother_School_ID" TEXT');
+        
+        console.log('✅ [DB-Init] schools_IERN schema verified & cleaned.');
+    } catch (err) {
+        console.error('❌ [DB-Init] Failed to harden schools_IERN schema:', err.message);
+    }
+})();
+
 console.log('✅ [Env] DATABASE_URL loaded:', process.env.DATABASE_URL ? 'YES' : 'NO');
 
 /* --- LEGACY FIREBASE INIT REMOVED --- */
@@ -5544,6 +5565,18 @@ app.get('/api/master-list/schools-deprecated', async (req, res) => {
   }
 });
 
+// GET - SDO Check School ID existence in schools_IERN
+app.get('/api/sdo/check-id/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('SELECT "SchoolID" FROM "schools_IERN" WHERE "SchoolID" = $1', [id]);
+    res.json({ exists: result.rows.length > 0 });
+  } catch (err) {
+    console.error("Check ID Error:", err);
+    res.status(500).json({ error: "Failed to verify ID" });
+  }
+});
+
 app.post('/api/sdo/submit-school', async (req, res) => {
   const {
     school_id,
@@ -5600,22 +5633,74 @@ app.post('/api/sdo/submit-school', async (req, res) => {
       }
     }
 
-    const result = await pool.query(`
-      INSERT INTO pending_schools (
-        school_id, school_name, region, division, district, province, municipality, leg_district,
-        barangay, street_address, mother_school_id, curricular_offering,
-        latitude, longitude, submitted_by, submitted_by_name, special_order
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-      RETURNING pending_id
-    `, [
-      school_id, school_name, region, division, district, province, municipality, leg_district,
-      barangay, street_address, mother_school_id, curricular_offering,
-      latitude, longitude, submitted_by, submitted_by_name, special_order
-    ]);
+    // --- START AUTOMATED INSTANT APPROVAL WORKFLOW ---
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
 
-    console.log(`… School submitted for approval: ${school_name} (${school_id})`);
-    res.json({ success: true, pending_id: result.rows[0].pending_id });
+        // 1. Log the submission in pending_schools (as 'approved' audit record)
+        const pendingResult = await client.query(`
+            INSERT INTO pending_schools (
+                school_id, school_name, region, division, district, province, municipality, leg_district,
+                barangay, street_address, mother_school_id, curricular_offering,
+                latitude, longitude, submitted_by, submitted_by_name, special_order,
+                status, reviewed_at, reviewed_by, reviewed_by_name
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'approved', CURRENT_TIMESTAMP, $15, $16)
+            RETURNING pending_id
+        `, [
+            school_id, school_name, region, division, district, province, municipality, leg_district,
+            barangay, street_address, mother_school_id, curricular_offering,
+            latitude, longitude, submitted_by, submitted_by_name, special_order
+        ]);
+
+        const pending_id = pendingResult.rows[0].pending_id;
+
+        // 2. Generate IERN (Sequential with Regex Hardening)
+        const lastIernRes = await client.query(`
+            SELECT iern FROM "schools_IERN" 
+            WHERE "SchoolID" NOT LIKE '999%' 
+            AND iern IS NOT NULL 
+            AND iern ~ '^[0-9]{4}-[0-9]+$'
+            ORDER BY iern DESC LIMIT 1
+        `);
+
+        let lastSuffix = 45998; 
+        if (lastIernRes.rows.length > 0) {
+            const parts = lastIernRes.rows[0].iern.split('-');
+            if (parts.length === 2) {
+                const parsedSuffix = parseInt(parts[1], 10);
+                if (!isNaN(parsedSuffix)) lastSuffix = parsedSuffix;
+            }
+        }
+
+        const currentYear = new Date().getFullYear();
+        const newIern = `${currentYear}-${lastSuffix + 1}`;
+
+        // 3. Insert directly into schools_IERN (Instant Activation)
+        await client.query(`
+            INSERT INTO "schools_IERN" (
+                "SchoolID", iern, "School_Name", "Region", "Division", "District", "Province", "Municipality", 
+                "Legislative_District", "Barangay", "Street_Address", "Curricular_Offering",
+                "Latitude", "Longitude", "Mother_School_ID"
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        `, [
+            school_id, newIern, school_name, region, division, district, province, municipality,
+            leg_district, barangay, street_address, curricular_offering,
+            latitude, longitude, mother_school_id
+        ]);
+
+        await client.query('COMMIT');
+        console.log(`✅ [SDO-AUTO] School Auto-Approved & Active: ${school_name} -> ${newIern}`);
+        res.json({ success: true, pending_id, iern: newIern });
+
+    } catch (txnErr) {
+        await client.query('ROLLBACK');
+        throw txnErr;
+    } finally {
+        client.release();
+    }
   } catch (err) {
     console.error("Submit School Error:", err);
     if (err.code === '23505') { // Unique violation
@@ -5781,7 +5866,7 @@ app.get('/api/sdo/document/:id/:type', async (req, res) => {
   }
 });
 
-// GET - SDO Fetch Pending Schools (by SDO user)
+// GET - SDO Fetch All Submission History (by SDO user)
 app.get('/api/sdo/pending-schools', async (req, res) => {
   const { sdo_uid } = req.query;
 
@@ -5792,7 +5877,7 @@ app.get('/api/sdo/pending-schools', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT * FROM pending_schools
-      WHERE submitted_by = $1 AND status IN ('pending', 'needs_revision')
+      WHERE submitted_by = $1
       ORDER BY submitted_at DESC
     `, [sdo_uid]);
 
