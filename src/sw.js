@@ -47,7 +47,7 @@ self.addEventListener('sync', (event) => {
 
 // 5. Facility Repairs Background Sync
 const REPAIR_DB_NAME = 'InsightEd_Outbox';
-const REPAIR_DB_VERSION = 10;
+const REPAIR_DB_VERSION = 13;
 const REPAIR_STORE_NAME = 'facility_repairs';
 const MODULAR_STORE_NAME = 'modular_outbox';
 

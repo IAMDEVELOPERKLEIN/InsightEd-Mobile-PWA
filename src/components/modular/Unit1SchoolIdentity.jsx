@@ -143,20 +143,12 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             console.log("🔄 [Unit1] Starting Initialization for:", storedId);
             
             try {
-                // PRIORITY 1: Check Sync Center (Outbox) for pending submission
-                const outbox = await getModularOutbox().catch(err => {
+                let pendingEntry = null;
+                try {
+                    const outbox = await getModularOutbox();
+                    pendingEntry = outbox.find(entry => entry.unitId === 1 && (entry.schoolId === storedId || entry.payload?.school_id === storedId));
+                } catch (err) {
                     console.error("Outbox fetch failed:", err);
-                    return [];
-                });
-                
-                const pendingEntry = outbox.find(entry => entry.unitId === 1 && (entry.schoolId === storedId || entry.payload?.school_id === storedId));
-                
-                if (pendingEntry) {
-                    console.log("📍 [Unit1] Found pending submission in Sync Center.");
-                    setFormData(prev => ({ ...prev, ...pendingEntry.payload }));
-                    setPendingOutboxId(pendingEntry.id);
-                    setIsReviewMode(true);
-                    return;
                 }
 
                 if (!storedId) {
@@ -282,6 +274,13 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             if (draft && draft.formData) {
                 merged = { ...merged, ...draft.formData };
                 merged.school_id = String(storedId); // Re-force ID integrity
+            }
+
+            // Sync Center (Outbox) overlay - Highest Priority for unsynced changes
+            if (pendingEntry) {
+                console.log("📍 [Unit1] Overlaying pending submission from Sync Center.");
+                merged = { ...merged, ...pendingEntry.payload };
+                setPendingOutboxId(pendingEntry.id);
             }
 
             // ── Auto-Fill Logic for School Head ──────────────────────────────────
@@ -672,13 +671,12 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             const requiredFields = [
                 { key: 'barangay', label: 'Barangay' },
                 { key: 'leg_district', label: 'Legislative District' },
-                { key: 'ownership', label: 'Ownership' },
+                { key: 'ownership', label: 'Ownership Selection' },
                 { key: 'school_type', label: 'School Classification' },
                 { key: 'curricular_offering', label: 'Curricular Offering' },
                 { key: 'latitude', label: 'Map Pin (Latitude)' },
                 { key: 'longitude', label: 'Map Pin (Longitude)' },
                 { key: 'school_name', label: 'School Name' },
-                { key: 'local_file_path', label: 'Ownership Document' },
                 { key: 'established_month', label: 'Month Established' },
                 { key: 'established_year', label: 'Year Established' }
             ];
@@ -848,8 +846,8 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const isStep4Valid = formData.head_first_name !== "" && formData.head_last_name !== "" && formData.head_position_title !== "" && formData.head_date_hired !== "";
     const isStep5Valid = formData.latitude !== "" && formData.longitude !== "";
     const isStep6Valid = formData.ownership && 
-        formData.ownership_document_type && 
-        formData.local_file_path && 
+        /* formData.ownership_document_type && */
+        /* formData.local_file_path && */
         formData.school_type &&
         formData.established_month &&
         formData.established_year && (
@@ -1606,7 +1604,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                         )}
 
                                         {/* School Type Question */}
-                                        {formData.local_file_path && (
+                                        {formData.ownership && (
                                             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
                                                 className="space-y-3">
                                                 <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">School Type</label>

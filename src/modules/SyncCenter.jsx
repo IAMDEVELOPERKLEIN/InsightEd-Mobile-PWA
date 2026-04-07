@@ -16,6 +16,7 @@ const SyncCenter = () => {
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncProgress, setSyncProgress] = useState(0);
     const [syncStatus, setSyncStatus] = useState({}); // itemID -> 'syncing' | 'success' | 'error'
+    const [syncErrors, setSyncErrors] = useState({}); // itemID -> string message
     const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'history'
 
     useEffect(() => {
@@ -46,11 +47,20 @@ const SyncCenter = () => {
         for (let i = 0; i < pendingItems.length; i++) {
             const item = pendingItems[i];
             setSyncStatus(prev => ({ ...prev, [item.id]: 'syncing' }));
+            setSyncErrors(prev => ({ ...prev, [item.id]: null }));
 
             try {
-                const response = await fetch(item.url, {
+                // Ensure URL starts with / if it's relative
+                const fetchUrl = item.url.startsWith('http') ? item.url : 
+                               (item.url.startsWith('/') ? item.url : `/${item.url}`);
+
+                const response = await fetch(fetchUrl, {
                     method: item.method || 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'include', // Support session cookies if used
                     body: JSON.stringify(item.payload)
                 });
 
@@ -59,11 +69,22 @@ const SyncCenter = () => {
                     await deleteModularFromOutbox(item.id);
                     successCount++;
                 } else {
+                    let errorMsg = `Server returned ${response.status}`;
+                    try {
+                        const errorData = await response.json();
+                        errorMsg = errorData.error || errorData.message || errorMsg;
+                    } catch (e) {
+                        // Not JSON or no error field
+                    }
                     setSyncStatus(prev => ({ ...prev, [item.id]: 'error' }));
+                    setSyncErrors(prev => ({ ...prev, [item.id]: errorMsg }));
+                    console.error(`Sync error for ${item.label}:`, errorMsg);
                 }
             } catch (err) {
+                const diag = err.message || "Network request failed";
                 console.error("Sync failed for item:", item.id, err);
                 setSyncStatus(prev => ({ ...prev, [item.id]: 'error' }));
+                setSyncErrors(prev => ({ ...prev, [item.id]: diag }));
             }
 
             setSyncProgress(((i + 1) / pendingItems.length) * 100);
@@ -74,7 +95,9 @@ const SyncCenter = () => {
         loadData();
         
         if (successCount === pendingItems.length) {
-            // All synced!
+            alert("✅ Synchronization Success: All unit data has been successfully transmitted to the server.");
+        } else if (successCount > 0) {
+            alert(`⚠️ Partial Sync: Successfully transmitted ${successCount} units, but some failures occurred. Please check the logs.`);
         }
     };
 
@@ -225,6 +248,11 @@ const SyncCenter = () => {
                                             <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider mt-0.5">
                                                 {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Unit {item.unitId}
                                             </p>
+                                            {syncErrors[item.id] && (
+                                                <p className="text-[9px] font-bold text-rose-400 mt-2 bg-rose-500/5 p-2 rounded-lg border border-rose-500/10 italic">
+                                                    Error: {syncErrors[item.id]}
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
 

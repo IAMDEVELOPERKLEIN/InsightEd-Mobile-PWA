@@ -16718,7 +16718,7 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
     const query = `UPDATE ph_schools SET ${fields.join(', ')} WHERE school_id = $19`;
 
     // Ensure row exists before update
-    await pool.query('INSERT INTO ph_schools (iern, school_id) VALUES ($1, $2) ON CONFLICT (iern) DO UPDATE SET school_id = EXCLUDED.school_id', [data.iern, schoolId]);
+    await pool.query('INSERT INTO ph_schools (iern, school_id) VALUES ($1, $2) ON CONFLICT (school_id) DO UPDATE SET iern = COALESCE(ph_schools.iern, EXCLUDED.iern)', [data.iern, schoolId]);
     await pool.query(query, values);
 
     // --- SYNC COMPLETION (Unit 2) ---
@@ -16852,7 +16852,7 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
     ];
 
     // Ensure the row exists before updating, in case the user jumped straight to this unit
-    await pool.query('INSERT INTO ph_schools (iern, school_id) VALUES ($1, $2) ON CONFLICT (iern) DO UPDATE SET school_id = EXCLUDED.school_id', [data.iern, schoolId]);
+    await pool.query('INSERT INTO ph_schools (iern, school_id) VALUES ($1, $2) ON CONFLICT (school_id) DO UPDATE SET iern = COALESCE(ph_schools.iern, EXCLUDED.iern)', [data.iern, schoolId]);
 
     await pool.query(query, values);
 
@@ -16973,7 +16973,7 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
     console.log(`[Unit4 Save] Saving ${setClauses.length} fields for school ${schoolId}`);
 
     // Ensure the row exists before updating, in case the user jumped straight to this unit
-    await pool.query('INSERT INTO ph_schools (iern, school_id) VALUES ($1, $2) ON CONFLICT (iern) DO UPDATE SET school_id = EXCLUDED.school_id', [data.iern, schoolId]);
+    await pool.query('INSERT INTO ph_schools (iern, school_id) VALUES ($1, $2) ON CONFLICT (school_id) DO UPDATE SET iern = COALESCE(ph_schools.iern, EXCLUDED.iern)', [data.iern, schoolId]);
 
     await pool.query(query, values);
 
@@ -17068,7 +17068,7 @@ app.put('/api/ph_schools/unit5/:schoolId', async (req, res) => {
     dynamicFields.push(`verified_as_of = CURRENT_TIMESTAMP`);
     dynamicFields.push(`updated_at = CURRENT_TIMESTAMP`);
     // Ensure the row exists before updating, in case the user jumped straight to this unit
-    await pool.query('INSERT INTO ph_schools (iern, school_id) VALUES ($1, $2) ON CONFLICT (iern) DO UPDATE SET school_id = EXCLUDED.school_id', [data.iern, schoolId]);
+    await pool.query('INSERT INTO ph_schools (iern, school_id) VALUES ($1, $2) ON CONFLICT (school_id) DO UPDATE SET iern = COALESCE(ph_schools.iern, EXCLUDED.iern)', [data.iern, schoolId]);
 
     // --- START BASELINE CALCULATION ---
     // Calculate teacher headcount from master list (teachers_list)
@@ -17782,8 +17782,8 @@ app.post('/api/school-location', async (req, res) => {
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, CURRENT_TIMESTAMP
       )
-      ON CONFLICT (iern) DO UPDATE SET
-        school_id = EXCLUDED.school_id,
+      ON CONFLICT (school_id) DO UPDATE SET
+        iern = COALESCE(school_location_profiles.iern, EXCLUDED.iern),
         transportation_modes = EXCLUDED.transportation_modes,
         road_paved_pct = EXCLUDED.road_paved_pct,
         road_unpaved_pct = EXCLUDED.road_unpaved_pct,
