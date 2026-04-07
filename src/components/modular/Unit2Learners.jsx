@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FiArrowRight, FiCheckCircle, FiChevronLeft, FiAlertTriangle, FiUnlock, FiSave, FiArrowLeft, FiCheck, FiWifiOff, FiEdit2 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import SuccessModal from '../SuccessModal';
-import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox } from '../../db';
+import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, getModularOutbox } from '../../db';
 import { useAuth } from "../../context/AuthContext";
 
 // --- Shared Styles ---
@@ -181,172 +181,50 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         const initData = async () => {
             if (authLoading) return;
             const storedId = targetSchoolId || user?.school_id || localStorage.getItem('schoolId');
-            
+            if (!storedId) {
+                setLoading(false);
+                return;
+            }
+
             try {
-                // PRIORITY 0: Check Sync Center (Outbox) for Unit 2's own pending submission
+                // 1. Gather all local sources
                 const outbox = await getModularOutbox().catch(() => []);
-                const pendingUnit2 = outbox.find(entry => entry.unitId === 2 && (entry.schoolId === storedId || entry.payload?.school_id === storedId));
+                const pendingUnit1 = outbox.find(e => e.unitId === 1 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const pendingUnit2 = outbox.find(e => e.unitId === 2 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const [draft2, draft1] = await Promise.all([
+                    getUnitDraft(2, storedId),
+                    getUnitDraft(1, storedId)
+                ]);
+
+                // 2. Resolve Offering (Sync Center > Unit 1 Draft > LS)
+                let resolvedOffering = pendingUnit1?.payload?.curricular_offering 
+                    || draft1?.formData?.curricular_offering 
+                    || localStorage.getItem('schoolOffering') 
+                    || "";
                 
-                // Also check for pending Unit 1 to get latest Curricular Offering
-                const pendingUnit1 = outbox.find(entry => entry.unitId === 1 && (entry.schoolId === storedId || entry.payload?.school_id === storedId));
-
-                if (pendingUnit2) {
-                    console.log("📍 [Unit2] Found pending submission in Sync Center.");
-                    const p = pendingUnit2.payload;
-                    const questionnaire = p.unit2_simplified_enrollment?.questionnaire || p.unit2_simplified_enrollment;
-                    
-                    if (questionnaire) {
-                        setKinderEnrollment(questionnaire.kinderEnrollment || "");
-                        setGradeTotals(questionnaire.gradeTotals || {});
-                        setGradeAvailability(questionnaire.gradeAvailability || {});
-                        setHasSNED(questionnaire.hasSNED);
-                        setSnedTotalCount(questionnaire.snedTotalCount || "");
-                        setSnedProgramType(questionnaire.snedProgramType || null);
-                        setSnedOrganizedClassCount(questionnaire.snedOrganizedClassCount || "");
-                        setHasAralMath(questionnaire.hasAralMath);
-                        setAralMath(questionnaire.aralMath || {});
-                        setHasAralReading(questionnaire.hasAralReading);
-                        setAralReading(questionnaire.aralReading || {});
-                        setHasAralScience(questionnaire.hasAralScience);
-                        setAralScience(questionnaire.aralScience || {});
-                        setGradeGenderMap(questionnaire.gradeGenderMap || p.gradeGenderMap || {});
-                        setOrgType(questionnaire.orgType);
-                        setMgCombinations(questionnaire.mgCombinations || []);
-                    }
-                    
-                    setPendingOutboxId(pendingUnit2.id);
-                    setIsReviewMode(true);
-                    setIsReadOnly(true);
-                    // Don't return yet, we might need pendingUnit1 offering
-                }
-
-                if (!storedId) return;
-
-                // Load path
-                const res = await fetch(`/api/ph_schools/${storedId}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.exists && data.data) {
-                        const d = data.data;
-                        if (d.iern) setIern(d.iern);
-                        
-                        // Check for Drafts
-                        const [draft2, draft1] = await Promise.all([
-                            getUnitDraft(2, storedId),
-                            getUnitDraft(1, storedId)
-                        ]);
-
-                        // Prioritization: Outbox (Unit 1) -> Unit 1 Draft Cache -> localStorage -> Database
-                        const storedOffering = pendingUnit1?.payload?.curricular_offering
-                            || draft1?.formData?.curricular_offering 
-                            || localStorage.getItem('schoolOffering') 
-                            || d.curricular_offering
-                            || "";
-                        
-                        setSchoolOffering(storedOffering);
-
-                        if (draft2) {
-                            setKinderEnrollment(draft2.kinderEnrollment || "");
-                            setOrgType(draft2.orgType || null);
-                            setMgCombinations(draft2.mgCombinations || []);
-                            setGradeTotals(draft2.gradeTotals || {});
-                            setGradeAvailability(draft2.gradeAvailability || {});
-                            setHasSNED(draft2.hasSNED);
-                            setSnedTotalCount(draft2.snedTotalCount || "");
-                            setSnedProgramType(draft2.snedProgramType || null);
-                            setSnedOrganizedClassCount(draft2.snedOrganizedClassCount || "");
-                            setHasAralMath(draft2.hasAralMath);
-                            setAralMath(draft2.aralMath || {});
-                            setHasAralReading(draft2.hasAralReading);
-                            setAralReading(draft2.aralReading || {});
-                            setHasAralScience(draft2.hasAralScience);
-                            setAralScience(draft2.aralScience || {});
-                            setGradeGenderMap(draft2.gradeGenderMap || {});
-                            setCurrentStep(draft2.step || 1);
-                            setCurrentGradeIndex(draft2.currentGradeIndex || 0);
+                // 3. Attempt Server Sync for existing data
+                try {
+                    const res = await fetch(`/api/ph_schools/${storedId}`);
+                    if (res.ok) {
+                        const sData = await res.json();
+                        if (sData.exists && sData.data) {
+                            const d = sData.data;
+                            if (d.iern) setIern(d.iern);
+                            // Fallback offering from DB if nothing local
+                            if (!resolvedOffering) resolvedOffering = d.curricular_offering || "";
                             
-                            setShowWelcomeBack(true);
-                            setTimeout(() => setShowWelcomeBack(false), 3000);
-                        }
-
-                        // --- Calculate Available Grades based on Offering ---
-                        const text = storedOffering.toLowerCase();
-                        let filteredIds = [];
-
-                        if (text === "purely elementary") {
-                            filteredIds = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
-                        } else if (text === "elementary school and junior high school (k-10)") {
-                            filteredIds = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10'];
-                        } else if (text === "junior high and senior high") {
-                            filteredIds = ['g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
-                        } else if (text === "all offering (k to 12)") {
-                            filteredIds = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
-                        } else if (text === "purely junior high school") {
-                            filteredIds = ['g7', 'g8', 'g9', 'g10'];
-                        } else if (text === "purely senior high school") {
-                            filteredIds = ['g11', 'g12'];
-                        } else {
-                            // Fallback for legacy data or partial matches
-                            if (text.includes("elementary") || text.includes("primary")) {
-                                filteredIds.push('kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6');
-                            }
-                            if (text.includes("jhs") || text.includes("junior") || text.includes("high school")) {
-                                filteredIds.push('g7', 'g8', 'g9', 'g10');
-                            }
-                            if (text.includes("shs") || text.includes("senior")) {
-                                filteredIds.push('g11', 'g12');
-                            }
-                        }
-
-                        filteredIds = [...new Set(filteredIds)];
-                        const uniqueObj = ALL_GRADES.filter(g => filteredIds.includes(g.id));
-                        
-                        setAvailableGrades(uniqueObj);
-                        const hasK = uniqueObj.some(g => g.id === 'kinder');
-                        const hasE = uniqueObj.some(g => g.type === 'elem' && g.id !== 'kinder');
-                        setHasKinder(hasK);
-                        setHasElementary(hasE);
-
-                        // 2. Auto-advance if Kinder/Elementary is not offered AND no draft exists
-                        if (!draft2) {
-                            if (!hasK) {
-                                if (hasE) {
-                                    setCurrentStep(2);
-                                } else if (uniqueObj.length > 0) {
-                                    setOrgType('nano');
-                                    setCurrentStep(4);
-                                }
-                            }
-                        } else {
-                            // Ensure the restored grade index is still valid
-                            const lockedG = new Set();
-                            (draft2.mgCombinations || []).forEach(c => c.grades.forEach(gg => lockedG.add(gg)));
-                            const monogrades = uniqueObj.filter(g => g.id !== 'kinder' && !lockedG.has(g.id));
-                            
-                            if (draft2.step === 4 && monogrades.length > 0) {
-                                const clampedIndex = Math.min(draft2.currentGradeIndex || 0, monogrades.length - 1);
-                                setCurrentGradeIndex(clampedIndex);
-                            } else if (draft2.step === 4 && monogrades.length === 0) {
-                                setCurrentStep(5); 
-                            }
-                        }
-
-                        // 3. Restore Backend Data if finalized
-                        if (d.unit2_simplified_enrollment) {
-                            setHasSubmitted(true);
-                            
-                            // If no draft exists, we load the backend data as the starting point in Read Only mode.
-                            // If a draft DOES exist, we skip this so the fresh draft (loaded above) isn't overwritten, 
-                            // and we ensure the form is in Edit Mode.
-                            if (!draft2) {
+                            // If Unit 2 is already completed on server, and we have no local changes, set to read-only
+                            if (d.unit2_completed && !draft2 && !pendingUnit2) {
+                                setHasSubmitted(true);
                                 setIsReadOnly(true);
-                                try {
-                                    const parsed = typeof d.unit2_simplified_enrollment === 'string' 
-                                        ? JSON.parse(d.unit2_simplified_enrollment) 
-                                        : d.unit2_simplified_enrollment;
-                                    
-                                    if (parsed.questionnaire) {
-                                        const q = parsed.questionnaire;
+                                
+                                if (d.unit2_simplified_enrollment) {
+                                    try {
+                                        const parsed = typeof d.unit2_simplified_enrollment === 'string' 
+                                            ? JSON.parse(d.unit2_simplified_enrollment) 
+                                            : d.unit2_simplified_enrollment;
+                                        
+                                        const q = parsed.questionnaire || parsed;
                                         setKinderEnrollment(q.kinderEnrollment || "");
                                         setGradeTotals(q.gradeTotals || {});
                                         setGradeAvailability(q.gradeAvailability || {});
@@ -362,24 +240,132 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                         setAralScience(q.aralScience || {});
                                         setGradeGenderMap(q.gradeGenderMap || {});
                                         if (q.orgType) setOrgType(q.orgType);
-                                        if (q.mgCombinations) setMgCombinations(q.mgCombinations);
-                                    }
-                                } catch (e) { console.warn("Parse error", e); }
-                            } else {
-                                // Draft exists: strictly ensure we are in edit mode
-                                setIsReadOnly(false);
+                                        if (q.mgCombinations) setMgCombinations(q.mgCombinations || []);
+                                    } catch (e) { console.warn("Unit 2 Parse error", e); }
+                                }
                             }
                         }
                     }
+                } catch (e) {
+                    console.log("📍 [Unit2] Offline: Skipping server record check.");
                 }
-            } catch (e) {
-                console.error("Error fetching Unit 2 data:", e);
+
+                // 4. Set the offering (triggers the availableGrades Effect)
+                setSchoolOffering(resolvedOffering || "");
+
+                // 5. Apply Pending Changes (Sync Center)
+                if (pendingUnit2) {
+                    const p = pendingUnit2.payload;
+                    const q = p.unit2_simplified_enrollment?.questionnaire || p.unit2_simplified_enrollment;
+                    if (q) {
+                        setKinderEnrollment(q.kinderEnrollment || "");
+                        setGradeTotals(q.gradeTotals || {});
+                        setGradeAvailability(q.gradeAvailability || {});
+                        setHasSNED(q.hasSNED);
+                        setSnedTotalCount(q.snedTotalCount || "");
+                        setSnedProgramType(q.snedProgramType || null);
+                        setSnedOrganizedClassCount(q.snedOrganizedClassCount || "");
+                        setHasAralMath(q.hasAralMath);
+                        setAralMath(q.aralMath || {});
+                        setHasAralReading(q.hasAralReading);
+                        setAralReading(q.aralReading || {});
+                        setHasAralScience(q.hasAralScience);
+                        setAralScience(q.aralScience || {});
+                        setGradeGenderMap(q.gradeGenderMap || p.gradeGenderMap || {});
+                        setOrgType(q.orgType);
+                        setMgCombinations(q.mgCombinations || []);
+                    }
+                    setPendingOutboxId(pendingUnit2.id);
+                    setIsReviewMode(true);
+                    setIsReadOnly(true);
+                } 
+                // 6. Apply Draft Changes if no pending outbox
+                else if (draft2) {
+                    setKinderEnrollment(draft2.kinderEnrollment || "");
+                    setOrgType(draft2.orgType || null);
+                    setMgCombinations(draft2.mgCombinations || []);
+                    setGradeTotals(draft2.gradeTotals || {});
+                    setGradeAvailability(draft2.gradeAvailability || {});
+                    setHasSNED(draft2.hasSNED);
+                    setSnedTotalCount(draft2.snedTotalCount || "");
+                    setSnedProgramType(draft2.snedProgramType || null);
+                    setSnedOrganizedClassCount(draft2.snedOrganizedClassCount || "");
+                    setHasAralMath(draft2.hasAralMath);
+                    setAralMath(draft2.aralMath || {});
+                    setHasAralReading(draft2.hasAralReading);
+                    setAralReading(draft2.aralReading || {});
+                    setHasAralScience(draft2.hasAralScience);
+                    setAralScience(draft2.aralScience || {});
+                    setGradeGenderMap(draft2.gradeGenderMap || {});
+                    setCurrentStep(draft2.step || 1);
+                    setCurrentGradeIndex(draft2.currentGradeIndex || 0);
+                    
+                    setIsReadOnly(false);
+                    setShowWelcomeBack(true);
+                    setTimeout(() => setShowWelcomeBack(false), 3000);
+                }
+
+            } catch (err) {
+                console.error("Critical Unit 2 Initialization Error:", err);
             } finally {
                 setLoading(false);
             }
         };
         initData();
     }, [targetSchoolId, user?.school_id, authLoading]);
+    
+    // OFFLINE GRADE SELECTOR: Recalculate available grades as soon as schoolOffering changes
+    useEffect(() => {
+        if (!schoolOffering) {
+            setAvailableGrades([]);
+            return;
+        }
+
+        const text = schoolOffering.toLowerCase();
+        let filteredIds = [];
+
+        if (text === "purely elementary") {
+            filteredIds = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
+        } else if (text.includes("k-10") || text.includes("elementary school and junior high school")) {
+            filteredIds = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10'];
+        } else if (text.includes("junior high and senior high")) {
+            filteredIds = ['g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+        } else if (text.includes("all offering") || text.includes("k-12")) {
+            filteredIds = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+        } else if (text === "purely junior high school") {
+            filteredIds = ['g7', 'g8', 'g9', 'g10'];
+        } else if (text === "purely senior high school") {
+            filteredIds = ['g11', 'g12'];
+        } else {
+            // Fallback for legacy data or partial matches
+            if (text.includes("elementary") || text.includes("primary")) {
+                filteredIds.push('kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6');
+            }
+            if (text.includes("jhs") || text.includes("junior") || text.includes("high school")) {
+                filteredIds.push('g7', 'g8', 'g9', 'g10');
+            }
+            if (text.includes("shs") || text.includes("senior")) {
+                filteredIds.push('g11', 'g12');
+            }
+        }
+
+        const uniqueIds = [...new Set(filteredIds)];
+        const uniqueObj = ALL_GRADES.filter(g => uniqueIds.includes(g.id));
+        setAvailableGrades(uniqueObj);
+
+        const hasK = uniqueObj.some(g => g.id === 'kinder');
+        const hasE = uniqueObj.some(g => g.type === 'elem' && g.id !== 'kinder');
+        setHasKinder(hasK);
+        setHasElementary(hasE);
+        
+        if (uniqueObj.length > 0 && !loading) {
+             const stored = localStorage.getItem(`unit2_draft_${user?.school_id}`);
+             if (!stored && currentStep === 1 && !hasK) {
+                 if (hasE) setCurrentStep(2);
+                 else setCurrentStep(4);
+             }
+        }
+    }, [schoolOffering, loading, user?.school_id]);
 
     // ── Safety Guard: Ensure currentGradeIndex stays in bounds ──────────────────
     useEffect(() => {

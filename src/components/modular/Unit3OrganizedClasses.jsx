@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { FiX, FiCheckCircle, FiCheck, FiChevronRight, FiChevronLeft, FiLayers, FiUsers, FiUnlock, FiSave, FiArrowLeft, FiAlertTriangle } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
-import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox } from "../../db";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, getModularOutbox } from "../../db";
 import { useAuth } from "../../context/AuthContext";
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -286,85 +286,89 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             setSchoolId(storedId);
 
             try {
-                // Check for Draft First
+                // 1. Gather all local sources
+                const outbox = await getModularOutbox().catch(() => []);
+                const pendingUnit1 = outbox.find(e => e.unitId === 1 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
+                const pendingUnit2 = outbox.find(e => e.unitId === 2 && (e.schoolId === storedId || e.payload?.schoolId === storedId || e.payload?.school_id === storedId));
                 const draft = await getUnitDraft(3, storedId);
 
-                const res = await fetch(`/api/ph_schools/${storedId}`);
-                if (!res.ok) {
-                    throw new Error("Failed to fetch. Please check your connection.");
+                // 2. Reconstruct school baseline
+                let baseline = { iern: "", total_enrollment: 0, curricular_offering: "" };
+                try {
+                    const res = await fetch(`/api/ph_schools/${storedId}`);
+                    if (res.ok) {
+                        const saved = await res.json();
+                        if (saved.exists && saved.data) baseline = { ...baseline, ...saved.data };
+                    }
+                } catch (e) {
+                    console.log("📍 [Unit3] Offline: Using local sources for baseline.");
                 }
-                
-                const saved = await res.json();
-                if (saved.exists && saved.data) {
-                    const d = saved.data;
-                    if (d.iern) setIern(d.iern);
-                    setTotalEnrollment(d.total_enrollment || 0);
-                    
-                    // --- New Fixed-Column Hydration ---
-                    const { activeClasses, parsedData, isActuallySaved } = parseClassStructure(d);
-                    setAvailableGrades(activeClasses);
 
-                    // If unit3 counts are saved, restore them into sectionData
-                    let sectionCounts = {};
-                    if (d.unit3_simplified_counts) {
-                        try {
-                            const raw = typeof d.unit3_simplified_counts === 'string'
-                                ? JSON.parse(d.unit3_simplified_counts)
-                                : d.unit3_simplified_counts;
-                            const arr = Array.isArray(raw) ? raw : (raw.array || []);
-                            
-                            arr.forEach(item => {
-                                sectionCounts[item.grade_level] = {
-                                    total_sections: item.total_sections || 0,
-                                    col_below: item.col_below || 0,
-                                    col_within: item.col_within || 0,
-                                    col_above: item.col_above || 0,
-                                    selectedSize: item.class_size || item.selectedSize || null
-                                };
-                            });
-                        } catch (e) { console.warn("Unit3 parse err", e); }
+                // Overlay Sync Center Data
+                if (pendingUnit1) baseline.curricular_offering = pendingUnit1.payload?.curricular_offering || baseline.curricular_offering;
+                if (pendingUnit2) {
+                    const p = pendingUnit2.payload;
+                    const q = p.unit2_simplified_enrollment?.questionnaire || p.unit2_simplified_enrollment;
+                    if (q) {
+                        let sum = parseInt(q.kinderEnrollment) || 0;
+                        if (q.gradeTotals) Object.values(q.gradeTotals).forEach(v => sum += (parseInt(v) || 0));
+                        baseline.total_enrollment = sum;
+                        baseline.unit2_simplified_enrollment = p.unit2_simplified_enrollment; 
                     }
+                }
 
-                    // Merge parsed structure with saved counts
-                    let mergedData = {};
-                    activeClasses.forEach(ac => {
-                        mergedData[ac.id] = {
-                            selectedSize: parsedData[ac.id]?.selectedSize || sectionCounts[ac.id]?.selectedSize || null,
-                            total_sections: sectionCounts[ac.id]?.total_sections || 0,
-                            col_below: sectionCounts[ac.id]?.col_below || 0,
-                            col_within: sectionCounts[ac.id]?.col_within || 0,
-                            col_above: sectionCounts[ac.id]?.col_above || 0
-                        };
-                    });
+                if (baseline.iern) setIern(baseline.iern);
+                setTotalEnrollment(baseline.total_enrollment || 0);
 
-                    // MASTER DATA PRECEDENCE: Draft > Database
-                    if (draft) {
-                        setSectionData(draft.sectionData || mergedData);
-                        setCurrentStep(draft.step !== undefined ? draft.step : 1);
-                        setIsReadOnly(false); // Force edit mode for drafts
-                        setShowWelcomeBack(true);
-                        setTimeout(() => setShowWelcomeBack(false), 3000);
-                    } else {
-                        setSectionData(mergedData);
-                        if (isActuallySaved || d.unit3_completed || propReadOnly) {
-                            setIsReadOnly(true);
-                            setCurrentStep(1);
-                        } else {
-                            setIsReadOnly(false);
-                            setCurrentStep(1);
-                            if (activeClasses.length === 0) {
-                                setFetchError("No active classes found. Please complete Unit 2.");
-                            }
-                        }
-                    }
-                    
-                    setIsFetching(false);
+                // 3. Resolve Form Structure
+                const { activeClasses, parsedData, isActuallySaved } = parseClassStructure(baseline);
+                setAvailableGrades(activeClasses);
+
+                let sectionCounts = {};
+                if (baseline.unit3_simplified_counts) {
+                    try {
+                        const raw = typeof baseline.unit3_simplified_counts === 'string' ? JSON.parse(baseline.unit3_simplified_counts) : baseline.unit3_simplified_counts;
+                        const arr = Array.isArray(raw) ? raw : (raw.array || []);
+                        arr.forEach(item => {
+                            sectionCounts[item.grade_level] = {
+                                total_sections: item.total_sections || 0,
+                                col_below: item.col_below || 0,
+                                col_within: item.col_within || 0,
+                                col_above: item.col_above || 0,
+                                selectedSize: item.class_size || item.selectedSize || null
+                            };
+                        });
+                    } catch (e) { console.warn("Unit3 baseline parse err", e); }
+                }
+
+                let mergedData = {};
+                activeClasses.forEach(ac => {
+                    mergedData[ac.id] = {
+                        selectedSize: parsedData[ac.id]?.selectedSize || sectionCounts[ac.id]?.selectedSize || null,
+                        total_sections: sectionCounts[ac.id]?.total_sections || 0,
+                        col_below: sectionCounts[ac.id]?.col_below || 0,
+                        col_within: sectionCounts[ac.id]?.col_within || 0,
+                        col_above: sectionCounts[ac.id]?.col_above || 0
+                    };
+                });
+
+                if (draft) {
+                    setSectionData(draft.sectionData || mergedData);
+                    setCurrentStep(draft.step !== undefined ? draft.step : 1);
+                    setIsReadOnly(false);
+                    setShowWelcomeBack(true);
+                    setTimeout(() => setShowWelcomeBack(false), 3000);
                 } else {
-                    throw new Error("Invalid data format received.");
+                    setSectionData(mergedData);
+                    if (isActuallySaved || baseline.unit3_completed || propReadOnly) {
+                        setIsReadOnly(true);
+                    }
                 }
+
             } catch (e) {
-                console.warn("Could not fetch Unit 3 data", e);
-                setFetchError(e.message || "An unexpected error occurred while loading class data.");
+                console.warn("Could not fetch/init Unit 3 data", e);
+                setFetchError("An error occurred while loading class data. Please try again.");
+            } finally {
                 setIsFetching(false);
             }
         };
