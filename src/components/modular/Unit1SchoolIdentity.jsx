@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft, FiUnlock, FiInfo, FiMaximize2, FiSave, FiWifiOff } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft, FiUnlock, FiInfo, FiMaximize2, FiSave, FiWifiOff, FiList } from "react-icons/fi";
 import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, deleteModularFromOutbox, saveSchoolToCache, getCachedSchool, getModularOutbox } from "../../db";
 import { useAuth } from "../../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
@@ -469,7 +469,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     }, [formData.head_hired_month, formData.head_hired_day, formData.head_hired_year]);
 
     useEffect(() => {
-        if (formData.school_name) {
+        if (!formData.school_name) {
             setSchoolNameWarning("");
             return;
         }
@@ -648,6 +648,10 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     };
 
     const handleNext = () => {
+        if (currentStep === 1 && schoolNameWarning) {
+            alert(schoolNameWarning);
+            return;
+        }
         if (currentStep < TOTAL_STEPS - 1) setCurrentStep(s => s + 1);
         else handleSubmit();
     };

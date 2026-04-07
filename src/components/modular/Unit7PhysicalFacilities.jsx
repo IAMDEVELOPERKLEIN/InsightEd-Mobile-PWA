@@ -22,6 +22,57 @@ const DefaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
+// --- Grade Level Utilities ---
+// Split ONLY on semicolons. Commas are legal inside grade labels (e.g. "Grade 1, 2 & 3").
+const parseGradeLevel = (raw) =>
+    (raw || "").split(';').map(s => s.trim()).filter(Boolean);
+
+/**
+ * normalizeGradeLevel — converts legacy comma-delimited grade strings to semicolon-delimited,
+ * using greedy longest-label matching so composite labels ("Grade 1, 2 & 3") survive intact.
+ *
+ * If the stored value already contains semicolons it is considered modern and only trimmed.
+ * If it contains no semicolons (legacy), a greedy pass against knownLabels extracts tokens.
+ */
+const normalizeGradeLevel = (raw, knownLabels = []) => {
+    if (!raw) return '';
+    if (raw.includes(';')) {
+        // Already semicolon-delimited — just clean whitespace
+        return raw.split(';').map(s => s.trim()).filter(Boolean).join(';');
+    }
+    // Legacy comma path: attempt greedy longest-match against known labels
+    const sorted = [...knownLabels].sort((a, b) => b.length - a.length);
+    let remaining = raw.trim();
+    const found = [];
+    while (remaining.length > 0) {
+        remaining = remaining.trim().replace(/^,+/, '').trim(); // strip leading commas
+        if (!remaining) break;
+        const match = sorted.find(lbl => remaining.startsWith(lbl));
+        if (match) {
+            found.push(match);
+            remaining = remaining.slice(match.length).trim().replace(/^,+/, '').trim();
+        } else {
+            // No label matched — consume up to the next comma as a fallback token
+            const idx = remaining.indexOf(',');
+            if (idx === -1) { found.push(remaining.trim()); break; }
+            const token = remaining.slice(0, idx).trim();
+            if (token) found.push(token);
+            remaining = remaining.slice(idx + 1);
+        }
+    }
+    return [...new Set(found)].join(';');
+};
+
+const DEBUG_UNIT7_GRADES = false;
+const logGradeState = (roomId, rawValue) => {
+    if (!DEBUG_UNIT7_GRADES) return;
+    const parsed = parseGradeLevel(rawValue);
+    console.log(`[Unit7-Grade-Debug] Room: ${roomId} | Raw: "${rawValue}" | Parsed:`, parsed);
+    if (new Set(parsed).size !== parsed.length) {
+        console.warn(`[Unit7-Grade-Debug] DUPLICATES DETECTED in Room ${roomId}!`);
+    }
+};
+
 // Helper: fly/zoom to school coordinates when they load
 const RecenterMap = ({ center }) => {
     const map = useMap();
@@ -167,6 +218,24 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
     const [availableGrades, setAvailableGrades] = useState([]);
 
     const years = Array.from({ length: currentYear - 1900 + 1 }, (_, i) => currentYear - i);
+
+    // Normalize grade_level values in roomsData whenever availableGrades loads.
+    // This repairs legacy comma-delimited entries and multigrade labels that were
+    // incorrectly split (e.g. "Grade 1, 2 & 3" stored without semicolons).
+    useEffect(() => {
+        if (availableGrades.length === 0) return;
+        const knownLabels = availableGrades.map(g => g.label);
+        setRoomsData(prev => {
+            let changed = false;
+            const next = prev.map(r => {
+                const normalized = normalizeGradeLevel(r.grade_level, knownLabels);
+                if (normalized === (r.grade_level || '')) return r;
+                changed = true;
+                return { ...r, grade_level: normalized };
+            });
+            return changed ? next : prev; // avoid re-render if nothing changed
+        });
+    }, [availableGrades]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Data Fetching ─────────────────────────────────────────────────────
     const [isReadOnly, setIsReadOnly] = useState(false);
@@ -326,11 +395,18 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                         if (b.rooms && Array.isArray(b.rooms)) {
                             b.rooms.forEach(r => {
                                 allRooms.push({
-                                    id: r.id, building_local_id: b.id, room_name: r.room_name,
-                                    grade_level: r.grade_level, advisory_teacher: r.advisory_teacher,
-                                    room_length: r.room_length, room_width: r.room_width,
-                                    dimension: r.dimension || '', condition: r.condition || 'Good Condition',
-                                    seats: r.seats || ''
+                                    id: r.id, 
+                                    building_local_id: b.id, 
+                                    building_name: b.building_name,
+                                    room_name: r.room_name,
+                                    grade_level: r.grade_level, 
+                                    advisory_teacher: r.advisory_teacher,
+                                    room_length: r.room_length, 
+                                    room_width: r.room_width,
+                                    dimension: r.dimension || '', 
+                                    condition: r.condition || 'Good Condition',
+                                    seats: r.seats || '',
+                                    is_in_use: r.is_in_use !== false
                                 });
                             });
                         }
@@ -492,8 +568,6 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
             if (!progress.completedUnits.includes(7)) {
                 progress.completedUnits.push(7);
-                // The dashboard mapped Unit 10 ID to locked array of 9. Let's just update as needed.
-                if (!progress.completedUnits.includes(10)) progress.completedUnits.push(10);
                 progress.xp += 300;
                 localStorage.setItem('quest_progress', JSON.stringify(progress));
             }
@@ -934,7 +1008,11 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
     };
 
     const handleBack = () => {
-        navigate("/modular-dashboard");
+        if (currentPage > 1) {
+            setCurrentPage(prev => prev - 1);
+        } else {
+            navigate("/modular-dashboard");
+        }
     };
 
     const handleSaveDraftAndExit = async () => {
@@ -1121,7 +1199,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                     <p className="text-[9px] font-bold text-slate-400 tracking-tighter uppercase">{room.dimensions || '7x9'}</p>
                                                 </td>
                                                 <td className="px-4 py-4">
-                                                    <span className="font-bold text-slate-600 text-[11px] whitespace-nowrap">{room.grade_level || '--'}</span>
+                                                    <span className="font-bold text-slate-600 text-[11px] whitespace-nowrap">{(room.grade_level || "").replace(/;/g, ', ') || '--'}</span>
                                                 </td>
                                                 <td className="px-4 py-4 text-center">
                                                     <div className={`inline-flex items-center justify-center w-6 h-6 rounded-lg ${room.condition === 'Good Condition' || room.condition === 'Newly Built' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
@@ -1794,16 +1872,16 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Grade Level(s)</label>
                                                 <div className="space-y-3">
                                                     <div className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-3 py-2 min-h-[44px] flex flex-wrap gap-1.5 focus-within:border-indigo-500 transition-all cursor-pointer">
-                                                        {(room.grade_level || "").split(',').filter(Boolean).map(g => (
+                                                        {parseGradeLevel(room.grade_level).map(g => (
                                                             <span key={g} className="bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 group-hover:bg-indigo-700 transition-colors">
                                                                 {g}
                                                                 <FiX
                                                                     className="cursor-pointer hover:text-rose-300"
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
-                                                                        const currentGrades = (room.grade_level || "").split(',').filter(Boolean);
+                                                                        const currentGrades = parseGradeLevel(room.grade_level);
                                                                         const newGrades = currentGrades.filter(x => x !== g);
-                                                                        setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: newGrades.join(',') } : r));
+                                                                        setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: newGrades.join(';') } : r));
                                                                     }}
                                                                 />
                                                             </span>
@@ -1814,20 +1892,22 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                     <div className="mt-2 flex flex-wrap gap-2">
                                                         {availableGrades.length > 0 ? (
                                                             availableGrades.map(g => {
-                                                                const isSelected = (room.grade_level || "").split(',').filter(Boolean).includes(g.label);
+                                                                const isSelected = parseGradeLevel(room.grade_level).includes(g.label);
                                                                 return (
                                                                     <button
                                                                         key={g.id}
                                                                         type="button"
                                                                         onClick={() => {
-                                                                            const currentGrades = (room.grade_level || "").split(',').filter(Boolean);
+                                                                            const currentGrades = parseGradeLevel(room.grade_level);
                                                                             let newGrades;
                                                                             if (isSelected) {
                                                                                 newGrades = currentGrades.filter(x => x !== g.label);
                                                                             } else {
-                                                                                newGrades = [...currentGrades, g.label];
+                                                                                newGrades = [...new Set([...currentGrades, g.label])];
                                                                             }
-                                                                            setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: newGrades.join(',') } : r));
+                                                                            const joined = newGrades.join(';');
+                                                                            logGradeState(room.id, joined);
+                                                                            setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: joined } : r));
                                                                         }}
                                                                         className={`text-[10px] font-black px-3 py-1.5 rounded-lg border-2 transition-all ${
                                                                             isSelected 
@@ -1847,18 +1927,20 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                         <button
                                                             type="button"
                                                             onClick={() => {
-                                                                const isSelected = (room.grade_level || "").split(',').filter(Boolean).includes("Non-Instructional");
-                                                                const currentGrades = (room.grade_level || "").split(',').filter(Boolean);
+                                                                const isSelected = parseGradeLevel(room.grade_level).includes("Non-Instructional");
+                                                                const currentGrades = parseGradeLevel(room.grade_level);
                                                                 let newGrades;
                                                                 if (isSelected) {
                                                                     newGrades = currentGrades.filter(x => x !== "Non-Instructional");
                                                                 } else {
-                                                                    newGrades = [...currentGrades, "Non-Instructional"];
+                                                                    newGrades = [...new Set([...currentGrades, "Non-Instructional"])];
                                                                 }
-                                                                setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: newGrades.join(',') } : r));
+                                                                const joined = newGrades.join(';');
+                                                                logGradeState(room.id, joined);
+                                                                setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: joined } : r));
                                                             }}
                                                             className={`text-[10px] font-black px-3 py-1.5 rounded-lg border-2 transition-all ${
-                                                                (room.grade_level || "").split(',').filter(Boolean).includes("Non-Instructional")
+                                                                parseGradeLevel(room.grade_level).includes("Non-Instructional")
                                                                     ? "bg-slate-100 border-slate-500 text-slate-700 shadow-sm" 
                                                                     : "bg-white border-gray-100 text-gray-400 hover:border-slate-200"
                                                             }`}

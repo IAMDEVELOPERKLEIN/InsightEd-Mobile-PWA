@@ -354,7 +354,7 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     setIsReviewMode(false);
                     setShowWelcomeBack(true);
                     setTimeout(() => setShowWelcomeBack(false), 3000);
-                } else if (d.unit7_completed || propReadOnly) {
+                } else if (d.unit6_completed || propReadOnly) {
                     setSavedData(d);
                     setIsReviewMode(true);
                 }
@@ -658,7 +658,7 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 unit7_ecarts: JSON.stringify(eCarts),
                 unit7_wash: JSON.stringify(washData),
                 unit7_utilities: JSON.stringify(utilitiesData),
-                unit7_completed: true,
+                unit6_completed: true,
                 u7_ict_smart_tv_cond: ictData.smart_tvs_cond,
                 u7_ict_projector_cond: ictData.projectors_cond,
                 u7_ict_printer_cond: ictData.printers_cond,
@@ -746,7 +746,7 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     label: "Unit 6: School Resources (Furniture, ICT, WASH)",
                     url: `/api/ph_schools/${storedId}`,
                     method: 'PUT',
-                    payload: { ...payload, unit7_completed: true },
+                    payload: { ...payload, unit6_completed: true },
                     schoolId: storedId
                 });
                 await clearUnitDraft(6, storedId);

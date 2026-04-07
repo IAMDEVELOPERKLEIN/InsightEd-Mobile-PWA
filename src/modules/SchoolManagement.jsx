@@ -102,6 +102,18 @@ const SchoolManagement = () => {
         return () => clearInterval(interval);
     }, [showConfirmModal, confirmTimer]);
 
+    // Body Scroll Lock when Modal is Open
+    useEffect(() => {
+        if (showConfirmModal) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'unset';
+        }
+        return () => {
+            document.body.style.overflow = 'unset';
+        };
+    }, [showConfirmModal]);
+
     // Location Options & Coordinates State
     const [locationOptions, setLocationOptions] = useState([]);
     const [locationCoordinates, setLocationCoordinates] = useState([]); // Array of { municipality, barangay, lat, lng }
@@ -1208,8 +1220,8 @@ const SchoolManagement = () => {
 
                 {/* MODAL: Confirmation */}
                 {showConfirmModal && (
-                    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">
-                        <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl transform scale-100 animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-slate-700">
+                    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+                        <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl transform scale-100 animate-in zoom-in-95 duration-200 border border-slate-200 dark:border-slate-700 my-auto">
                             <div className="w-16 h-16 bg-amber-50 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto text-amber-500 mb-6 shadow-sm">
                                 <FiClock size={32} />
                             </div>
