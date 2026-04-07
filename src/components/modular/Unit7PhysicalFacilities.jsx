@@ -166,7 +166,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
     const [editingRepairRoomId, setEditingRepairRoomId] = useState(null);
     const [availableGrades, setAvailableGrades] = useState([]);
 
-    const years = Array.from({ length: currentYear - 1950 + 1 }, (_, i) => currentYear - i);
+    const years = Array.from({ length: currentYear - 1900 + 1 }, (_, i) => currentYear - i);
 
     // ── Data Fetching ─────────────────────────────────────────────────────
     const [isReadOnly, setIsReadOnly] = useState(false);
@@ -263,7 +263,22 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                     const groupName = baseline[`multigrade_groupings_${i}`];
                     if (groupName) mgGroups.push({ id: `mg_${i}`, label: groupName, isMultigrade: true });
                 }
-                setAvailableGrades([...detectedGrades, ...mgGroups]);
+
+                // 3. Filter out monogrades that are part of a MG group
+                const mgGradeNumbers = new Set();
+                mgGroups.forEach(mg => {
+                    const digits = mg.label.match(/\d+/g);
+                    if (digits) digits.forEach(d => mgGradeNumbers.add(d));
+                });
+
+                const filteredMonogrades = detectedGrades.filter(dg => {
+                    const digit = dg.id.replace(/\D/g, '');
+                    if (!digit) return true; // Keep Kinder or others without digits unless strictly needed
+                    return !mgGradeNumbers.has(digit);
+                });
+
+                setAvailableGrades([...filteredMonogrades, ...mgGroups]);
+
 
                 // 4. RESTORE UNIT 7 DATA
                 if (pendingUnit7) {
@@ -1856,7 +1871,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
                                             {!isBuildingCondemned && (
                                                 <div>
-                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Total Seats Capacity</label>
+                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Total Seats</label>
                                                     <input
                                                         type="text"
                                                         inputMode="numeric"

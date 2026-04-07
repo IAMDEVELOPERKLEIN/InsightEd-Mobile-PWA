@@ -1568,6 +1568,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 >
                                                     <option value="" disabled hidden style={{color: '#999'}}>Select Document Type...</option>
                                                     <option value="Transfer Certificate of Title">Transfer Certificate of Title</option>
+                                                    <option value="Native Title">Native Title</option>
                                                     <option value="Special Patents">Special Patents</option>
                                                     <option value="Presidential Proclamations">Presidential Proclamations</option>
                                                     <option value="Deed of Sale">Deed of Sale</option>
