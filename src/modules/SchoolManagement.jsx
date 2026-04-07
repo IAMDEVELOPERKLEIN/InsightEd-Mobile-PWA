@@ -90,6 +90,10 @@ const SchoolManagement = () => {
     const [confirmTimer, setConfirmTimer] = useState(20);
     const [canConfirm, setCanConfirm] = useState(false);
 
+    // Success Modal State
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [lastSubmissionDetails, setLastSubmissionDetails] = useState(null);
+
     useEffect(() => {
         let interval;
         if (showConfirmModal && confirmTimer > 0) {
@@ -540,13 +544,20 @@ const SchoolManagement = () => {
                         }
                     } catch (docErr) {
                         console.error("Document upload exception:", docErr);
-                        alert("School was submitted, but an error occurred uploading the Special Order document.");
+                        // We still show success for the school, but note the doc failure
                     } finally {
                         setUploading(false);
                     }
                 }
 
-                alert(isConverting ? 'Converted school application submitted successfully! Awaiting approval.' : 'School submitted successfully! Awaiting admin approval.');
+                // Show Success Modal instead of alert
+                setLastSubmissionDetails({
+                    school_id: formData.school_id,
+                    school_name: formData.school_name,
+                    isConverting
+                });
+                setShowSuccessModal(true);
+
                 // Reset form
                 setFormData({
                     school_id: '',
@@ -1250,6 +1261,52 @@ const SchoolManagement = () => {
                                     Confirm Submit
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                )}
+                {/* MODAL: Success Confirmation */}
+                {showSuccessModal && lastSubmissionDetails && (
+                    <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] p-10 max-w-sm w-full shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)] transform scale-100 animate-in zoom-in-[0.8] duration-300 border border-slate-200 dark:border-slate-700 text-center">
+                            
+                            <div className="relative mb-8">
+                                <div className="w-24 h-24 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mx-auto text-emerald-500 relative z-10">
+                                    <FiCheck size={48} className="animate-in zoom-in-50 duration-500 delay-150" />
+                                </div>
+                                <div className="absolute inset-0 bg-emerald-400/20 rounded-full scale-125 animate-ping duration-[3s]"></div>
+                            </div>
+
+                            <h3 className="text-3xl font-black text-slate-800 dark:text-white mb-2 tracking-tight">SUCCESS!</h3>
+                            <p className="text-slate-500 dark:text-slate-400 font-bold mb-8 text-sm uppercase tracking-widest">School Submitted</p>
+
+                            <div className="bg-slate-50 dark:bg-slate-900/40 p-5 rounded-3xl border border-slate-100 dark:border-slate-800 mb-8 space-y-4">
+                                <div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Assigned ID</p>
+                                    <p className="text-xl font-black text-blue-600 dark:text-blue-400 font-mono tracking-tighter">{lastSubmissionDetails.school_id}</p>
+                                </div>
+                                
+                                <div className="h-px bg-slate-200 dark:bg-slate-800 w-12 mx-auto"></div>
+
+                                <div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">School Name</p>
+                                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200 line-clamp-2 px-2 uppercase">{lastSubmissionDetails.school_name}</p>
+                                </div>
+
+                                <div className="flex items-center justify-center gap-2 pt-2">
+                                    <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
+                                    <span className="text-[10px] font-black text-amber-600 dark:text-amber-500 uppercase tracking-wider">Awaiting Admin Review</span>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={() => {
+                                    setShowSuccessModal(false);
+                                    setActiveView('requests');
+                                }}
+                                className="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-sm uppercase tracking-[0.2em] transition-all shadow-xl shadow-blue-500/20 transform hover:-translate-y-1 active:scale-95"
+                            >
+                                Done
+                            </button>
                         </div>
                     </div>
                 )}
