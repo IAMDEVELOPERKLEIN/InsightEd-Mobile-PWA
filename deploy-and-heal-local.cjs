@@ -75,12 +75,15 @@ async function deployAndHeal() {
                         // OVERRIDE: Point healer to production targets
                         const remoteCmd = `
                             cd ${SERVER_DIR} && 
-                            tar -xzf ${TAR_FILE} && 
-                            rm ${TAR_FILE} && 
+                            (
+                                tar -xzf ${TAR_FILE} || true
+                            ) && 
+                            rm -f ${TAR_FILE} && 
                             chmod +x forensic_heal.sh &&
                             npm cache clean --force 2>/dev/null && 
                             npm install --omit=dev --legacy-peer-deps && 
                             npm prune --omit=dev --legacy-peer-deps && 
+                            npm cache clean --force 2>/dev/null &&
                             STAGING_DIR=${SERVER_DIR} PM2_NAME=insighted-backend ./forensic_heal.sh
                         `.replace(/\n/g, '').trim();
 

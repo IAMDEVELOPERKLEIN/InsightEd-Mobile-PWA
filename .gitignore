@@ -65,3 +65,8 @@ verify_*.mjs
 *.log
 !README.md
 !CLAUDE.md
+
+# Large Archives
+*.tar.gz
+*.zip
+*.tmp.tar.gz

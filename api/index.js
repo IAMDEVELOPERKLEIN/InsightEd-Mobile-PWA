@@ -146,7 +146,7 @@ const RegisterBetaSchema = z.object({
 });
 
 // --- DATABASE CONNECTION ---
-const dbUrl = process.env.DATABASE_URL || 'postgres://postgres:password@localhost:5432/postgres';
+const dbUrl = process.env.DATABASE_URL || 'postgres://Administrator1:pRZTbQ2T1JD7@stride-posgre-prod-01.postgres.database.azure.com:5432/insightEd';
 const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
 
 console.log(`🔌 Database Connection: ${isLocal ? 'Local' : 'Remote'} (${dbUrl.replace(/:[^:@]*@/, ':****@')})`);
@@ -155,45 +155,63 @@ const { Pool } = pg;
 const pool = new Pool({
   connectionString: dbUrl,
   ssl: isLocal ? false : { rejectUnauthorized: false },
-  max: 50, // Resilient v6.0: Support 1000+ concurrent users
+  max: 80, // Optimized for Cluster Mode (assuming 16 cores, 16*80 = 1280 < 1718)
+  min: 5,  // Pre-warmed connections
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000, 
-  statement_timeout: 30000, // Increased for heavy report generation
+  connectionTimeoutMillis: 10000, // Reduced to 10s to fail fast
   application_name: 'InsightEd_API_Primary'
 });
 
-pool.on('error', (err) => {
-  console.error('💥 Unexpected error on idle database client:', err.message);
+pool.on('connect', (client) => {
+  // Optional: monitor new connections if needed for deep debugging
 });
+
+pool.on('acquire', (client) => {
+  // Optional: monitor connection acquisition throughput
+});
+
+pool.on('error', (err) => {
+  console.error('💥 [DB-POOL] Unexpected error on idle database client:', err.message);
+});
+
+// Proactive Pool Telemetry (Hawkeye Protocol v2.0)
+setInterval(() => {
+  if (pool) {
+    const { totalCount, idleCount, waitingCount } = pool;
+    if (waitingCount > 0) {
+      console.warn(`📡 [DB-POOL-ALERT] Total: ${totalCount} | Idle: ${idleCount} | WAITING: ${waitingCount} ⚠️`);
+    } else if (process.env.DEBUG_POOL === 'true' || totalCount > 100) {
+        console.log(`📡 [DB-POOL-HEALTH] Total: ${totalCount} | Idle: ${idleCount} | Waiting: ${waitingCount}`);
+    }
+  }
+}, 10000);
 
 // Inject pool into chatbot module
 setPool(pool);
 
-// --- DB INITIALIZATION & SCHEMA HARDENING ---
-(async () => {
+// --- [Hawkeye Protocol] DB INITIALIZATION & SCHEMA HARDENING (Consolidated) ---
+const hardenSchoolsIernSchema = async (client) => {
     try {
         console.log('🏗️ [DB-Init] Verifying schools_IERN schema...');
         
-        // Cleanup unintended lowercase columns
-        await pool.query('ALTER TABLE "schools_IERN" DROP COLUMN IF EXISTS latitude');
-        await pool.query('ALTER TABLE "schools_IERN" DROP COLUMN IF EXISTS longitude');
-        await pool.query('ALTER TABLE "schools_IERN" DROP COLUMN IF EXISTS mother_school_id');
-
-        // Ensure correct PascalCase columns exist
-        await pool.query('ALTER TABLE "schools_IERN" ADD COLUMN IF NOT EXISTS "Latitude" NUMERIC(10, 7)');
-        await pool.query('ALTER TABLE "schools_IERN" ADD COLUMN IF NOT EXISTS "Longitude" NUMERIC(10, 7)');
-        await pool.query('ALTER TABLE "schools_IERN" ADD COLUMN IF NOT EXISTS "Mother_School_ID" TEXT');
+        // [Hawkeye Protocol] Consolidated ALTER TABLE
+        await client.query(`
+            ALTER TABLE "schools_IERN" 
+            DROP COLUMN IF EXISTS latitude,
+            DROP COLUMN IF EXISTS longitude,
+            DROP COLUMN IF EXISTS mother_school_id,
+            ADD COLUMN IF NOT EXISTS "Latitude" NUMERIC(10, 7),
+            ADD COLUMN IF NOT EXISTS "Longitude" NUMERIC(10, 7),
+            ADD COLUMN IF NOT EXISTS "Mother_School_ID" TEXT,
+            ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'Active';
+        `);
         
-        // Add status column and initialize CURRENT data as 'Active'
-        await pool.query('ALTER TABLE "schools_IERN" ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT \'Active\'');
-        await pool.query('UPDATE "schools_IERN" SET "status" = \'Active\' WHERE "status" IS NULL');
+        await client.query('UPDATE "schools_IERN" SET "status" = \'Active\' WHERE "status" IS NULL');
 
-        // UPGRADE: Convert hard unique constraint to Partial Unique Index
-        // This allows history (multiple IDs in table) but only ONE can be 'Active'
         try {
-            await pool.query('ALTER TABLE "schools_IERN" DROP CONSTRAINT IF EXISTS schools_iern_schoolid_unique');
-            await pool.query('DROP INDEX IF EXISTS idx_schoolid_active');
-            await pool.query('CREATE UNIQUE INDEX idx_schoolid_active ON "schools_IERN" ("SchoolID") WHERE status = \'Active\'');
+            await client.query('ALTER TABLE "schools_IERN" DROP CONSTRAINT IF EXISTS schools_iern_schoolid_unique');
+            await client.query('DROP INDEX IF EXISTS idx_schoolid_active');
+            await client.query('CREATE UNIQUE INDEX idx_schoolid_active ON "schools_IERN" ("SchoolID") WHERE status = \'Active\'');
             console.log('✅ [DB-Init] SchoolID constraint upgraded to Partial Unique (Active-only).');
         } catch (idxErr) {
             console.warn('⚠️ [DB-Init] Index upgrade warning (might already exist):', idxErr.message);
@@ -203,7 +221,7 @@ setPool(pool);
     } catch (err) {
         console.error('❌ [DB-Init] Failed to harden schools_IERN schema:', err.message);
     }
-})();
+};
 
 console.log('✅ [Env] DATABASE_URL loaded:', process.env.DATABASE_URL ? 'YES' : 'NO');
 
@@ -988,7 +1006,6 @@ if (process.env.NEW_DATABASE_URL) {
     max: 20, // Resilient v6.0: Scaled for secondary sync
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
-    statement_timeout: 30000,
     application_name: 'InsightEd_API_Secondary'
   });
 
@@ -1066,30 +1083,25 @@ const runAutoMigrations = async () => {
   try {
     await ensureMigrationTable();
 
-    const migrationPromises = [
-      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE'),
-      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS school_head TEXT;'),
-      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS contact_number TEXT;'),
-      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2_simplified_enrollment JSONB'),
-      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_self_contained_count INTEGER DEFAULT 0'),
-      // New SNED Redesign Columns
-      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS has_sned BOOLEAN DEFAULT FALSE'),
-      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_total_count INTEGER DEFAULT 0'),
-      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_program_type TEXT'),
-      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_organized_class_count INTEGER DEFAULT 0')
-    ];
-
-    // Multi-grade columns
-    const mgCols = ['multigrade_groupings_1', 'multigrade_groupings_2', 'multigrade_groupings_3'];
-    for (const col of mgCols) {
-      migrationPromises.push(pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} TEXT`));
-    }
-    const mgEnrCols = ['multigrade_enrollment_1', 'multigrade_enrollment_2', 'multigrade_enrollment_3'];
-    for (const col of mgEnrCols) {
-      migrationPromises.push(pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} INTEGER DEFAULT 0`));
-    }
-
-    await Promise.all(migrationPromises);
+    // [Hawkeye Protocol] Consolidate multiple ALTER TABLEs into single bulk queries
+    await pool.query(`
+      ALTER TABLE ph_schools 
+      ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS school_head TEXT,
+      ADD COLUMN IF NOT EXISTS contact_number TEXT,
+      ADD COLUMN IF NOT EXISTS unit2_simplified_enrollment JSONB,
+      ADD COLUMN IF NOT EXISTS sned_self_contained_count INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS has_sned BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS sned_total_count INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS sned_program_type TEXT,
+      ADD COLUMN IF NOT EXISTS sned_organized_class_count INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS multigrade_groupings_1 TEXT,
+      ADD COLUMN IF NOT EXISTS multigrade_groupings_2 TEXT,
+      ADD COLUMN IF NOT EXISTS multigrade_groupings_3 TEXT,
+      ADD COLUMN IF NOT EXISTS multigrade_enrollment_1 INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS multigrade_enrollment_2 INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS multigrade_enrollment_3 INTEGER DEFAULT 0;
+    `);
 
     // Unit 4
     await unit4MigrateCols();
@@ -18602,14 +18614,25 @@ app.get('/api/lgu/project/:id', async (req, res) => {
 const startServer = async () => {
   try {
     console.log("🚀 Starting database initialization...");
-    await runAutoMigrations();
-    await initDB();
-
-    const client = await pool.connect();
+    
+    // [Hawkeye Protocol] Distributed Lock to prevent concurrent migrations in cluster mode
+    const migClient = await pool.connect();
     try {
-      await runMigrations(client, "Primary");
+      const lockRes = await migClient.query('SELECT pg_try_advisory_lock(654321)');
+      const isMigrator = lockRes.rows[0].pg_try_advisory_lock;
+
+      if (isMigrator) {
+        console.log("🔒 [Cluster] Migration lock ACQUIRED. Running schema auto-hardening...");
+        await hardenSchoolsIernSchema(migClient);
+        await runAutoMigrations();
+        await initDB();
+        await runMigrations(migClient, "Primary");
+        console.log("🔓 [Cluster] Migrations complete. Lock will be released on disconnect.");
+      } else {
+        console.log("⏭️ [Cluster] Migration lock already held by another worker. Skipping redundant schema check.");
+      }
     } finally {
-      client.release();
+      migClient.release();
     }
 
     console.log("✅ Primary DB Init finished. Running secondary modules in parallel...");
