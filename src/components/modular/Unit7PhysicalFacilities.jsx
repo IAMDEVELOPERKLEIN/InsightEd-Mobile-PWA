@@ -320,7 +320,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
                     const u2Entry = u2Parsed.find(x => x.grade_level === pg.id);
                     const isActive = u2Entry ? u2Entry.is_active !== false : isOffered;
-                    const hasEnrollment = u2Entry ? (parseInt(u2Entry.total) >= 0) : false;
+                    const hasEnrollment = u2Entry ? (parseInt(u2Entry.total) >= 0) : false; // Note: using >= 0 to include active grades even if zero enrollment
 
                     if (hasEnrollment || (isOffered && isActive)) {
                         detectedGrades.push({ id: pg.id, label: pg.label, isMultigrade: false });
@@ -395,15 +395,15 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                         if (b.rooms && Array.isArray(b.rooms)) {
                             b.rooms.forEach(r => {
                                 allRooms.push({
-                                    id: r.id, 
-                                    building_local_id: b.id, 
+                                    id: r.id,
+                                    building_local_id: b.id,
                                     building_name: b.building_name,
                                     room_name: r.room_name,
-                                    grade_level: r.grade_level, 
+                                    grade_level: r.grade_level,
                                     advisory_teacher: r.advisory_teacher,
-                                    room_length: r.room_length, 
+                                    room_length: r.room_length,
                                     room_width: r.room_width,
-                                    dimension: r.dimension || '', 
+                                    dimension: r.dimension || '',
                                     condition: r.condition || 'Good Condition',
                                     seats: r.seats || '',
                                     is_in_use: r.is_in_use !== false
@@ -921,16 +921,6 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             };
 
             if (!navigator.onLine) {
-<<<<<<< Updated upstream
-=======
-                await addModularToOutbox({
-                    unitId: 7, label: "Unit 7: Physical Facilities (Inventory & Mapping)",
-                    url: `/api/save-physical-facilities`, method: 'POST',
-                    payload, schoolId
-                });
-                await clearUnitDraft(7, schoolId);
-
->>>>>>> Stashed changes
                 // Update local quest progress
                 const stored = localStorage.getItem('quest_progress');
                 let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
@@ -1547,236 +1537,12 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                     </div>
                                                     <p className="text-sm font-bold text-gray-500 mt-1">{b.category} &bull; {b.storey} Storey &bull; {roomsData.filter(r => r.building_local_id === b.id).length} Rooms</p>
                                                 </div>
-<<<<<<< Updated upstream
-                                            )}
-
-                                            <div className="md:col-span-2">
-                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Grade Level(s)</label>
-                                                <div className="space-y-3">
-                                                    <div className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-3 py-2 min-h-[44px] flex flex-wrap gap-1.5 focus-within:border-indigo-500 transition-all cursor-pointer">
-                                                        {parseGradeLevel(room.grade_level).map(g => (
-                                                            <span key={g} className="bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 group-hover:bg-indigo-700 transition-colors">
-                                                                {g}
-                                                                <FiX
-                                                                    className="cursor-pointer hover:text-rose-300"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        const currentGrades = parseGradeLevel(room.grade_level);
-                                                                        const newGrades = currentGrades.filter(x => x !== g);
-                                                                        setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: newGrades.join(';') } : r));
-                                                                    }}
-                                                                />
-                                                            </span>
-                                                        ))}
-                                                        {!(room.grade_level || "") && <span className="text-gray-400 text-sm font-medium py-0.5">Select Grade Levels</span>}
-                                                    </div>
-
-                                                    <div className="mt-2 flex flex-wrap gap-2">
-                                                        {availableGrades.length > 0 ? (
-                                                            availableGrades.map(g => {
-                                                                const isSelected = parseGradeLevel(room.grade_level).includes(g.label);
-                                                                return (
-                                                                    <button
-                                                                        key={g.id}
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            const currentGrades = parseGradeLevel(room.grade_level);
-                                                                            let newGrades;
-                                                                            if (isSelected) {
-                                                                                newGrades = currentGrades.filter(x => x !== g.label);
-                                                                            } else {
-                                                                                newGrades = [...new Set([...currentGrades, g.label])];
-                                                                            }
-                                                                            const joined = newGrades.join(';');
-                                                                            logGradeState(room.id, joined);
-                                                                            setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: joined } : r));
-                                                                        }}
-                                                                        className={`text-[10px] font-black px-3 py-1.5 rounded-lg border-2 transition-all ${
-                                                                            isSelected 
-                                                                                ? "bg-indigo-50 border-indigo-500 text-indigo-700 shadow-sm" 
-                                                                                : "bg-white border-gray-100 text-gray-500 hover:border-indigo-200"
-                                                                        }`}
-                                                                    >
-                                                                        {g.label}
-                                                                    </button>
-                                                                );
-                                                            })
-                                                        ) : (
-                                                            <p className="text-[10px] font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-100 italic">
-                                                                ⚠️ No audited grades found in Unit 7
-                                                            </p>
-                                                        )}
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                const isSelected = parseGradeLevel(room.grade_level).includes("Non-Instructional");
-                                                                const currentGrades = parseGradeLevel(room.grade_level);
-                                                                let newGrades;
-                                                                if (isSelected) {
-                                                                    newGrades = currentGrades.filter(x => x !== "Non-Instructional");
-                                                                } else {
-                                                                    newGrades = [...new Set([...currentGrades, "Non-Instructional"])];
-                                                                }
-                                                                const joined = newGrades.join(';');
-                                                                logGradeState(room.id, joined);
-                                                                setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: joined } : r));
-                                                            }}
-                                                            className={`text-[10px] font-black px-3 py-1.5 rounded-lg border-2 transition-all ${
-                                                                parseGradeLevel(room.grade_level).includes("Non-Instructional")
-                                                                    ? "bg-slate-100 border-slate-500 text-slate-700 shadow-sm" 
-                                                                    : "bg-white border-gray-100 text-gray-400 hover:border-slate-200"
-                                                            }`}
-                                                        >
-                                                            Non-Instructional
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {!isBuildingCondemned && (
-                                                <div>
-                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Total Seats</label>
-                                                    <input
-                                                        type="text"
-                                                        inputMode="numeric"
-                                                        value={room.seats || ""}
-                                                        onChange={(e) => {
-                                                            const val = e.target.value.replace(/[^0-9]/g, '');
-                                                            setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, seats: val } : r));
-                                                        }}
-                                                        placeholder="0"
-                                                        className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
-                                                    />
-                                                </div>
-                                            )}
-                                            
-                                            {/* In Use / Not Used Toggle */}
-                                            <div className="md:col-span-2 pt-4 border-t-2 border-dashed border-gray-100 flex items-center justify-between mt-2">
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg shadow-sm ${room.is_in_use !== false ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'}`}>
-                                                        {room.is_in_use !== false ? '✅' : '🚫'}
-                                                    </div>
-                                                    <div>
-                                                        <p className={`font-black text-[11px] uppercase tracking-wider ${room.is_in_use !== false ? 'text-emerald-600' : 'text-slate-400'}`}>
-                                                            {room.is_in_use !== false ? 'Currently In Use' : 'Not Currently In Use'}
-                                                        </p>
-                                                        <p className="text-[9px] font-bold text-gray-400 mt-0.5">Instructional Space Status</p>
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, is_in_use: !(r.is_in_use !== false) } : r))}
-                                                    className={`relative w-12 h-6 rounded-full transition-all duration-500 ease-out outline-none ${room.is_in_use !== false ? 'bg-emerald-500' : 'bg-slate-200'}`}
-                                                >
-                                                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-500 ease-out shadow-sm ${room.is_in_use !== false ? 'left-7' : 'left-1'}`} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    );
-                                });
-                            })()}
-
-                            {/* Pagination Controls */}
-                            {roomsData.length > roomsPerPage && (
-                                <div className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl">
-                                    <button
-                                        onClick={() => setRoomsPage(prev => Math.max(prev - 1, 1))}
-                                        disabled={roomsPage === 1}
-                                        className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-gray-600 disabled:opacity-50"
-                                    >
-                                        <FiArrowLeft /> Previous
-                                    </button>
-                                    <span className="font-black text-gray-400 uppercase text-xs tracking-widest">
-                                        Page {roomsPage} of {Math.ceil(roomsData.length / roomsPerPage)}
-                                    </span>
-                                    <button
-                                        onClick={() => setRoomsPage(prev => Math.min(prev + 1, Math.ceil(roomsData.length / roomsPerPage)))}
-                                        disabled={roomsPage === Math.ceil(roomsData.length / roomsPerPage)}
-                                        className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-indigo-600 disabled:opacity-50"
-                                    >
-                                        Next <FiArrowRight />
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </motion.div>
-                )}
-
-                {/* ────────────────────────────────────────────────────────
-                    PHASE 2: Repair Assessment
-                    ──────────────────────────────────────────────────────── */}
-                {currentPage === 4 && (
-                    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-                        <h2 className="text-3xl font-black text-gray-800 tracking-tight leading-tight mb-2">
-                            Repair Assessment 🛠️
-                        </h2>
-                        <p className="text-gray-500 mb-6 font-medium">Assess rooms marked for repair during registration.</p>
-
-                        <div className="space-y-6">
-                            {roomsData.filter(r => r.condition === 'Repair').length === 0 ? (
-                                <div className="bg-emerald-50 p-8 rounded-3xl border-2 border-emerald-100 text-center">
-                                    <p className="text-emerald-800 font-bold text-xl">✨ All rooms are in good shape!</p>
-                                    <p className="text-emerald-600 mt-2 font-medium">No rooms were marked for repair. You can proceed to the next step.</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    {roomsData.filter(r => r.condition === 'Repair').map(room => {
-                                        const building = allBuildings.find(b => b.id === room.building_local_id);
-                                        const bName = building?.building_name || building?.building_no || "";
-                                        const isAssessed = repairAssessments.some(a => a.building_name === bName && a.room_name === room.room_name);
-
-                                        return (
-                                            <div key={room.id} className="bg-white p-6 rounded-3xl shadow-sm border-2 border-gray-100">
-                                                <div className="flex justify-between items-center">
-                                                    <div>
-                                                        <h4 className="font-black text-xl text-gray-800">{room.room_name}</h4>
-                                                        <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-widest">{bName || 'N/A'}</p>
-                                                        {isAssessed && <p className="text-xs font-black text-emerald-500 mt-2 uppercase flex items-center gap-1"><FiCheckCircle /> Assessment Recorded</p>}
-                                                    </div>
-                                                    <button
-                                                        onClick={() => {
-                                                            const bName = building?.building_name || building?.building_no || "";
-                                                            setRepairRoomFormData({
-                                                                building_name: bName,
-                                                                room_name: room.room_name,
-                                                                room_length: room.room_length || 9,
-                                                                room_width: room.room_width || 7
-                                                            });
-
-                                                            // Populate previous assessments
-                                                            const existingItems = repairAssessments.filter(a =>
-                                                                a.building_name === bName &&
-                                                                a.room_name === room.room_name
-                                                            );
-
-                                                            const initialState = {};
-                                                            existingItems.forEach(item => {
-                                                                initialState[item.item] = {
-                                                                    oms: item.oms || "",
-                                                                    condition: item.condition || "Repair",
-                                                                    damage_ratio: item.damage_ratio || 0,
-                                                                    recommend_action: item.recommend_action || "Routine Repair",
-                                                                    demo_justification: item.demo_justification || "",
-                                                                    remarks: item.remarks || ""
-                                                                };
-                                                            });
-                                                            setRepairItemsState(initialState);
-
-                                                            setEditingRepairRoomId(bName + "-" + room.room_name);
-                                                            setShowRepairModal(true);
-                                                        }}
-                                                        className={`p-4 rounded-2xl shadow-lg transition-all active:scale-95 ${isAssessed ? 'bg-indigo-50 text-indigo-500 shadow-indigo-100' : 'bg-amber-500 text-white shadow-amber-100'}`}
-                                                    >
-                                                        {isAssessed ? <FiEdit2 className="w-6 h-6" /> : <FiPlus className="w-6 h-6" />}
-=======
                                                 <div className="flex flex-col gap-2">
                                                     <button onClick={() => handleEditBuilding(b)} className="p-3 bg-indigo-50 text-indigo-500 rounded-xl hover:bg-indigo-100 transition-colors">
                                                         <FiEdit2 className="w-5 h-5" />
                                                     </button>
                                                     <button onClick={() => handleDeleteBuilding(b.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors">
                                                         <FiTrash2 className="w-5 h-5" />
->>>>>>> Stashed changes
                                                     </button>
                                                 </div>
                                             </div>
@@ -2106,16 +1872,16 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Grade Level(s)</label>
                                                         <div className="space-y-3">
                                                             <div className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-3 py-2 min-h-[44px] flex flex-wrap gap-1.5 focus-within:border-indigo-500 transition-all cursor-pointer">
-                                                                {(room.grade_level || "").split(',').filter(Boolean).map(g => (
+                                                                {parseGradeLevel(room.grade_level).map(g => (
                                                                     <span key={g} className="bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 group-hover:bg-indigo-700 transition-colors">
                                                                         {g}
                                                                         <FiX
                                                                             className="cursor-pointer hover:text-rose-300"
                                                                             onClick={(e) => {
                                                                                 e.stopPropagation();
-                                                                                const currentGrades = (room.grade_level || "").split(',').filter(Boolean);
+                                                                                const currentGrades = parseGradeLevel(room.grade_level);
                                                                                 const newGrades = currentGrades.filter(x => x !== g);
-                                                                                setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: newGrades.join(',') } : r));
+                                                                                setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: newGrades.join(';') } : r));
                                                                             }}
                                                                         />
                                                                     </span>
@@ -2126,24 +1892,26 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                             <div className="mt-2 flex flex-wrap gap-2">
                                                                 {availableGrades.length > 0 ? (
                                                                     availableGrades.map(g => {
-                                                                        const isSelected = (room.grade_level || "").split(',').filter(Boolean).includes(g.label);
+                                                                        const isSelected = parseGradeLevel(room.grade_level).includes(g.label);
                                                                         return (
                                                                             <button
                                                                                 key={g.id}
                                                                                 type="button"
                                                                                 onClick={() => {
-                                                                                    const currentGrades = (room.grade_level || "").split(',').filter(Boolean);
+                                                                                    const currentGrades = parseGradeLevel(room.grade_level);
                                                                                     let newGrades;
                                                                                     if (isSelected) {
                                                                                         newGrades = currentGrades.filter(x => x !== g.label);
                                                                                     } else {
-                                                                                        newGrades = [...currentGrades, g.label];
+                                                                                        newGrades = [...new Set([...currentGrades, g.label])];
                                                                                     }
-                                                                                    setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: newGrades.join(',') } : r));
+                                                                                    const joined = newGrades.join(';');
+                                                                                    logGradeState(room.id, joined);
+                                                                                    setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: joined } : r));
                                                                                 }}
                                                                                 className={`text-[10px] font-black px-3 py-1.5 rounded-lg border-2 transition-all ${isSelected
-                                                                                    ? "bg-indigo-50 border-indigo-500 text-indigo-700 shadow-sm"
-                                                                                    : "bg-white border-gray-100 text-gray-500 hover:border-indigo-200"
+                                                                                        ? "bg-indigo-50 border-indigo-500 text-indigo-700 shadow-sm"
+                                                                                        : "bg-white border-gray-100 text-gray-500 hover:border-indigo-200"
                                                                                     }`}
                                                                             >
                                                                                 {g.label}
@@ -2158,19 +1926,21 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => {
-                                                                        const isSelected = (room.grade_level || "").split(',').filter(Boolean).includes("Non-Instructional");
-                                                                        const currentGrades = (room.grade_level || "").split(',').filter(Boolean);
+                                                                        const isSelected = parseGradeLevel(room.grade_level).includes("Non-Instructional");
+                                                                        const currentGrades = parseGradeLevel(room.grade_level);
                                                                         let newGrades;
                                                                         if (isSelected) {
                                                                             newGrades = currentGrades.filter(x => x !== "Non-Instructional");
                                                                         } else {
-                                                                            newGrades = [...currentGrades, "Non-Instructional"];
+                                                                            newGrades = [...new Set([...currentGrades, "Non-Instructional"])];
                                                                         }
-                                                                        setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: newGrades.join(',') } : r));
+                                                                        const joined = newGrades.join(';');
+                                                                        logGradeState(room.id, joined);
+                                                                        setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: joined } : r));
                                                                     }}
-                                                                    className={`text-[10px] font-black px-3 py-1.5 rounded-lg border-2 transition-all ${(room.grade_level || "").split(',').filter(Boolean).includes("Non-Instructional")
-                                                                        ? "bg-slate-100 border-slate-500 text-slate-700 shadow-sm"
-                                                                        : "bg-white border-gray-100 text-gray-400 hover:border-slate-200"
+                                                                    className={`text-[10px] font-black px-3 py-1.5 rounded-lg border-2 transition-all ${parseGradeLevel(room.grade_level).includes("Non-Instructional")
+                                                                            ? "bg-slate-100 border-slate-500 text-slate-700 shadow-sm"
+                                                                            : "bg-white border-gray-100 text-gray-400 hover:border-slate-200"
                                                                         }`}
                                                                 >
                                                                     Non-Instructional
@@ -2181,7 +1951,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
                                                     {!isBuildingCondemned && (
                                                         <div>
-                                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Total Seats Capacity</label>
+                                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Total Seats</label>
                                                             <input
                                                                 type="text"
                                                                 inputMode="numeric"
@@ -2538,4 +2308,4 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             </AnimatePresence>
         </div>
     );
-};
+}
