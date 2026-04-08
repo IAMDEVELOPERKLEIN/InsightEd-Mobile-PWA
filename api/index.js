@@ -13608,7 +13608,7 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
       FROM "schools_IERN" s
       LEFT JOIN ph_schools sp ON s."SchoolID" = sp.school_id
       LEFT JOIN school_summary ss ON s."SchoolID" = ss.school_id
-      WHERE UPPER(TRIM(s."Region")) ~* ('^' || $1 || '($|[^a-zA-Z0-9])')
+      WHERE UPPER(TRIM(s."Region")) ~* ('^' || $1 || '($|[^a-zA-Z0-9])') AND s.status = 'Active'
       GROUP BY UPPER(TRIM(s."Division"))
       ORDER BY UPPER(TRIM(s."Division"))
     `;
@@ -14181,7 +14181,7 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
       LEFT JOIN ph_schools sp ON s."SchoolID" = sp.school_id
       LEFT JOIN school_summary ss ON s."SchoolID" = ss.school_id
       WHERE UPPER(TRIM(s."Region")) ~* ('^' || $1 || '($|[^a-zA-Z0-9])') AND
-            UPPER(TRIM(s."Division")) = UPPER(TRIM($2))
+            UPPER(TRIM(s."Division")) = UPPER(TRIM($2)) AND s.status = 'Active'
       GROUP BY UPPER(TRIM(${groupCol}))
       ORDER BY UPPER(TRIM(${groupCol})) ASC
     `;
@@ -14215,7 +14215,7 @@ app.get('/api/monitoring/schools', async (req, res) => {
     const offset = (pageNum - 1) * limitNum;
 
     // Base WHERE using schools table (source of truth)
-    let whereClauses = [];
+    let whereClauses = ["s.status = 'Active'"];
     let params = [];
     // removed: whereClauses.push(`s.iern IS NOT NULL`);
     if (region) {
