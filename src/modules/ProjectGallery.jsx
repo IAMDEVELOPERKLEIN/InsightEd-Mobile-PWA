@@ -8,7 +8,7 @@ import { cacheGallery, getCachedGallery } from '../db';
 import { resolveAssetUrl } from '../utils/assetHelper';
 
 // --- LAZY IMAGE COMPONENT ---
-const LazyImage = ({ imageId, meta, onClick }) => {
+const LazyImage = ({ imageId, meta, index, onClick }) => {
     const [src, setSrc] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
@@ -70,7 +70,7 @@ const LazyImage = ({ imageId, meta, onClick }) => {
     return (
         <div
             className="bg-white rounded-xl overflow-hidden shadow-sm border border-slate-200 active:scale-95 transition-transform"
-            onClick={() => onClick({ ...meta, image_data: src })}
+            onClick={() => onClick(index)}
         >
             <img
                 src={src}
@@ -102,7 +102,7 @@ const ProjectGallery = () => {
     const navigate = useNavigate();
     const [images, setImages] = useState([]); // Now this will hold METADATA only
     const [loading, setLoading] = useState(true);
-    const [selectedImage, setSelectedImage] = useState(null);
+    const [selectedImageIndex, setSelectedImageIndex] = useState(null);
     const [deletingId, setDeletingId] = useState(null);
 
     const API_BASE = '';
@@ -151,13 +151,44 @@ const ProjectGallery = () => {
             });
             if (!res.ok) throw new Error("Failed to delete image");
             setImages(prev => prev.filter(img => img.id !== imageId));
-            setSelectedImage(null);
+            setSelectedImageIndex(null);
         } catch (err) {
             alert("Error deleting photo: " + err.message);
         } finally {
             setDeletingId(null);
         }
     };
+
+    const goToNext = (e) => {
+        if (e) e.stopPropagation();
+        if (images.length <= 1) return;
+        setSelectedImageIndex((prev) => (prev + 1) % images.length);
+    };
+
+    const goToPrev = (e) => {
+        if (e) e.stopPropagation();
+        if (images.length <= 1) return;
+        setSelectedImageIndex((prev) => (prev - 1 + images.length) % images.length);
+    };
+
+    // Keyboard support
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (selectedImageIndex === null) return;
+            if (e.key === 'ArrowRight') goToNext();
+            if (e.key === 'ArrowLeft') goToPrev();
+            if (e.key === 'Escape') setSelectedImageIndex(null);
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedImageIndex, images.length]);
+
+    const selectedImage = selectedImageIndex !== null ? images[selectedImageIndex] : null;
+    const resolvedZoomSrc = selectedImage ? (
+        (typeof selectedImage.image_data === 'string' && (selectedImage.image_data.startsWith('/uploads/') || selectedImage.image_data.startsWith('/api/asset/')))
+            ? resolveAssetUrl(selectedImage.image_data)
+            : (selectedImage.image_data.startsWith('http') || selectedImage.image_data.startsWith('data:') ? selectedImage.image_data : `data:image/jpeg;base64,${selectedImage.image_data}`)
+    ) : null;
 
     return (
         <PageTransition>
@@ -193,12 +224,13 @@ const ProjectGallery = () => {
                         </div>
                     ) : (
                         <div className="grid grid-cols-2 gap-3">
-                            {images.map((meta) => (
+                            {images.map((meta, idx) => (
                                 <LazyImage
                                     key={meta.id}
                                     imageId={meta.id}
                                     meta={meta}
-                                    onClick={(fullData) => setSelectedImage(fullData)}
+                                    index={idx}
+                                    onClick={(index) => setSelectedImageIndex(index)}
                                 />
                             ))}
                         </div>
@@ -209,16 +241,42 @@ const ProjectGallery = () => {
                 {selectedImage && createPortal(
                     <div
                         className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in duration-200"
-                        onClick={() => setSelectedImage(null)}
+                        onClick={() => setSelectedImageIndex(null)}
                     >
+                        {/* Status Bar */}
+                        <div className="absolute top-0 left-0 right-0 p-6 flex items-center justify-between z-[102] bg-gradient-to-b from-black/60 to-transparent">
+                            <div className="flex flex-col">
+                                <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest leading-none">Photo {selectedImageIndex + 1} of {images.length}</p>
+                                <p className="text-white text-sm font-bold mt-1">{selectedImage.school_name || 'Project Evidence'}</p>
+                            </div>
+                            <button
+                                className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center text-white text-xl hover:bg-white/20 transition backdrop-blur-md"
+                                onClick={() => setSelectedImageIndex(null)}
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Navigation Arrows */}
+                        {images.length > 1 && (
+                            <>
+                                <button
+                                    onClick={goToPrev}
+                                    className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/10 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition z-[101] backdrop-blur-sm"
+                                >
+                                    <span className="text-2xl mr-1">‹</span>
+                                </button>
+                                <button
+                                    onClick={goToNext}
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white/10 rounded-full flex items-center justify-center text-white hover:bg-white/20 transition z-[101] backdrop-blur-sm"
+                                >
+                                    <span className="text-2xl ml-1">›</span>
+                                </button>
+                            </>
+                        )}
+
                         <button
-                            className="absolute top-10 right-6 w-10 h-10 bg-white/10 rounded-full flex items-center justify-center text-white text-2xl hover:bg-white/20 transition"
-                            onClick={() => setSelectedImage(null)}
-                        >
-                            ✕
-                        </button>
-                        <button
-                            className="absolute top-10 left-6 w-10 h-10 bg-red-500/80 rounded-full flex items-center justify-center text-white hover:bg-red-600 transition"
+                            className="absolute bottom-10 right-6 w-12 h-12 bg-red-500/80 rounded-2xl flex items-center justify-center text-white hover:bg-red-600 transition z-[101] shadow-xl"
                             onClick={(e) => { e.stopPropagation(); handleDeleteImage(selectedImage.id); }}
                             disabled={deletingId === selectedImage.id}
                             title="Delete photo"
@@ -226,11 +284,11 @@ const ProjectGallery = () => {
                             {deletingId === selectedImage.id ? '...' : '🗑'}
                         </button>
 
-                        <div className="w-full max-w-4xl max-h-[70vh] flex items-center justify-center">
+                        <div className="w-full max-w-4xl h-[60vh] flex items-center justify-center relative group">
                             <img
-                                src={selectedImage.image_data}
+                                src={resolvedZoomSrc}
                                 alt="Zoomed progress"
-                                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl transition-all duration-300"
                                 onClick={(e) => e.stopPropagation()}
                             />
                         </div>

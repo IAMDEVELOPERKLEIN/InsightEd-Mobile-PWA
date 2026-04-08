@@ -55,6 +55,7 @@ import ChatModule from './modules/ChatModule'; // <--- RESTORED THIS
 import EducationalDashboard from './modules/EducationalDashboard';
 import ProjectSummaryDashboard from './modules/ProjectSummaryDashboard';
 import { ROLE_GROUPS } from './config/roleGroups';
+import { EFDFilterProvider } from './context/EFDFilterContext';
 
 
 
@@ -422,9 +423,11 @@ import ForceUpdateModal from './components/ForceUpdateModal';
 function App() {
   return (
     <GlobalErrorBoundary>
-      <Router>
-        <AppContent />
-      </Router>
+      <EFDFilterProvider>
+        <Router>
+          <AppContent />
+        </Router>
+      </EFDFilterProvider>
     </GlobalErrorBoundary>
   );
 }

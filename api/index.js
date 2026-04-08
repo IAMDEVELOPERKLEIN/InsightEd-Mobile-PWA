@@ -59,6 +59,41 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
+// --- PROJECT CATEGORY NORMALIZER (auto-cleans messy imports & API saves) ---
+const CATEGORY_ALIASES = {
+  'NEW CONSTRUCTION': 'New Construction',
+  'REPAIR': 'Repair and Rehab',
+  'REPAIR AND REHAB': 'Repair and Rehab',
+  'LMS': 'Last Mile Schools',
+  'LAST MILE SCHOOLS': 'Last Mile Schools',
+  'HEALTH FACILITIES': 'Health facilities',
+  'SCHOOL HEALTH FACILITIES': 'Health facilities',
+  'GABALDON': 'Gabaldon Restoration',
+  'GABALDON RESTORATION': 'Gabaldon Restoration',
+  'LIBRARY HUB': 'Library Hub',
+  'ILRC': 'SpEd Inclusive Learning Resource Centers (ILRC)',
+  'SPED INCLUSIVE LEARNING RESOURCE CENTERS (ILRC)': 'SpEd Inclusive Learning Resource Centers (ILRC)',
+  'ALS-CLC': 'Alternative Learning System - Community Based Learning Centers (ALS-CLC)',
+  'ALS CLC': 'Alternative Learning System - Community Based Learning Centers (ALS-CLC)',
+  'ALTERNATIVE LEARNING SYSTEM - COMMUNITY BASED LEARNING CENTERS (ALS-CLC)': 'Alternative Learning System - Community Based Learning Centers (ALS-CLC)',
+  'MIDRISE SCHOOL BUILDING': 'Midrise School Building',
+  'QRF': 'QRF',
+  'ELECTRIFICATION': 'Electrification',
+};
+const CANONICAL_CATEGORIES = [...new Set(Object.values(CATEGORY_ALIASES))];
+
+function normalizeProjectCategory(raw) {
+  if (!raw || typeof raw !== 'string') return raw;
+  const trimmed = raw.trim();
+  // 1. Exact match to a canonical value → no change needed
+  if (CANONICAL_CATEGORIES.includes(trimmed)) return trimmed;
+  // 2. Lookup by uppercased alias
+  const mapped = CATEGORY_ALIASES[trimmed.toUpperCase()];
+  if (mapped) return mapped;
+  // 3. No match → return trimmed original (don't destroy unknown data)
+  return trimmed;
+}
+
 // --- ZOD VALIDATION SCHEMAS (Resilience v6.0) ---
 const PasscodeSchema = z.string().length(6).regex(/^\d+$/, "Passcode must be exactly 6 digits.");
 
@@ -2132,6 +2167,23 @@ app.get('/api/reference/batch-of-funds', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+
+app.get('/api/reference/project-categories', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT project_category 
+      FROM engineer_form 
+      WHERE project_category IS NOT NULL AND TRIM(project_category) != ''
+      ORDER BY project_category ASC;
+    `);
+    res.json(result.rows.map(row => row.project_category));
+  } catch (err) {
+    console.error('❌ Error fetching project categories:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 app.get('/api/reference/functional-divisions', async (req, res) => {
   try {
@@ -8659,6 +8711,9 @@ app.post('/api/update-offering', async (req, res) => {
 app.post('/api/save-project', async (req, res) => {
   const data = req.body;
 
+  // Auto-normalize project category on every save (handles imports, API calls, etc.)
+  if (data.projectCategory) data.projectCategory = normalizeProjectCategory(data.projectCategory);
+
   if (!data.schoolName || !data.projectName || !data.schoolId) {
     return res.status(400).json({ message: "Missing required fields" });
   }
@@ -9066,6 +9121,8 @@ app.put('/api/update-project/:id', upload.fields([
   const data = req.body;
   console.log("🔥 HIT: PUT /api/update-project/" + id);
 
+  // Auto-normalize project category on every update
+  if (data.projectCategory) data.projectCategory = normalizeProjectCategory(data.projectCategory);
 
   let client;
   let clientNew = null;
@@ -9997,14 +10054,20 @@ app.get('/api/dashboard/efd-summary', async (req, res) => {
       whereClauses.push(`e.program_type = $${queryParams.length}`);
     }
 
-    if (region) { 
-      queryParams.push(region); 
-      whereClauses.push(`TRIM(e.region) ILIKE TRIM($${queryParams.length})`); 
+    if (region) {
+      const regionList = region.split(',').map(r => r.trim().toUpperCase()).filter(Boolean);
+      if (regionList.length === 1) {
+        queryParams.push(regionList[0]);
+        whereClauses.push(`UPPER(TRIM(e.region)) ILIKE UPPER(TRIM($${queryParams.length}))`);
+      } else if (regionList.length > 1) {
+        const placeholders = regionList.map(r => { queryParams.push(r); return `$${queryParams.length}`; });
+        whereClauses.push(`UPPER(TRIM(e.region)) = ANY(ARRAY[${placeholders.join(',')}])`);
+      }
     }
     if (division) {
-      const normDiv = division.replace(/^(SDO|Division of)[-\s]+/i, '').trim();
+      const normDiv = division.replace(/^(SDO|Division of)\s+/i, '').trim();
       queryParams.push(normDiv);
-      whereClauses.push(`regexp_replace(TRIM(e.division), '^(SDO|Division of)[-\\s]+', '', 'i') ILIKE $${queryParams.length}`);
+      whereClauses.push(`regexp_replace(TRIM(e.division), '^(SDO|Division of)\\s+', '', 'i') ILIKE $${queryParams.length}`);
     }
     if (req.query.province) {
       queryParams.push(req.query.province);
@@ -10199,7 +10262,8 @@ app.get('/api/projects', async (req, res) => {
         p.province, p.city, p.municipality, p.district,
         p.tranche_1, p.tranche_2, p.tranche_3,
         p.liquidated_tranche_1, p.liquidated_tranche_2, p.liquidated_tranche_3,
-        p.approval_status AS "approvalStatus"
+        p.approval_status AS "approvalStatus",
+        (SELECT COUNT(*) FROM engineer_image ei WHERE ei.ipc = p.ipc OR ei.project_id = p.project_id) AS "imagesCount"
       FROM LatestProjects p
     `;
 
@@ -10252,8 +10316,15 @@ app.get('/api/projects', async (req, res) => {
       whereClauses.push(`TRIM(p.status) ILIKE TRIM($${queryParams.length})`);
     }
     if (region) {
-      queryParams.push(region);
-      whereClauses.push(`TRIM(p.region) ILIKE TRIM($${queryParams.length})`);
+      const regionList = region.split(',').map(r => r.trim().toUpperCase()).filter(Boolean);
+      if (regionList.length === 1) {
+        queryParams.push(regionList[0]);
+        whereClauses.push(`UPPER(TRIM(p.region)) ILIKE UPPER(TRIM($${queryParams.length}))`);
+      } else if (regionList.length > 1) {
+        // Multi-region: ANY match
+        const placeholders = regionList.map(r => { queryParams.push(r); return `$${queryParams.length}`; });
+        whereClauses.push(`UPPER(TRIM(p.region)) = ANY(ARRAY[${placeholders.join(',')}])`);
+      }
     }
     if (division) {
       const normDiv = division.replace(/^(SDO|Division of)[-\s]+/i, '').trim();
@@ -15135,6 +15206,9 @@ app.get('/api/user-info/:uid', async (req, res) => {
 // --- LGU 1. POST: Save New Project (LGU) ---
 app.post('/api/lgu/save-project', async (req, res) => {
   const data = req.body;
+  
+  // Auto-normalize project category on every LGU save
+  if (data.projectCategory) data.projectCategory = normalizeProjectCategory(data.projectCategory);
 
   if (!data.schoolName || !data.projectName || !data.schoolId) {
     return res.status(400).json({ message: "Missing required fields" });
@@ -18391,6 +18465,9 @@ app.get('/api/health', (req, res) => {
 // --- LGU 1. POST: Save New Project (LGU) ---
 app.post('/api/lgu/save-project', async (req, res) => {
   const data = req.body;
+  
+  // Auto-normalize project category on every LGU save
+  if (data.projectCategory) data.projectCategory = normalizeProjectCategory(data.projectCategory);
 
   if (!data.schoolName || !data.projectName || !data.schoolId) {
     return res.status(400).json({ message: "Missing required fields" });
