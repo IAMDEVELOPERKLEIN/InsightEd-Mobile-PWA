@@ -538,7 +538,7 @@ const SchoolManagement = () => {
         }
     };
 
-    const handleInitialSubmit = (e) => {
+    const handleInitialSubmit = async (e) => {
         e.preventDefault();
 
         // Validate all required fields
@@ -574,10 +574,8 @@ const SchoolManagement = () => {
             return;
         }
 
-        // Open Confirmation Modal
-        setConfirmTimer(20);
-        setCanConfirm(false);
-        setShowConfirmModal(true);
+        // Proceed directly with submission
+        await handleConfirmSubmit();
     };
 
     const handleConfirmSubmit = async () => {
