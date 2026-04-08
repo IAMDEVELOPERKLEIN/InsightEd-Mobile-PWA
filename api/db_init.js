@@ -69,9 +69,11 @@ const runMigrations = async (client, dbLabel) => {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        // Migration to add school_id if missing
-        await client.query(`ALTER TABLE ph_school_completion ADD COLUMN IF NOT EXISTS school_id VARCHAR(255)`).catch(() => {});
-        await client.query(`ALTER TABLE ph_school_completion ADD COLUMN IF NOT EXISTS registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP`).catch(() => {});
+        await client.query(`
+            ALTER TABLE ph_school_completion 
+            ADD COLUMN IF NOT EXISTS school_id VARCHAR(255),
+            ADD COLUMN IF NOT EXISTS registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+        `).catch(() => {});
         // console.log(`✅ [${dbLabel}] School Completion Table Initialized`);
     } catch (tableErr) {
         console.error(`❌ [${dbLabel}] Failed to init ph_school_completion table:`, tableErr.message);
@@ -98,28 +100,21 @@ const runMigrations = async (client, dbLabel) => {
 
     // --- 3. SCHOOL PROFILES EXTENSIONS ---
     try {
-        // Add Email
-        await client.query(`ALTER TABLE school_profiles ADD COLUMN IF NOT EXISTS email TEXT;`);
-        // Add Submitted By (UID mapping)
-        await client.query(`ALTER TABLE school_profiles ADD COLUMN IF NOT EXISTS submitted_by TEXT;`);
-        // Add Curricular Offering
-        await client.query(`ALTER TABLE school_profiles ADD COLUMN IF NOT EXISTS curricular_offering TEXT;`);
-        // Add Resources Columns
+        // Add Basic Extensions, Resources, Site & Utils
         await client.query(`
-        ALTER TABLE school_profiles 
-        ADD COLUMN IF NOT EXISTS res_toilets_common INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS sha_category TEXT,
-        ADD COLUMN IF NOT EXISTS res_faucets INTEGER DEFAULT 0;
-    `);
-        // Add Site & Utils
-        await client.query(`
-        ALTER TABLE school_profiles 
-        ADD COLUMN IF NOT EXISTS res_ownership_type TEXT,
-        ADD COLUMN IF NOT EXISTS res_electricity_source TEXT,
-        ADD COLUMN IF NOT EXISTS res_buildable_space TEXT,
-        ADD COLUMN IF NOT EXISTS res_water_source TEXT,
-        ADD COLUMN IF NOT EXISTS res_internet_type TEXT;
-    `);
+            ALTER TABLE school_profiles 
+            ADD COLUMN IF NOT EXISTS email TEXT,
+            ADD COLUMN IF NOT EXISTS submitted_by TEXT,
+            ADD COLUMN IF NOT EXISTS curricular_offering TEXT,
+            ADD COLUMN IF NOT EXISTS res_toilets_common INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS sha_category TEXT,
+            ADD COLUMN IF NOT EXISTS res_faucets INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS res_ownership_type TEXT,
+            ADD COLUMN IF NOT EXISTS res_electricity_source TEXT,
+            ADD COLUMN IF NOT EXISTS res_buildable_space TEXT,
+            ADD COLUMN IF NOT EXISTS res_water_source TEXT,
+            ADD COLUMN IF NOT EXISTS res_internet_type TEXT;
+        `);
         // console.log(`✅ [${dbLabel}] School Profiles Schema Updated (Basic Extensions)`);
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to migrate school_profiles basic:`, migErr.message);
@@ -182,15 +177,11 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS password_salt TEXT,
             ADD COLUMN IF NOT EXISTS hash_version TEXT,
             ADD COLUMN IF NOT EXISTS passcode TEXT,
-            ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
+            ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE,
+            DROP COLUMN IF EXISTS registrar_type,
+            DROP COLUMN IF EXISTS email_address,
+            ALTER COLUMN passcode TYPE TEXT;
         `);
-
-        // Clean up redundant columns
-        await client.query(`ALTER TABLE users DROP COLUMN IF EXISTS registrar_type;`);
-        await client.query(`ALTER TABLE users DROP COLUMN IF EXISTS email_address;`);
-        
-        // Ensure passcode is TEXT
-        await client.query(`ALTER TABLE users ALTER COLUMN passcode TYPE TEXT;`);
 
         // Create UNIQUE INDEX on school_id (only for non-null values)
         await client.query(`
@@ -458,7 +449,8 @@ const runMigrations = async (client, dbLabel) => {
             -- 6. Document Blobs (The ones that caused the error)
             ADD COLUMN IF NOT EXISTS pow_pdf TEXT,
             ADD COLUMN IF NOT EXISTS dupa_pdf TEXT,
-            ADD COLUMN IF NOT EXISTS contract_pdf TEXT;
+            ADD COLUMN IF NOT EXISTS contract_pdf TEXT,
+            DROP CONSTRAINT IF EXISTS engineer_form_ipc_key;
         `);
         console.log(`✅ [${dbLabel}] Multi-Column alignment for engineer_form completed`);
 
@@ -547,10 +539,6 @@ const runMigrations = async (client, dbLabel) => {
             console.error(`❌ [${dbLabel}] Failed to refactor engineer_form columns:`, refactorErr.message);
         }
 
-        await client.query(`
-          ALTER TABLE engineer_form 
-          DROP CONSTRAINT IF EXISTS engineer_form_ipc_key; 
-        `);
         console.log(`✅ [${dbLabel}] Engineer Form Schema Initialized`);
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to migrate engineer_form:`, migErr.message);
@@ -1438,6 +1426,15 @@ const runMigrations = async (client, dbLabel) => {
         // TOAST hint: store BYTEA chunks externally to keep main table indices snappy
         await client.query(`
             ALTER TABLE unified_binaries ALTER COLUMN content SET STORAGE EXTERNAL;
+        `);
+
+        // AUTOVACUUM Tuning (Postgres Master Protocol): 
+        // Reduce scale factor to 1% to prevent bloat in blob-heavy tables
+        await client.query(`
+            ALTER TABLE unified_binaries SET (
+                autovacuum_vacuum_scale_factor = 0.01,
+                autovacuum_vacuum_cost_limit = 1000
+            );
         `);
 
         // O(log n) deduplication lookups

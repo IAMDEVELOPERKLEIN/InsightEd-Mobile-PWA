@@ -17,6 +17,11 @@ TEMP_DIR="${TEMP_DIR:-/tmp/insighted-pdf-tmp}"
 NGINX_CONF="${NGINX_CONF:-/etc/nginx/sites-enabled/stride.conf}"
 PM2_NAME="${PM2_NAME:-insighted-staging}"
 
+# --- LOG MANAGEMENT PATHS ---
+NGINX_ACCESS_LOG="/var/log/nginx/access.log"
+NGINX_ERROR_LOG="/var/log/nginx/error.log"
+PM2_LOG_DIR="$HOME/.pm2/logs"
+
 # --- SMART PATH DISCOVERY ---
 find_tool() {
     local tool=$1
@@ -120,7 +125,35 @@ else
 fi
 
 # =============================================================================
-# PHASE 3: Python / PyMuPDF Dependency Verification
+# PHASE 2.5: Log Management & Disk Reclamation
+# Truncate large Nginx and PM2 logs to prevent disk exhaustion.
+# =============================================================================
+echo ""
+echo -e "${CYAN}[Phase 2.5] Log Management & Disk Reclamation${NC}"
+
+truncate_log() {
+    local log=$1
+    if [ -f "$log" ]; then
+        local size=$(du -h "$log" | awk '{print $1}')
+        info "Truncating log: $log (Current size: $size)"
+        run_sudo truncate -s 0 "$log" || warn "Failed to truncate $log"
+    fi
+}
+
+# Truncate Nginx Logs
+truncate_log "$NGINX_ACCESS_LOG"
+truncate_log "$NGINX_ERROR_LOG"
+truncate_log "${NGINX_ACCESS_LOG}.1" 2>/dev/null || true
+
+# Truncate PM2 Logs
+if [ -d "$PM2_LOG_DIR" ]; then
+    find "$PM2_LOG_DIR" -name "*.log" -type f -size +10M -exec truncate -s 0 {} +
+    ok "Large PM2 logs (>10MB) truncated."
+fi
+
+# Clear old deployment artifacts
+find "$STAGING_DIR" -name "*-deploy.tmp.tar.gz" -type f -delete
+ok "Cleanup of temporary deployment archives complete."
 # =============================================================================
 echo ""
 echo -e "${CYAN}[Phase 3] Python & PyMuPDF Dependency Check${NC}"

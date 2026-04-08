@@ -26,7 +26,7 @@ echo "🧹 1.5 Cleaning remote destination to free up space..."
 ssh -o StrictHostKeyChecking=no -o BatchMode=yes $USER@$SERVER_IP "rm -rf $SERVER_DIR/dist $SERVER_DIR/api" || { echo "❌ [SSH Error] Connection failed. Run setup-ssh-key.sh."; exit 1; }
 
 echo "📦 2. Packing artifacts into archive ($TAR_FILE)..."
-tar -czf $TAR_FILE dist api public package.json package-lock.json compress_pdf.py tmp_stride.conf forensic_heal.sh ecosystem.config.cjs
+tar -czf $TAR_FILE dist api public package.json package-lock.json compress_pdf.py tmp_stride.conf tmp_nginx.conf forensic_heal.sh ecosystem.config.cjs
 
 echo "📤 3. Syncing to VM via SCP..."
 scp -o StrictHostKeyChecking=no -o BatchMode=yes $TAR_FILE $USER@$SERVER_IP:$SERVER_DIR/
@@ -36,7 +36,7 @@ ssh -o StrictHostKeyChecking=no -o BatchMode=yes $USER@$SERVER_IP "
   set -e
   mkdir -p $SERVER_DIR
   cd $SERVER_DIR
-  tar -xzf $TAR_FILE && rm $TAR_FILE
+  (tar -xzf $TAR_FILE || true) && rm -f $TAR_FILE
   
   # Ensure healer is executable
   chmod +x forensic_heal.sh
@@ -44,6 +44,7 @@ ssh -o StrictHostKeyChecking=no -o BatchMode=yes $USER@$SERVER_IP "
   npm cache clean --force 2>/dev/null
   npm install --omit=dev --legacy-peer-deps
   npm prune --omit=dev --legacy-peer-deps
+  npm cache clean --force 2>/dev/null
   
   # Run Forensic Healer (Handles Nginx, Python deps, and PM2)
   STAGING_DIR=$SERVER_DIR PM2_NAME=insighted-backend ./forensic_heal.sh
