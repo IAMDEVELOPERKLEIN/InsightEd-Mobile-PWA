@@ -19,6 +19,14 @@ This repository contains the persistent history of architectural decisions, perf
   - Refactored `forensic_heal.sh` for multi-site autonomy.
   - Implemented `heal:production` unified deployment workflow.
 
+- **2026-04-08**: [Filter Normalization, Server Recovery & Nginx Hardening](./sessions/2026-04-08_Filter_Normalization_and_Infrastructure_Hardening.md)
+  - Fixed division filter regex to handle `SDO-`, `SDO `, and `Division of ` prefixes (`[-\\s]+`).
+  - Implemented prop-driven derivation pattern in `FilterDrawer.jsx` (ADR-0010).
+  - Recovered staging from ENOSPC using targeted `api-only-deploy.tar.gz` strategy.
+  - Deleted stale `stride-dashboard` PM2 process (was `npm start` error loop).
+  - Applied Nginx concurrency optimization: 4096 workers, upstream keepalive pools, binary asset micro-cache (ADR-0011).
+  - Created `diag_server.sh` and `check_nginx_concurrency.sh` operational scripts.
+
 ## 📋 Architecture Decision Records
 
 | ADR | Title | Date |
@@ -32,6 +40,8 @@ This repository contains the persistent history of architectural decisions, perf
 | [ADR-0007](./adr/ADR-0007-PDF-Pipeline-Scratch-Directory.md) | PDF Pipeline Scratch Directory | 2026-04-04 |
 | [ADR-0008](./adr/ADR-0008-Engineer-Upload-Postgres-Binary-Alignment.md) | Division Engineer Upload Postgres Binary Alignment | 2026-04-04 |
 | [ADR-0009](./adr/ADR-0009-Permanent-Self-Healing-Infrastructure.md) | Permanent Self-Healing Infrastructure | 2026-04-04 |
+| [ADR-0010](./adr/ADR-0010-Filter-Prop-Driven-Derivation-Pattern.md) | Filter Prop-Driven Derivation Pattern | 2026-04-08 |
+| [ADR-0011](./adr/ADR-0011-Nginx-Concurrency-and-Asset-Micro-Cache.md) | Nginx Concurrency Optimization & Binary Asset Micro-Cache | 2026-04-08 |
 
 ---
 *Maintained by Antigravity — InsightEd PWA Engineering Log*

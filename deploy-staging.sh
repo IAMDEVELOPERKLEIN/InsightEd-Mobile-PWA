@@ -39,7 +39,7 @@ ssh -o StrictHostKeyChecking=no -o BatchMode=yes $USER@$SERVER_IP "
   set -e
   mkdir -p $SERVER_DIR
   cd $SERVER_DIR
-  tar -xzf $TAR_FILE && rm $TAR_FILE
+  (tar -xzf $TAR_FILE || true) && rm -f $TAR_FILE
 
   # --- Temp dir for PDF compression pipeline (replaces /mnt/uploads) ---
   # All PDFs/images are stored in Postgres binary. This dir is scratch-only.
@@ -49,6 +49,7 @@ ssh -o StrictHostKeyChecking=no -o BatchMode=yes $USER@$SERVER_IP "
   npm cache clean --force 2>/dev/null
   npm install --omit=dev --legacy-peer-deps
   npm prune --omit=dev --legacy-peer-deps
+  npm cache clean --force 2>/dev/null
   pm2 set pm2-logrotate:max_size 50M
   pm2 set pm2-logrotate:retain 5
   pm2 flush

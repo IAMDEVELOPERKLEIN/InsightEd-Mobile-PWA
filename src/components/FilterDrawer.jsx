@@ -96,6 +96,9 @@ const FilterDrawer = ({
             console.log('[FilterDrawer] DEBUG — derived years:', years, '| batches:', batches);
         }
 
+        const derivedCategories = [...new Set(sourceData.map(p => p.project_category || p.projectCategory).filter(Boolean))].map(s => s.trim()).filter(Boolean);
+        const categories = categoryOptions.length > 0 ? categoryOptions : derivedCategories;
+
         return {
             divisions: [...new Set(divisions)].sort(),
             provinces: [...new Set(provinces)].sort(),

@@ -2,6 +2,17 @@
 
 This document tracks technical improvements, bug fixes, and feature implementations made during development.
 
+## 2026-04-08
+### Infrastructure Migration & Optimization (STRIDE Transformation)
+- **Local Database Migration**: Successfully migrated the PostgreSQL database from a remote Azure instance to a local environment on `STRIDE-PROD-VM-01`. This shift minimizes latency and prepares the infrastructure for 2,000+ concurrent users.
+- **Dedicated Storage Partitioning**: Provisioned and mounted a 295GB managed disk at `/mnt` for application and database data, decoupling it from the 30GB OS partition.
+- **PostgreSQL Performance Tuning**: 
+    - `shared_buffers`: Increased to 4GB (25% of 16GB RAM) for memory-resident inventory data.
+    - `work_mem`: Scaled to 16MB for complex sorting/joins.
+    - `effective_cache_size`: Set to 12GB to leverage OS-level caching.
+- **Connection Pooling (PgBouncer)**: Implemented PgBouncer on port 6432 to handle thousands of concurrent student/teacher sessions via connection recycling, preventing "Too many connections" bottlenecks.
+- **Storage Recovery**: Reclaimed 5GB+ of redundant DB files and 233MB of Nginx logs, reducing OS drive utilization from 100% to 84% and ensuring system stability.
+
 ## 2026-03-28
 ### HRODI Dashboard Visualization Fix
 - **Category Normalization**: Implemented a `normalizeCategory` helper in `EFDHome.jsx` to map inconsistent database category names (e.g., "NEW CONSTRUCTION", "LMS", "REPAIR") to canonical frontend keys. This resolved the discrepancy where bar graph lengths did not match their numerical labels due to case-sensitivity and naming mismatches in Recharts.

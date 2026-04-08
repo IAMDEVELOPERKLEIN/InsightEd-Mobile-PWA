@@ -786,6 +786,20 @@ const EFDHome = () => {
         );
     }, []);
 
+    const activeFilters = useMemo(() => {
+        const filters = [];
+        if (selectedRegions.length > 0) filters.push({ type: 'Region', value: selectedRegions.join(', '), onClear: () => setSelectedRegions([]) });
+        if (selectedDivision) filters.push({ type: 'Division', value: selectedDivision, onClear: () => setSelectedDivision('') });
+        if (selectedProvince) filters.push({ type: 'Province', value: selectedProvince, onClear: () => setSelectedProvince('') });
+        if (selectedMunicipality) filters.push({ type: 'Municipality', value: selectedMunicipality, onClear: () => setSelectedMunicipality('') });
+        if (selectedDistrict) filters.push({ type: 'District', value: selectedDistrict, onClear: () => setSelectedDistrict('') });
+        if (selectedCategories.length > 0) filters.push({ type: 'Category', value: selectedCategories.join(', '), onClear: () => setSelectedCategories([]) });
+        if (selectedYears.length > 0) filters.push({ type: 'Year', value: selectedYears.join(', '), onClear: () => setSelectedYears([]) });
+        if (selectedBatches.length > 0) filters.push({ type: 'Batch', value: selectedBatches.join(', '), onClear: () => setSelectedBatches([]) });
+        if (searchQuery) filters.push({ type: 'Search', value: searchQuery, onClear: () => setSearchQuery('') });
+        return filters;
+    }, [selectedRegions, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict, selectedCategories, selectedYears, selectedBatches, searchQuery]);
+
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -824,9 +838,28 @@ const EFDHome = () => {
                                     {(globalTotal || summaryData?.totalStats?.totalProjects || 0).toLocaleString()}
                                 </h2>
                             </div>
-                            <div className="bg-blue-400/20 backdrop-blur-sm p-4 rounded-2xl border border-white/10 sm:col-span-1 min-w-0">
+                            <div className="bg-blue-400/20 backdrop-blur-sm p-4 rounded-2xl border border-white/10 sm:col-span-1 min-w-0 flex flex-col">
                                 <p className="text-[10px] font-black text-blue-100 uppercase tracking-widest mb-1.5 opacity-80 truncate">Filtered Results</p>
                                 <h2 className="text-2xl lg:text-3xl font-black truncate">{pagination.total.toLocaleString()}</h2>
+                                {activeFilters.length > 0 && (
+                                    <div className="mt-3 flex flex-wrap gap-1.5 overflow-hidden">
+                                        {activeFilters.map((f, i) => (
+                                            <div key={i} className="flex items-center gap-1 px-1.5 py-0.5 bg-white/10 rounded-lg border border-white/5 hover:bg-white/20 transition-all group">
+                                                <span className="text-[7px] font-black uppercase tracking-tighter text-blue-200">{f.type}:</span>
+                                                <span className="text-[8px] font-black text-white truncate max-w-[60px]">{f.value}</span>
+                                                <button 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        f.onClear();
+                                                    }} 
+                                                    className="text-white/40 hover:text-white transition-colors"
+                                                >
+                                                    <FiX size={8} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 sm:col-span-2 min-w-0">
                                 <p className="text-[10px] font-black text-blue-100 uppercase tracking-widest mb-1.5 opacity-80 truncate">Total ABC Allocation</p>
@@ -1795,6 +1828,7 @@ const EFDHome = () => {
                 initialCategories={selectedCategories}
                 initialYears={selectedYears}
                 initialBatches={selectedBatches}
+                categoryOptions={allCategories}
                 yearOptions={allYears}
                 batchOptions={allBatches}
                 categoryOptions={projectCategories}

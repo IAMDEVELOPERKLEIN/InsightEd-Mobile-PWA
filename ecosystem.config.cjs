@@ -4,8 +4,8 @@ module.exports = {
       name: "insighted-staging",
       script: "api/index.js",
       watch: false,
-      instances: 1,
-      exec_mode: "fork",
+      instances: "max",
+      exec_mode: "cluster",
       env: {
         PORT: 5001,
         NODE_ENV: "staging",
@@ -16,8 +16,8 @@ module.exports = {
       name: "insighted-backend",
       script: "api/index.js",
       watch: false,
-      instances: 1,
-      exec_mode: "fork",
+      instances: "max",
+      exec_mode: "cluster",
       env: {
         PORT: 5000,
         NODE_ENV: "production",
