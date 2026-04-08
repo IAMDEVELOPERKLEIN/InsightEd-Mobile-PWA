@@ -502,6 +502,7 @@ const DetailedProjInfo = () => {
     const [externalPreviews, setExternalPreviews] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
     const [selectedZoomImage, setSelectedZoomImage] = useState(null);
+    const [zoomIndex, setZoomIndex] = useState(0);
     const [deletingImageId, setDeletingImageId] = useState(null);
     const [activeCategory, setActiveCategory] = useState('Internal');
     const [userRole, setUserRole] = useState(null);
@@ -522,9 +523,55 @@ const DetailedProjInfo = () => {
         { id: 1, label: 'Location', icon: <LuMapPin size={16} /> },
         { id: 2, label: 'Procurement', icon: <LuShoppingBag size={16} /> },
         { id: 3, label: 'Finance', icon: <LuDollarSign size={16} /> },
-        { id: 4, label: 'Progress', icon: <LuImages size={16} /> },
-        { id: 5, label: 'Documents', icon: <LuFileText size={16} /> }
+        { id: 4, label: 'Photos', icon: <LuImages size={16} /> },
+        { id: 5, label: 'Documents', icon: <LuFileText size={16} /> },
+        { id: 6, label: 'Checklist', icon: <LuHistory size={16} /> }
     ];
+
+    // --- DIAGNOSTIC ---
+    const DEBUG_MODE = false; // Toggle: set true to enable telemetry
+    useEffect(() => {
+        if (DEBUG_MODE) {
+            console.log('[DetailedProjInfo] projectImages.length:', projectImages.length);
+            console.log('[DetailedProjInfo] zoomIndex:', zoomIndex);
+        }
+    }, [projectImages, zoomIndex]);
+
+    // Sorted images lifted to component level for slider navigation
+    const sortedProjectImages = React.useMemo(() =>
+        [...projectImages].sort((a, b) => new Date(b.uploaded_at || b.created_at || 0) - new Date(a.uploaded_at || a.created_at || 0)),
+        [projectImages]
+    );
+
+    const openZoom = React.useCallback((img) => {
+        const idx = sortedProjectImages.findIndex(i => i === img || (i.id && img?.id && i.id === img.id));
+        const safeIdx = idx >= 0 ? idx : 0;
+        setZoomIndex(safeIdx);
+        const target = sortedProjectImages[safeIdx] || img;
+        setSelectedZoomImage({ ...target, src: getImageSrc(target) });
+    }, [sortedProjectImages]);
+
+    // Keyboard navigation for zoom slider
+    useEffect(() => {
+        if (!selectedZoomImage) return;
+        const handleKey = (e) => {
+            if (e.key === 'ArrowLeft') {
+                const newIdx = Math.max(0, zoomIndex - 1);
+                setZoomIndex(newIdx);
+                const img = sortedProjectImages[newIdx];
+                if (img) setSelectedZoomImage({ ...img, src: getImageSrc(img) });
+            } else if (e.key === 'ArrowRight') {
+                const newIdx = Math.min(sortedProjectImages.length - 1, zoomIndex + 1);
+                setZoomIndex(newIdx);
+                const img = sortedProjectImages[newIdx];
+                if (img) setSelectedZoomImage({ ...img, src: getImageSrc(img) });
+            } else if (e.key === 'Escape') {
+                setSelectedZoomImage(null);
+            }
+        };
+        window.addEventListener('keydown', handleKey);
+        return () => window.removeEventListener('keydown', handleKey);
+    }, [selectedZoomImage, zoomIndex, sortedProjectImages]);
 
 
     // Helper to extract image source correctly
@@ -1123,12 +1170,28 @@ const DetailedProjInfo = () => {
 
     const renderLocation = () => (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <SectionHeader title="Administrative Location" />
+            <div className="grid grid-cols-2 gap-4 mb-2">
+                <Field label="Region" name="region" value={project.region} />
+                <Field label="Division" name="division" value={project.division} />
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-2">
+                <Field label="Province" name="province" value={project.province} />
+                <Field label="Municipality / City" name="municipality" value={project.municipality} />
+            </div>
+            {(project.legislative_district || project.barangay) && (
+                <div className="grid grid-cols-2 gap-4 mb-2">
+                    {project.legislative_district && <Field label="Legislative District" name="legislative_district" value={project.legislative_district} />}
+                    {project.barangay && <Field label="Barangay" name="barangay" value={project.barangay} />}
+                </div>
+            )}
+
             <SectionHeader title="Geographic Coordinates" />
             <div className="grid grid-cols-2 gap-4 mb-6">
                 <Field label="Latitude" name="latitude" value={project.latitude} />
                 <Field label="Longitude" name="longitude" value={project.longitude} />
             </div>
-            
+
             {(project.latitude && project.longitude) && (
                 <div className="rounded-3xl overflow-hidden shadow-2xl border border-slate-200 h-80 relative z-0">
                     <LocationPickerMap
@@ -1178,15 +1241,18 @@ const DetailedProjInfo = () => {
     );
 
     const renderMedia = () => {
-        const sortedImages = [...projectImages].sort((a, b) => new Date(b.uploaded_at || b.created_at || 0) - new Date(a.uploaded_at || a.created_at || 0));
-        const featured = sortedImages[0];
-        const others = sortedImages.slice(1);
+        const featured = sortedProjectImages[0];
+        const others = sortedProjectImages.slice(1);
+
+        if (DEBUG_MODE) {
+            console.log('[renderMedia] sortedProjectImages.length:', sortedProjectImages.length);
+        }
 
         return (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
                 <SectionHeader title="Progress Documentation" />
-                
-                {sortedImages.length === 0 ? (
+
+                {sortedProjectImages.length === 0 ? (
                     <div className="bg-slate-50 rounded-3xl p-12 flex flex-col items-center justify-center text-center border-2 border-dashed border-slate-200">
                         <LuImages size={48} className="text-slate-300 mb-4" />
                         <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No documentation photos yet</p>
@@ -1195,13 +1261,13 @@ const DetailedProjInfo = () => {
                     <div className="space-y-4">
                         {/* Featured Recent Photo */}
                         {featured && (
-                            <div 
-                                onClick={() => setSelectedZoomImage({ ...featured, src: getImageSrc(featured) })}
+                            <div
+                                onClick={() => openZoom(featured)}
                                 className="relative aspect-[16/10] rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white group cursor-pointer active:scale-[0.98] transition-all"
                             >
-                                <img 
-                                    src={getImageSrc(featured)} 
-                                    alt="Most Recent Update" 
+                                <img
+                                    src={getImageSrc(featured)}
+                                    alt="Most Recent Update"
                                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                                 />
                                 <div className="absolute top-6 right-6 bg-emerald-500 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl flex items-center gap-2">
@@ -1223,31 +1289,31 @@ const DetailedProjInfo = () => {
                         {others.length > 0 && (
                             <div className="grid grid-cols-2 gap-3 mt-4">
                                 {others.map((img, idx) => (
-                                    <div 
+                                    <div
                                         key={idx}
-                                        onClick={() => setSelectedZoomImage({ ...img, src: getImageSrc(img) })}
+                                        onClick={() => openZoom(img)}
                                         className="relative aspect-square rounded-[2rem] overflow-hidden shadow-lg border-2 border-white group cursor-pointer active:scale-95 transition-all"
                                     >
-                                        <img 
-                                            src={getImageSrc(img)} 
-                                            alt={`Update ${idx + 2}`} 
+                                        <img
+                                            src={getImageSrc(img)}
+                                            alt={`Update ${idx + 2}`}
                                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                                         />
                                         <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                         <div className="absolute bottom-3 left-3 bg-white/20 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/20">
-                                             <p className="text-[7px] font-black text-white uppercase tracking-widest">
-                                                 {img.date_captured ? new Date(img.date_captured).toLocaleDateString() : 'Previous'}
-                                             </p>
+                                            <p className="text-[7px] font-black text-white uppercase tracking-widest">
+                                                {img.date_captured ? new Date(img.date_captured).toLocaleDateString() : 'Previous'}
+                                            </p>
                                         </div>
                                     </div>
                                 ))}
-                                
-                                <div 
+
+                                <div
                                     onClick={() => navigate(`/project-gallery/${id}`)}
                                     className="aspect-square bg-blue-600 rounded-[2rem] flex flex-col items-center justify-center border-2 border-white shadow-lg active:scale-95 transition-all cursor-pointer group overflow-hidden relative"
                                 >
                                     <TbPhoto size={32} className="text-white mb-2" />
-                                    <span className="text-[8px] font-black text-white uppercase tracking-widest text-center px-2">Total {sortedImages.length} Documentation Photos</span>
+                                    <span className="text-[8px] font-black text-white uppercase tracking-widest text-center px-2">Total {sortedProjectImages.length} Documentation Photos</span>
                                 </div>
                             </div>
                         )}
@@ -1375,6 +1441,117 @@ const DetailedProjInfo = () => {
         </div>
     );
 
+    const renderChecklist = () => {
+        // Canonical triangulation task list — mirrors UpdateProjectWizard exactly
+        const CANONICAL_TASKS = [
+            { id: 1, task: 'Mobilization & Site Layout',         weight: 5  },
+            { id: 2, task: 'Excavation & Foundation Work',       weight: 15 },
+            { id: 3, task: 'Structural Framing (Beams/Columns)', weight: 20 },
+            { id: 4, task: 'Roofing & Gutter System',            weight: 15 },
+            { id: 5, task: 'Masonry & Wall Finishes',            weight: 15 },
+            { id: 6, task: 'Electrical & Plumbing Rough-ins',    weight: 10 },
+            { id: 7, task: 'Windows, Doors & Glass Works',       weight: 10 },
+            { id: 8, task: 'Final Painting & Cleansing',         weight: 10 },
+        ];
+
+        // Load saved check state from project.checklist (JSONB: { "1": true, "2": false, ... })
+        let savedState = {};
+        try {
+            const raw = project.checklist;
+            if (raw && typeof raw === 'object' && !Array.isArray(raw)) savedState = raw;
+            else if (typeof raw === 'string') savedState = JSON.parse(raw);
+        } catch (e) { /* ignore parse errors */ }
+
+        const triangulatedPct = Number(project.triangulated_percentage || 0);
+        const accomplishmentPct = Number(project.accomplishmentPercentage || 0);
+        const variance = Math.abs(triangulatedPct - accomplishmentPct);
+        const numberOfStoreys = Number(project.numberOfStoreys || 1);
+
+        if (DEBUG_MODE) {
+            console.log('[renderChecklist] savedState:', savedState);
+            console.log('[renderChecklist] triangulatedPct:', triangulatedPct, 'accomplishment:', accomplishmentPct);
+        }
+
+        const checkedCount = CANONICAL_TASKS.filter(t => savedState[t.id] === true || savedState[String(t.id)] === true).length;
+        const scoreColor = triangulatedPct >= 80 ? 'text-emerald-600' : triangulatedPct >= 50 ? 'text-amber-500' : 'text-red-500';
+        const scoreBg   = triangulatedPct >= 80 ? 'bg-emerald-50 border-emerald-200' : triangulatedPct >= 50 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200';
+
+        return (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-5">
+                <SectionHeader title="Construction Triangulation" />
+
+                {/* Building Info + Score Card */}
+                <div className={`rounded-3xl p-5 border-2 ${scoreBg}`}>
+                    <div className="flex items-center justify-between mb-3">
+                        <div>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">
+                                {numberOfStoreys}-Storey Building · {CANONICAL_TASKS.length} Phase Tasks
+                            </p>
+                            <span className={`text-3xl font-black ${scoreColor}`}>{triangulatedPct}%</span>
+                            <span className="text-[10px] font-bold text-slate-400 ml-2">Triangulated</span>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Reported</p>
+                            <span className="text-2xl font-black text-slate-700">{accomplishmentPct}%</span>
+                            {variance > 10 && (
+                                <p className="text-[9px] font-black text-amber-600 mt-1 flex items-center justify-end gap-1">
+                                    ⚠ {variance}% variance
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                    <div className="w-full bg-slate-200/60 rounded-full h-2.5 overflow-hidden">
+                        <div
+                            className={`h-2.5 rounded-full transition-all duration-700 ${triangulatedPct >= 80 ? 'bg-emerald-500' : triangulatedPct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                            style={{ width: `${triangulatedPct}%` }}
+                        />
+                    </div>
+                    <p className="text-[10px] font-bold text-slate-400 mt-2">{checkedCount} of {CANONICAL_TASKS.length} phases marked complete by engineer</p>
+                </div>
+
+                {/* Phase Checklist */}
+                <div className="bg-white rounded-3xl border border-slate-100 shadow-xl overflow-hidden divide-y divide-slate-50">
+                    {CANONICAL_TASKS.map((task) => {
+                        const isChecked = savedState[task.id] === true || savedState[String(task.id)] === true;
+                        return (
+                            <div key={task.id} className={`flex items-center gap-4 px-5 py-4 transition-colors ${isChecked ? 'hover:bg-emerald-50/30' : 'hover:bg-slate-50'}`}>
+                                {/* Phase number */}
+                                <div className={`w-8 h-8 rounded-xl flex-none flex items-center justify-center text-[10px] font-black ${isChecked ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                                    {task.id}
+                                </div>
+
+                                {/* Check icon */}
+                                <div className={`w-6 h-6 rounded-full flex-none flex items-center justify-center border-2 ${isChecked ? 'bg-emerald-500 border-emerald-500' : 'border-slate-200 bg-white'}`}>
+                                    {isChecked && (
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                    )}
+                                </div>
+
+                                {/* Label */}
+                                <div className="flex-1 min-w-0">
+                                    <p className={`text-[11px] font-black uppercase tracking-wide leading-tight ${isChecked ? 'text-slate-800' : 'text-slate-400'}`}>
+                                        {task.task}
+                                    </p>
+                                </div>
+
+                                {/* Weight badge */}
+                                <span className={`flex-none text-[9px] font-black px-2 py-1 rounded-lg ${isChecked ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                                    {task.weight}%
+                                </span>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {triangulatedPct === 0 && checkedCount === 0 && (
+                    <p className="text-center text-[10px] font-bold text-slate-300 uppercase tracking-widest py-2">
+                        No triangulation data submitted yet. Update via the project wizard.
+                    </p>
+                )}
+            </div>
+        );
+    };
+
     return (
         <>
         <PageTransition>
@@ -1408,12 +1585,21 @@ const DetailedProjInfo = () => {
                                 </>
                              ) : (
                                 <>
-                                    <button 
+                                    <button
+                                        disabled={imageLoading || projectImages.length === 0}
                                         onClick={() => navigate(`/project-gallery/${id}`)}
-                                        className="p-2 bg-white/10 rounded-xl text-white hover:bg-white/20 transition-all flex items-center gap-2"
+                                        title={imageLoading ? 'Loading photos...' : projectImages.length === 0 ? 'No photos uploaded yet' : `View all ${projectImages.length} photos`}
+                                        className={`p-2 rounded-xl flex items-center gap-2 transition-all ${
+                                            imageLoading || projectImages.length === 0
+                                                ? 'opacity-40 cursor-not-allowed bg-white/5 text-white/50'
+                                                : 'bg-white/10 text-white hover:bg-white/20 cursor-pointer'
+                                        }`}
                                     >
                                         <LuImages size={16} />
                                         <span className="text-[10px] font-black uppercase hidden sm:inline">Gallery</span>
+                                        {!imageLoading && projectImages.length > 0 && (
+                                            <span className="text-[8px] font-black bg-white/20 px-1.5 py-0.5 rounded-full hidden sm:inline">{projectImages.length}</span>
+                                        )}
                                     </button>
                                     <button 
                                         onClick={() => setIsEditMode(true)}
@@ -1470,6 +1656,7 @@ const DetailedProjInfo = () => {
                         {activeTab === 3 && renderFinance()}
                         {activeTab === 4 && renderMedia()}
                         {activeTab === 5 && renderDocuments()}
+                        {activeTab === 6 && renderChecklist()}
                     </div>
                     </FieldFormContext.Provider>
                 </div>
@@ -1524,69 +1711,144 @@ const DetailedProjInfo = () => {
                 )}
 
 
-                {/* --- ZOOM MODAL (PORTALLED) --- */}
+                {/* --- ZOOM / SLIDER MODAL (PORTALLED) --- */}
                 {selectedZoomImage && createPortal(
-                    <div 
-                        className="fixed inset-0 bg-black/95 z-[9999] flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300"
+                    <div
+                        className="fixed inset-0 bg-black/95 z-[9999] animate-in fade-in duration-300"
                         onClick={() => setSelectedZoomImage(null)}
                     >
-                        <button
-                            onClick={() => setSelectedZoomImage(null)}
-                            className="absolute top-10 right-6 w-12 h-12 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all z-[10000] border border-white/10 shadow-xl"
+                        {/* ── Image area (padded so controls don't overlap) ── */}
+                        <div
+                            className="absolute"
+                            style={{ top: 72, bottom: 96, left: 72, right: 72 }}
                         >
-                            <LuX size={24} />
-                        </button>
-                        <button
-                            onClick={(e) => { e.stopPropagation(); handleDeleteImage(selectedZoomImage.id); }}
-                            disabled={deletingImageId === selectedZoomImage.id}
-                            className="absolute top-10 left-6 w-12 h-12 bg-red-500/80 hover:bg-red-600 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all z-[10000] border border-white/10 shadow-xl"
-                            title="Delete photo"
-                        >
-                            {deletingImageId === selectedZoomImage.id
-                                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                : <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                            }
-                        </button>
-
-                        <div className="w-full max-w-4xl h-[70vh] flex items-center justify-center relative" onClick={e => e.stopPropagation()}>
-                            {/* Loading state for the high-res image */}
-                            <div className="absolute inset-0 flex flex-col items-center justify-center text-white/20 -z-10">
-                                <div className="w-10 h-10 border-2 border-white/5 border-t-white/40 rounded-full animate-spin mb-2"></div>
-                                <span className="text-[10px] font-bold uppercase tracking-widest">Loading Photo</span>
+                            <div className="w-full h-full flex items-center justify-center">
+                                <img
+                                    key={zoomIndex}
+                                    src={selectedZoomImage.src || getImageSrc(selectedZoomImage)}
+                                    alt={`Photo ${zoomIndex + 1}`}
+                                    className="max-w-full max-h-full object-contain rounded-xl shadow-2xl animate-in zoom-in-95 duration-300"
+                                    style={{ transform: 'translateZ(0)' }}
+                                    onClick={e => e.stopPropagation()}
+                                    onError={(e) => {
+                                        const fallback = getImageSrc(selectedZoomImage);
+                                        if (fallback && e.target.src !== fallback) {
+                                            e.target.src = fallback;
+                                        } else {
+                                            e.target.style.display = 'none';
+                                        }
+                                    }}
+                                />
                             </div>
-
-                            <img 
-                                src={selectedZoomImage.src || getImageSrc(selectedZoomImage)} 
-                                alt="preview" 
-                                className="max-w-full max-h-full object-contain rounded-xl shadow-2xl ring-1 ring-white/10 animate-in zoom-in-95 duration-500" 
-                                style={{ transform: 'translateZ(0)' }} // Hardware acceleration
-                                onLoad={(e) => {
-                                    e.target.style.opacity = '1';
-                                }}
-                                onError={(e) => {
-                                    console.error("Zoom image failed to load");
-                                    const fallback = getImageSrc(selectedZoomImage);
-                                    if (fallback && e.target.src !== fallback) {
-                                        e.target.src = fallback;
-                                    } else {
-                                        e.target.parentElement.innerHTML = '<div class="text-white/50 text-center flex flex-col items-center gap-3"><span class="text-4xl">📷</span><p class="text-[10px] font-bold uppercase tracking-widest">Image Unavailable</p></div>';
-                                    }
-                                }}
-                            />
                         </div>
 
-                        {/* Metadata Footer */}
-                        <div className="mt-8 text-center text-white max-w-lg animate-in slide-in-from-bottom-6 duration-500" onClick={e => e.stopPropagation()}>
-                            <div className="flex items-center justify-center gap-2 mb-2">
-                                <span className="bg-blue-600/30 text-blue-400 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-500/20">
+                        {/* ── Top bar: Delete | Counter | Close ── */}
+                        <div
+                            className="absolute top-0 left-0 right-0 h-16 flex items-center justify-between px-5 z-10"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <button
+                                onClick={() => handleDeleteImage(selectedZoomImage.id)}
+                                disabled={deletingImageId === selectedZoomImage.id}
+                                className="w-10 h-10 rounded-full bg-red-600/80 hover:bg-red-600 text-white flex items-center justify-center border border-red-400/30 transition-all active:scale-90"
+                                title="Delete photo"
+                            >
+                                {deletingImageId === selectedZoomImage.id
+                                    ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    : <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                                }
+                            </button>
+
+                            {sortedProjectImages.length > 1 && (
+                                <span className="bg-white/10 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-black text-white uppercase tracking-widest border border-white/10">
+                                    {zoomIndex + 1} / {sortedProjectImages.length}
+                                </span>
+                            )}
+
+                            <button
+                                onClick={() => setSelectedZoomImage(null)}
+                                className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center border border-white/20 transition-all active:scale-90"
+                            >
+                                <LuX size={20} />
+                            </button>
+                        </div>
+
+                        {/* ── LEFT arrow ── */}
+                        {sortedProjectImages.length > 1 && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    const newIdx = Math.max(0, zoomIndex - 1);
+                                    setZoomIndex(newIdx);
+                                    const img = sortedProjectImages[newIdx];
+                                    if (img) setSelectedZoomImage({ ...img, src: getImageSrc(img) });
+                                }}
+                                disabled={zoomIndex === 0}
+                                className="absolute left-3 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center rounded-full border-2 transition-all active:scale-90"
+                                style={{
+                                    width: 52, height: 52,
+                                    background: zoomIndex === 0 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.6)',
+                                    borderColor: zoomIndex === 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.5)',
+                                    color: zoomIndex === 0 ? 'rgba(255,255,255,0.2)' : 'white',
+                                    cursor: zoomIndex === 0 ? 'not-allowed' : 'pointer',
+                                }}
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                            </button>
+                        )}
+
+                        {/* ── RIGHT arrow ── */}
+                        {sortedProjectImages.length > 1 && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    const newIdx = Math.min(sortedProjectImages.length - 1, zoomIndex + 1);
+                                    setZoomIndex(newIdx);
+                                    const img = sortedProjectImages[newIdx];
+                                    if (img) setSelectedZoomImage({ ...img, src: getImageSrc(img) });
+                                }}
+                                disabled={zoomIndex === sortedProjectImages.length - 1}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center rounded-full border-2 transition-all active:scale-90"
+                                style={{
+                                    width: 52, height: 52,
+                                    background: zoomIndex === sortedProjectImages.length - 1 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.6)',
+                                    borderColor: zoomIndex === sortedProjectImages.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.5)',
+                                    color: zoomIndex === sortedProjectImages.length - 1 ? 'rgba(255,255,255,0.2)' : 'white',
+                                    cursor: zoomIndex === sortedProjectImages.length - 1 ? 'not-allowed' : 'pointer',
+                                }}
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                            </button>
+                        )}
+
+                        {/* ── Bottom: dots + metadata ── */}
+                        <div
+                            className="absolute bottom-0 left-0 right-0 h-24 flex flex-col items-center justify-end pb-5 gap-2 z-10"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            {sortedProjectImages.length > 1 && (
+                                <div className="flex gap-1.5 mb-1">
+                                    {sortedProjectImages.map((_, i) => (
+                                        <button
+                                            key={i}
+                                            onClick={() => {
+                                                setZoomIndex(i);
+                                                const img = sortedProjectImages[i];
+                                                if (img) setSelectedZoomImage({ ...img, src: getImageSrc(img) });
+                                            }}
+                                            className={`h-1.5 rounded-full transition-all ${i === zoomIndex ? 'w-6 bg-white' : 'w-1.5 bg-white/30 hover:bg-white/60'}`}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                            <div className="flex items-center gap-3 text-center">
+                                <span className="bg-blue-600/30 text-blue-300 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-500/20">
                                     {selectedZoomImage.category || 'Documentation'}
                                 </span>
+                                <span className="text-[10px] text-slate-400">
+                                    {new Date(selectedZoomImage.uploaded_at || selectedZoomImage.created_at || Date.now()).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                                </span>
                             </div>
-                            <h3 className="text-lg font-bold mb-1 px-4">{project.schoolName || 'Project Photo'}</h3>
-                            <p className="text-xs text-slate-400">
-                                Captured on {new Date(selectedZoomImage.uploaded_at || selectedZoomImage.created_at || Date.now()).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                            </p>
-                            <p className="text-[10px] text-slate-500 mt-2 uppercase tracking-tighter opacity-40">Secure Site Proof</p>
                         </div>
                     </div>,
                     document.body

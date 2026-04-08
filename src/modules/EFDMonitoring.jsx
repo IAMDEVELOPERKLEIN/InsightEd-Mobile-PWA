@@ -14,6 +14,7 @@ import UpdateProjectWizard from '../components/UpdateProjectWizard';
 import ProjectLogModal from '../components/ProjectLogModal';
 import { FiActivity } from 'react-icons/fi';
 import FilterDrawer from '../components/FilterDrawer';
+import { useEFDFilters } from '../context/EFDFilterContext';
 const EFDMonitoring = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
@@ -25,13 +26,22 @@ const EFDMonitoring = () => {
         const saved = sessionStorage.getItem('efd_currentPage');
         return saved ? parseInt(saved, 10) : 1;
     });
-    const [searchQuery, setSearchQuery] = useState(() => localStorage.getItem('efd_searchQuery') || '');
-    const [selectedRegions, setSelectedRegions] = useState(() => JSON.parse(localStorage.getItem('efd_selectedRegions') || '[]'));
-    const [selectedCategories, setSelectedCategories] = useState(() => JSON.parse(localStorage.getItem('efd_selectedCategories') || '[]'));
-    const [selectedYears, setSelectedYears] = useState(() => JSON.parse(localStorage.getItem('efd_selectedYears') || '[]'));
-    const [selectedBatches, setSelectedBatches] = useState(() => JSON.parse(localStorage.getItem('efd_selectedBatches') || '[]'));
+    const {
+        selectedRegions, setSelectedRegions,
+        selectedCategories, setSelectedCategories,
+        selectedYears, setSelectedYears,
+        selectedBatches, setSelectedBatches,
+        searchQuery, setSearchQuery,
+        selectedDivision, setSelectedDivision,
+        selectedProvince, setSelectedProvince,
+        selectedMunicipality, setSelectedMunicipality,
+        selectedDistrict, setSelectedDistrict,
+        searchHistory, addToSearchHistory,
+        clearFilters
+    } = useEFDFilters();
     const [fundingYears, setFundingYears] = useState([]);
     const [allBatches, setAllBatches] = useState([]);
+    const [projectCategories, setProjectCategories] = useState([]);
 
     const [engineers, setEngineers] = useState([]);
     const [selectedProject, setSelectedProject] = useState(null);
@@ -40,10 +50,6 @@ const EFDMonitoring = () => {
     const [engineerSearchTerm, setEngineerSearchTerm] = useState('');
     const [isLogOpen, setIsLogOpen] = useState(false);
     const [logProject, setLogProject] = useState(null);
-    const [selectedDivision, setSelectedDivision] = useState(() => localStorage.getItem('efd_selectedDivision') || '');
-    const [selectedProvince, setSelectedProvince] = useState(() => localStorage.getItem('efd_selectedProvince') || '');
-    const [selectedMunicipality, setSelectedMunicipality] = useState(() => localStorage.getItem('efd_selectedMunicipality') || '');
-    const [selectedDistrict, setSelectedDistrict] = useState(() => localStorage.getItem('efd_selectedDistrict') || '');
     const [editModalOpen, setEditModalOpen] = useState(false);
     const [selectedProjectForEdit, setSelectedProjectForEdit] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -53,7 +59,9 @@ const EFDMonitoring = () => {
     const [pagination, setPagination] = useState(() => JSON.parse(sessionStorage.getItem('efd_cached_pagination')) || { total: 0, page: 1, limit: 12, totalPages: 1 });
     const [summaryData, setSummaryData] = useState(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const [globalTotal, setGlobalTotal] = useState(0); // fixed total inventory, never filtered
+    const [globalTotal, setGlobalTotal] = useState(0); 
+    const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
+    const [isSearchFocused, setIsSearchFocused] = useState(false);
     
     // Restore scroll position after the first data load completes
     const scrollRestored = useRef(false);
@@ -79,19 +87,10 @@ const EFDMonitoring = () => {
         }
     }, [loading]);
 
-    // Persistent Filter Sync
+    // Persistent Pagination Sync
     useEffect(() => {
-        localStorage.setItem('efd_selectedRegions', JSON.stringify(selectedRegions));
-        localStorage.setItem('efd_selectedDivision', selectedDivision);
-        localStorage.setItem('efd_selectedProvince', selectedProvince);
-        localStorage.setItem('efd_selectedMunicipality', selectedMunicipality);
-        localStorage.setItem('efd_selectedDistrict', selectedDistrict);
-        localStorage.setItem('efd_selectedCategories', JSON.stringify(selectedCategories));
-        localStorage.setItem('efd_selectedYears', JSON.stringify(selectedYears));
-        localStorage.setItem('efd_selectedBatches', JSON.stringify(selectedBatches));
-        localStorage.setItem('efd_searchQuery', searchQuery);
         sessionStorage.setItem('efd_currentPage', currentPage.toString());
-    }, [selectedRegions, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict, selectedCategories, selectedYears, selectedBatches, searchQuery, currentPage]);
+    }, [currentPage]);
     
     // Debug Telemetry
     useEffect(() => {
@@ -102,7 +101,27 @@ const EFDMonitoring = () => {
         }
     }, [projects, currentPage]);
     
+    // Sync local search when context changes (e.g. clear filters)
+    useEffect(() => {
+        setLocalSearchQuery(searchQuery);
+    }, [searchQuery]);
+
+    // Debounce search update + history tracking
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (localSearchQuery !== searchQuery) {
+                setSearchQuery(localSearchQuery);
+                if (localSearchQuery.trim().length >= 2) {
+                    addToSearchHistory(localSearchQuery);
+                }
+                setCurrentPage(1);
+            }
+        }, 800);
+        return () => clearTimeout(timer);
+    }, [localSearchQuery, searchQuery, setSearchQuery, addToSearchHistory]);
+
     // For UpdateWizard internal states (though Wizard handles most)
+
     const [internalFiles, setInternalFiles] = useState([]);
     const [externalFiles, setExternalFiles] = useState([]);
     const fileInputRef = useRef(null);
@@ -176,16 +195,18 @@ const EFDMonitoring = () => {
     useEffect(() => {
         const fetchInitial = async () => {
             try {
-                const [engRes, locRes, yearsRes, batchRes] = await Promise.all([
+                const [engRes, locRes, yearsRes, batchRes, categoryRes] = await Promise.all([
                     fetch('/api/engineers'),
                     fetch('/api/reference/efd-locations'),
                     fetch('/api/reference/funding-years'),
-                    fetch('/api/reference/batch-of-funds')
+                    fetch('/api/reference/batch-of-funds'),
+                    fetch('/api/reference/project-categories')
                 ]);
                 if (engRes.ok) setEngineers(await engRes.json());
                 if (locRes.ok) setEfdLocations(await locRes.json());
                 if (yearsRes.ok) setFundingYears(await yearsRes.json());
                 if (batchRes.ok) setAllBatches(await batchRes.json());
+                if (categoryRes.ok) setProjectCategories(await categoryRes.json());
 
                 // One-time unfiltered total to lock in the inventory count
                 try {
@@ -247,7 +268,7 @@ const EFDMonitoring = () => {
         setSelectedYears(filters.years || []);
         setSelectedBatches(filters.batches || []);
         setCurrentPage(1);
-    }, []);
+    }, [setSelectedRegions, setSelectedDivision, setSelectedProvince, setSelectedMunicipality, setSelectedDistrict, setSelectedCategories, setSelectedYears, setSelectedBatches]);
 
     const handleAssign = async () => {
         if (!selectedProject || selectedEngineers.length === 0) return;
@@ -376,9 +397,6 @@ const EFDMonitoring = () => {
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
                             <div className="space-y-2">
                                 <div className="flex items-center gap-3 mb-2">
-                                    <span className="px-3 py-1 bg-blue-400/20 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest border border-white/10">
-                                        Live Monitoring
-                                    </span>
                                     <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-400/20 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-400/20 text-emerald-300">
                                         <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
                                         System Active
@@ -407,7 +425,7 @@ const EFDMonitoring = () => {
                 {/* Main Content */}
                 <div className="max-w-7xl mx-auto px-6 -mt-10">
                     {/* Controls Bar */}
-                    <div className="bg-white/80 backdrop-blur-xl p-4 rounded-[2.5rem] shadow-xl border border-white/50 mb-8 space-y-4">
+                    <div className="relative z-[60] bg-white/80 backdrop-blur-xl p-4 rounded-[2.5rem] shadow-xl border border-white/50 mb-8 space-y-4">
                         <div className="flex flex-col lg:flex-row gap-4">
                             {/* Search */}
                             <div className="relative flex-1 group">
@@ -415,13 +433,39 @@ const EFDMonitoring = () => {
                                 <input 
                                     type="text"
                                     placeholder="Quick search projects, schools, or IDs..."
-                                    value={searchQuery}
-                                    onChange={(e) => {
-                                        setSearchQuery(e.target.value);
-                                        setCurrentPage(1);
-                                    }}
+                                    value={localSearchQuery}
+                                    onChange={(e) => setLocalSearchQuery(e.target.value)}
+                                    onFocus={() => setIsSearchFocused(true)}
+                                    onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
                                     className="w-full pl-12 pr-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5 transition-all"
                                 />
+
+                                {/* Search History Dropdown */}
+                                {isSearchFocused && searchHistory.length > 0 && !localSearchQuery && (
+                                    <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                        <div className="p-3 border-b border-slate-50 bg-slate-50/50">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                                <FiActivity size={10} /> Recent Searches
+                                            </p>
+                                        </div>
+                                        <div className="max-h-[240px] overflow-y-auto no-scrollbar">
+                                            {searchHistory.map((item, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    onClick={() => {
+                                                        setLocalSearchQuery(item);
+                                                        setSearchQuery(item);
+                                                        setIsSearchFocused(false);
+                                                    }}
+                                                    className="w-full text-left px-4 py-3 text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center gap-3 border-b border-slate-50 last:border-none"
+                                                >
+                                                    <FiSearch size={12} className="opacity-40" />
+                                                    {item}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Filters & Toggles */}
@@ -615,11 +659,17 @@ const EFDMonitoring = () => {
                                             <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-100 flex flex-col gap-2 mt-auto">
                                                 <div className="flex items-center gap-3">
                                                     <button
+                                                        disabled={!p.imagesCount || Number(p.imagesCount) === 0}
                                                         onClick={(e) => { e.stopPropagation(); navigate(`/project-gallery/${p.id}`); }}
-                                                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-purple-50 text-purple-600 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-purple-600 hover:text-white transition-all shadow-sm active:scale-[0.98] border border-purple-100/50"
+                                                        title={!p.imagesCount || Number(p.imagesCount) === 0 ? 'No photos uploaded yet' : `View ${p.imagesCount} photo${p.imagesCount !== 1 ? 's' : ''}`}
+                                                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] transition-all shadow-sm active:scale-[0.98] border ${
+                                                            !p.imagesCount || Number(p.imagesCount) === 0
+                                                                ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed opacity-60'
+                                                                : 'bg-purple-50 text-purple-600 border-purple-100/50 hover:bg-purple-600 hover:text-white cursor-pointer'
+                                                        }`}
                                                     >
                                                         <FiImage size={14} />
-                                                        Gallery
+                                                        Gallery{p.imagesCount > 0 ? ` (${p.imagesCount})` : ''}
                                                     </button>
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); setLogProject(p); setIsLogOpen(true); }}
@@ -846,8 +896,9 @@ const EFDMonitoring = () => {
                 initialCategories={selectedCategories}
                 initialYears={selectedYears}
                 initialBatches={selectedBatches}
-                yearOptions={allYears}
+                yearOptions={fundingYears}
                 batchOptions={allBatches}
+                categoryOptions={projectCategories}
             />
         </PageTransition>
     );

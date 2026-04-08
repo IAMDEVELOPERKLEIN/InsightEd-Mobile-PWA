@@ -4,6 +4,7 @@ import { FiFilter, FiSearch, FiLayers, FiList, FiTrendingUp, FiMapPin, FiChevron
 import { LuClipboardList, LuCalendar, LuDollarSign, LuActivity } from "react-icons/lu";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, LabelList, Legend } from 'recharts';
 import { useAuth } from '../context/AuthContext';
+import { useEFDFilters } from '../context/EFDFilterContext';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import EditProjectModal from '../components/EditProjectModal';
@@ -85,6 +86,7 @@ const EFDHome = () => {
     const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem('efd_activeTab') || 'summary');
     const [viewMode, setViewMode] = useState('card'); 
     const [engineers, setEngineers] = useState([]);
+    const [isSearchFocused, setIsSearchFocused] = useState(false);
     const [selectedProjectForAssignment, setSelectedProjectForAssignment] = useState(null);
     const [selectedEngineers, setSelectedEngineers] = useState([]);
     const [isAssigning, setIsAssigning] = useState(false);
@@ -133,26 +135,32 @@ const EFDHome = () => {
         }
     }, [loading]);
 
-    const [selectedRegions, setSelectedRegions] = useState(() => JSON.parse(localStorage.getItem('efd_selectedRegions') || '[]'));
+    const {
+        selectedRegions, setSelectedRegions,
+        selectedCategories, setSelectedCategories,
+        selectedYears, setSelectedYears,
+        selectedBatches, setSelectedBatches,
+        searchQuery, setSearchQuery,
+        selectedDivision, setSelectedDivision,
+        selectedProvince, setSelectedProvince,
+        selectedMunicipality, setSelectedMunicipality,
+        selectedDistrict, setSelectedDistrict,
+        selectedSource, setSelectedSource,
+        selectedDonated, setSelectedDonated,
+        selectedDocStatus, setSelectedDocStatus,
+        searchHistory, addToSearchHistory,
+        clearFilters
+    } = useEFDFilters();
+
     const [isFilterOpen, setIsFilterOpen] = useState(false);
-    const [selectedDivision, setSelectedDivision] = useState(() => localStorage.getItem('efd_selectedDivision') || '');
-    const [selectedProvince, setSelectedProvince] = useState(() => localStorage.getItem('efd_selectedProvince') || '');
-    const [selectedMunicipality, setSelectedMunicipality] = useState(() => localStorage.getItem('efd_selectedMunicipality') || '');
-    const [selectedDistrict, setSelectedDistrict] = useState(() => localStorage.getItem('efd_selectedDistrict') || '');
-    const [selectedCategories, setSelectedCategories] = useState(() => JSON.parse(localStorage.getItem('efd_selectedCategories') || '[]'));
-    const [selectedYears, setSelectedYears] = useState(() => JSON.parse(localStorage.getItem('efd_selectedYears') || '[]'));
-    const [selectedBatches, setSelectedBatches] = useState(() => JSON.parse(localStorage.getItem('efd_selectedBatches') || '[]'));
-    const [selectedSource, setSelectedSource] = useState('All'); 
     const [currentPage, setCurrentPage] = useState(() => {
         const saved = sessionStorage.getItem('efd_currentPage');
         return saved ? parseInt(saved, 10) : 1;
     });
-    const [selectedDonated, setSelectedDonated] = useState('All'); 
-    const [selectedDocStatus, setSelectedDocStatus] = useState('All'); 
     const [fundingYears, setFundingYears] = useState([]);
     const [allBatches, setAllBatches] = useState([]);
-    const [searchQuery, setSearchQuery] = useState(() => localStorage.getItem('efd_searchQuery') || '');
-    const [localSearchQuery, setLocalSearchQuery] = useState(() => localStorage.getItem('efd_searchQuery') || '');
+    const [projectCategories, setProjectCategories] = useState([]);
+    const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
     const [globalTotal, setGlobalTotal] = useState(0); // fixed total inventory, never filtered
     const [efdLocations, setEfdLocations] = useState([]);
     const [isBeffMode, setIsBeffMode] = useState(() => window.location.pathname.toLowerCase().includes('beff'));
@@ -164,32 +172,20 @@ const EFDHome = () => {
         return role;
     });
 
-    // Persistent Filter Sync
-    useEffect(() => {
-        localStorage.setItem('efd_selectedRegions', JSON.stringify(selectedRegions));
-        localStorage.setItem('efd_selectedDivision', selectedDivision);
-        localStorage.setItem('efd_selectedProvince', selectedProvince);
-        localStorage.setItem('efd_selectedMunicipality', selectedMunicipality);
-        localStorage.setItem('efd_selectedDistrict', selectedDistrict);
-        localStorage.setItem('efd_selectedCategories', JSON.stringify(selectedCategories));
-        localStorage.setItem('efd_selectedYears', JSON.stringify(selectedYears));
-        localStorage.setItem('efd_selectedBatches', JSON.stringify(selectedBatches));
-        localStorage.setItem('efd_searchQuery', searchQuery);
-    }, [selectedRegions, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict, selectedCategories, selectedYears, selectedBatches, searchQuery]);
-
     // Persistent Pagination Sync
     useEffect(() => {
         sessionStorage.setItem('efd_currentPage', currentPage.toString());
     }, [currentPage]);
 
-    // Debounce: update shared searchQuery 400ms after user stops typing
+    // Debounce: update shared searchQuery 800ms after user stops typing
     useEffect(() => {
         const timer = setTimeout(() => {
-            if (localSearchQuery !== searchQuery) {
-                setSearchQuery(localSearchQuery);
-                setCurrentPage(1); // reset pagination on new search
+            setSearchQuery(localSearchQuery);
+            if (localSearchQuery.trim().length >= 2) {
+                addToSearchHistory(localSearchQuery);
             }
-        }, 400);
+            setCurrentPage(1); // reset pagination on new search
+        }, 800);
         return () => clearTimeout(timer);
     }, [localSearchQuery]);
 
@@ -228,30 +224,8 @@ const EFDHome = () => {
     }, [user, user?.uid]);
 
     const handleClearFilters = () => {
-        setSelectedRegions([]);
-        setSelectedDivision('');
-        setSelectedProvince('');
-        setSelectedMunicipality('');
-        setSelectedDistrict('');
-        setSelectedCategories([]);
-        setSelectedYears([]); 
-        setSelectedSource('All'); 
-        setSelectedDonated('All');
-        setSelectedDocStatus('All');
-        setSearchQuery('');
+        clearFilters();
         setCurrentPage(1);
-
-        // Clear persistence to ensure sync
-        localStorage.removeItem('efd_selectedRegions');
-        localStorage.removeItem('efd_selectedDivision');
-        localStorage.removeItem('efd_selectedProvince');
-        localStorage.removeItem('efd_selectedMunicipality');
-        localStorage.removeItem('efd_selectedDistrict');
-        localStorage.removeItem('efd_selectedCategories');
-        localStorage.removeItem('efd_selectedYears');
-        localStorage.removeItem('efd_selectedBatches');
-        localStorage.removeItem('efd_searchQuery');
-        sessionStorage.removeItem('efd_currentPage');
     };
 
     const handleNavigateToProject = useCallback((id) => {
@@ -390,26 +364,29 @@ const EFDHome = () => {
                 if (!user) return;
                 setUserData(user);
 
-                const [fyRes, locRes, engRes, batchRes, globalRes] = await Promise.all([
+                const [fyRes, locRes, engRes, batchRes, globalRes, categoryRes] = await Promise.all([
                     fetch('/api/reference/funding-years'),
                     fetch('/api/reference/efd-locations'),
                     fetch('/api/engineers'),
                     fetch('/api/reference/batch-of-funds'),
-                    fetch(`/api/dashboard/efd-summary?engineer_id=${user.uid}`) // global total, no filters
+                    fetch(`/api/dashboard/efd-summary?engineer_id=${user.uid}`),
+                    fetch('/api/reference/project-categories')
                 ]);
 
-                const [fyData, locData, engData, batchData, globalData] = await Promise.all([
+                const [fyData, locData, engData, batchData, globalData, categoryData] = await Promise.all([
                     fyRes.ok ? fyRes.json() : [],
                     locRes.ok ? locRes.json() : [],
                     engRes.ok ? engRes.json() : [],
                     batchRes.ok ? batchRes.json() : [],
-                    globalRes.ok ? globalRes.json() : null
+                    globalRes.ok ? globalRes.json() : null,
+                    categoryRes.ok ? categoryRes.json() : []
                 ]);
 
                 setFundingYears(fyData);
                 setEfdLocations(locData);
                 setEngineers(engData);
                 setAllBatches(batchData);
+                setProjectCategories(categoryData);
                 if (globalData?.totalStats?.totalProjects != null) {
                     setGlobalTotal(globalData.totalStats.totalProjects);
                 }
@@ -863,7 +840,7 @@ const EFDHome = () => {
                         
 
                     {/* --- FILTER CONTROL PANEL --- */}
-                    <div className="space-y-4">
+                    <div className="relative z-[60] space-y-4">
                         {/* Search Bar & Filter Toggle */}
                         <div className="flex gap-4">
                             <div className="relative group flex-1">
@@ -873,8 +850,37 @@ const EFDHome = () => {
                                     placeholder="Search by project name, school ID, or location..."
                                     value={localSearchQuery}
                                     onChange={(e) => setLocalSearchQuery(e.target.value)}
+                                    onFocus={() => setIsSearchFocused(true)}
+                                    onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
                                     className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-3xl shadow-sm text-sm font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all placeholder:text-slate-300"
                                 />
+                                
+                                {/* Search History Dropdown */}
+                                {isSearchFocused && searchHistory.length > 0 && !localSearchQuery && (
+                                    <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                        <div className="p-3 border-b border-slate-50 bg-slate-50/50">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                                <FiActivity size={10} /> Recent Searches
+                                            </p>
+                                        </div>
+                                        <div className="max-h-[240px] overflow-y-auto no-scrollbar">
+                                            {searchHistory.map((item, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    onClick={() => {
+                                                        setLocalSearchQuery(item);
+                                                        setSearchQuery(item);
+                                                        setIsSearchFocused(false);
+                                                    }}
+                                                    className="w-full text-left px-4 py-3 text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center gap-3 border-b border-slate-50 last:border-none"
+                                                >
+                                                    <FiSearch size={12} className="opacity-40" />
+                                                    {item}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <button 
@@ -1514,7 +1520,11 @@ const EFDHome = () => {
 
                                                 {/* Card Footer (Assignment Action) */}
                                                 <div className="p-4 px-6 bg-slate-50/30 border-t border-slate-50 flex flex-col gap-3 mt-auto">
-                                                    {isUnassigned ? (
+                                                    {/* 
+                                                        Assign Engineer button commented out as projects now follow 
+                                                        shared regional/divisional logic. 
+                                                    */}
+                                                    {/* isUnassigned ? (
                                                         <button 
                                                             onClick={(e) => { 
                                                                 e.stopPropagation(); 
@@ -1543,7 +1553,27 @@ const EFDHome = () => {
                                                                 <FiChevronRight size={14} />
                                                             </button>
                                                         </div>
-                                                    )}
+                                                    ) */}
+
+                                                    {/* Simplified status footer since assignment button is hidden */}
+                                                    <div className="flex items-center justify-between w-full">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-400 border border-slate-200">
+                                                                {engrName?.[0] || 'EP'}
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Project Access</span>
+                                                                <span className="text-[8px] font-bold text-blue-500 uppercase">Regional Shared</span>
+                                                            </div>
+                                                        </div>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); handleNavigateToProject(p.id); }}
+                                                            className="w-8 h-8 flex items-center justify-center bg-white text-blue-600 rounded-xl border border-slate-100 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                                            title="See Insights"
+                                                        >
+                                                            <FiChevronRight size={14} />
+                                                        </button>
+                                                    </div>
                                                     {/* Action Buttons Row */}
                                                     <div className="flex items-center justify-between border-t border-slate-100 pt-3">
                                                         <div className="flex items-center gap-2">
@@ -1767,6 +1797,7 @@ const EFDHome = () => {
                 initialBatches={selectedBatches}
                 yearOptions={allYears}
                 batchOptions={allBatches}
+                categoryOptions={projectCategories}
             />
         </PageTransition>
     );

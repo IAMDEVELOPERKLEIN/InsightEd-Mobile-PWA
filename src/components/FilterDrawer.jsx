@@ -2,17 +2,22 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { FiX, FiCheck, FiChevronDown } from 'react-icons/fi';
 import { createPortal } from 'react-dom';
 
+const ALL_REGIONS = ['NCR', 'CAR', 'REGION I', 'REGION II', 'REGION III', 'REGION IV-A', 'MIMAROPA', 'REGION V', 'REGION VI', 'REGION VII', 'REGION VIII', 'REGION IX', 'REGION X', 'REGION XI', 'REGION XII', 'CARAGA', 'BARMM'];
+
 const FilterDrawer = ({
     isOpen,
     onClose,
     onApply,
     projects = [],
-    locations = [], // New prop for database-driven locations
+    locations = [],
     initialRegions = [],
     initialDivisions = [],
     initialCategories = [],
     initialYears = [],
     initialBatches = [],
+    yearOptions = [],   // pre-fetched from /api/reference/funding-years
+    batchOptions = [],  // pre-fetched from /api/reference/batch-of-funds
+    categoryOptions = [], // pre-fetched from /api/reference/project-categories
     hideRegions = false,
     hideDivisions = false,
     hideProvinces = false,
@@ -71,9 +76,16 @@ const FilterDrawer = ({
             .filter(l => !selectedMunicipality || normalize(l.municipality) === normalize(selectedMunicipality))
             .map(l => l.legislative_district).filter(Boolean))].map(s => s.trim().toUpperCase());
 
-        const years = [...new Set(sourceData.map(p => p.funding_year || p.fundingYear).filter(Boolean).map(String).filter(Boolean))].sort((a,b) => b.localeCompare(a));
+        // years/batches: prefer pre-fetched reference data (from engineer_form via API routes).
+        // Fall back to deriving from projects only when the reference props are empty.
+        const projectsSource = Array.isArray(projects) ? projects : [];
+        const years = yearOptions.length > 0
+            ? yearOptions.map(String)
+            : [...new Set(projectsSource.map(p => p.funding_year || p.fundingYear).filter(Boolean).map(String))].sort((a, b) => b.localeCompare(a));
 
-        const batches = [...new Set(sourceData.map(p => p.batch_of_funds || p.batchOfFunds).filter(Boolean).map(s => String(s).trim()).filter(Boolean))].sort();
+        const batches = batchOptions.length > 0
+            ? batchOptions.map(String)
+            : [...new Set(projectsSource.map(p => p.batch_of_funds || p.batchOfFunds).filter(Boolean).map(s => String(s).trim()))].sort();
 
         if (DEBUG_FILTERS) {
             console.log('[FilterDrawer] DEBUG — first 3 projects:', sourceData.slice(0, 3).map(p => ({
@@ -90,10 +102,12 @@ const FilterDrawer = ({
             municipalities: [...new Set(municipalities)].sort(),
             districts: [...new Set(districts)].sort(),
             years,
-            categories: [...new Set(sourceData.map(p => p.project_category || p.projectCategory).filter(Boolean))].map(s => s.trim()).filter(Boolean),
+            categories: categoryOptions.length > 0 
+                ? categoryOptions 
+                : [...new Set(projectsSource.map(p => p.project_category || p.projectCategory).filter(Boolean))].map(s => s.trim()).filter(Boolean),
             batches
         };
-    }, [projects, locations, selectedRegions, selectedDivision, selectedProvince, selectedMunicipality]);
+    }, [projects, locations, selectedRegions, selectedDivision, selectedProvince, selectedMunicipality, categoryOptions]);
 
     if (!isOpen) return null;
 
@@ -143,9 +157,22 @@ const FilterDrawer = ({
         </div>
     );
 
-    const MultiSelectField = ({ label, options, selected, onChange }) => (
+    const MultiSelectField = ({ label, options, selected, onChange, onSelectAll, allOptions }) => (
         <div className="space-y-3">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
+            <div className="flex items-center justify-between ml-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</label>
+                {onSelectAll && allOptions && (
+                    <button
+                        onClick={() => {
+                            if (selected.length === allOptions.length) onSelectAll([]);
+                            else onSelectAll(allOptions);
+                        }}
+                        className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest hover:underline transition-opacity"
+                    >
+                        {selected.length === allOptions.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                )}
+            </div>
             <div className="flex flex-wrap gap-2">
                 {(options || []).map(opt => {
                     const isSel = selected.includes(opt);
@@ -157,8 +184,8 @@ const FilterDrawer = ({
                                 else onChange([...selected, opt]);
                             }}
                             className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all border ${
-                                isSel 
-                                ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20' 
+                                isSel
+                                ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20'
                                 : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-500 hover:border-blue-200'
                             }`}
                         >
@@ -198,11 +225,13 @@ const FilterDrawer = ({
                     <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
                         {/* Regions */}
                         {!hideRegions && (
-                            <MultiSelectField 
-                                label="Regions" 
-                                options={['NCR', 'CAR', 'REGION I', 'REGION II', 'REGION III', 'REGION IV-A', 'MIMAROPA', 'REGION V', 'REGION VI', 'REGION VII', 'REGION VIII', 'REGION IX', 'REGION X', 'REGION XI', 'REGION XII', 'CARAGA', 'BARMM']}
+                            <MultiSelectField
+                                label="Regions"
+                                options={ALL_REGIONS}
                                 selected={selectedRegions}
                                 onChange={setSelectedRegions}
+                                onSelectAll={setSelectedRegions}
+                                allOptions={ALL_REGIONS}
                             />
                         )}
 
