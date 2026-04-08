@@ -9966,9 +9966,9 @@ app.get('/api/dashboard/efd-summary', async (req, res) => {
             whereClauses.push(`TRIM(e.region) ILIKE TRIM($${queryParams.length})`);
           }
           if (userProfile.division) {
-            const normalizedDivision = userProfile.division.trim().replace(/^(SDO|Division of)\s+/i, '').trim();
+            const normalizedDivision = userProfile.division.trim().replace(/^(SDO|Division of)[-\s]+/i, '').trim();
             queryParams.push(normalizedDivision);
-            whereClauses.push(`regexp_replace(TRIM(e.division), '^(SDO|Division of)\\s+', '', 'i') ILIKE $${queryParams.length}`);
+            whereClauses.push(`regexp_replace(TRIM(e.division), '^(SDO|Division of)[-\\s]+', '', 'i') ILIKE $${queryParams.length}`);
           }
         } else {
           queryParams.push(engineer_id);
@@ -9989,30 +9989,35 @@ app.get('/api/dashboard/efd-summary', async (req, res) => {
       queryParams.push(region); 
       whereClauses.push(`TRIM(e.region) ILIKE TRIM($${queryParams.length})`); 
     }
-    if (division) { 
-      const normDiv = division.replace(/^(SDO|Division of)\s+/i, '').trim();
-      queryParams.push(normDiv); 
-      whereClauses.push(`regexp_replace(TRIM(e.division), '^(SDO|Division of)\\s+', '', 'i') ILIKE $${queryParams.length}`); 
+    if (division) {
+      const normDiv = division.replace(/^(SDO|Division of)[-\s]+/i, '').trim();
+      queryParams.push(normDiv);
+      whereClauses.push(`regexp_replace(TRIM(e.division), '^(SDO|Division of)[-\\s]+', '', 'i') ILIKE $${queryParams.length}`);
     }
-    if (req.query.province) { 
-      queryParams.push(req.query.province); 
-      whereClauses.push(`TRIM(e.province) ILIKE TRIM($${queryParams.length})`); 
+    if (req.query.province) {
+      queryParams.push(req.query.province);
+      whereClauses.push(`TRIM(e.province) ILIKE TRIM($${queryParams.length})`);
     }
-    if (req.query.municipality) { 
-      queryParams.push(req.query.municipality); 
-      whereClauses.push(`TRIM(e.municipality) ILIKE TRIM($${queryParams.length})`); 
+    if (req.query.municipality) {
+      queryParams.push(req.query.municipality);
+      whereClauses.push(`TRIM(e.municipality) ILIKE TRIM($${queryParams.length})`);
     }
-    if (req.query.district) { 
-      queryParams.push(req.query.district); 
-      whereClauses.push(`TRIM(e.district) ILIKE TRIM($${queryParams.length})`); 
+    if (req.query.district) {
+      queryParams.push(req.query.district);
+      whereClauses.push(`TRIM(e.district) ILIKE TRIM($${queryParams.length})`);
     }
-    if (category) { queryParams.push(category); whereClauses.push(`e.project_category = $${queryParams.length}`); }
-    if (year) { queryParams.push(year); whereClauses.push(`e.funding_year = $${queryParams.length}`); }
-    if (req.query.batch) { queryParams.push(req.query.batch); whereClauses.push(`e.batch_of_funds = $${queryParams.length}`); }
+    if (category) { queryParams.push(category); whereClauses.push(`TRIM(e.project_category) ILIKE TRIM($${queryParams.length})`); }
+    if (year) { queryParams.push(year); whereClauses.push(`TRIM(e.funding_year::text) ILIKE TRIM($${queryParams.length})`); }
+    if (req.query.batch) { queryParams.push(req.query.batch); whereClauses.push(`TRIM(e.batch_of_funds::text) ILIKE TRIM($${queryParams.length})`); }
 
     if (search) {
       queryParams.push(`%${search}%`);
       whereClauses.push(`(e.school_name ILIKE $${queryParams.length} OR e.project_name ILIKE $${queryParams.length})`);
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔍 [efd-summary] Filter Query Params:', queryParams);
+      console.log('🔍 [efd-summary] SQL WHERE Clauses:', whereClauses.join(' AND '));
     }
 
     const whereStr = whereClauses.length > 0 ? `WHERE ` + whereClauses.join(' AND ') : '';
@@ -10206,11 +10211,11 @@ app.get('/api/projects', async (req, res) => {
           }
           // Regional Engineer oversees all divisions in their region — skip division filter
           if (userProfile.division && role !== 'regional engineer') {
-            // Normalize both sides: strip "SDO " / "Division of " prefixes so
-            // "SDO Benguet" in users matches "Benguet" in engineer_form (and vice-versa).
-            const normalizedDivision = userProfile.division.trim().replace(/^(SDO|Division of)\s+/i, '').trim();
+            // Normalize both sides: strip "SDO " / "SDO-" / "Division of " prefixes so
+            // "SDO Benguet" / "SDO-Benguet" in users matches "Benguet" in engineer_form (and vice-versa).
+            const normalizedDivision = userProfile.division.trim().replace(/^(SDO|Division of)[-\s]+/i, '').trim();
             queryParams.push(normalizedDivision);
-            whereClauses.push(`regexp_replace(TRIM(p.division), '^(SDO|Division of)\\s+', '', 'i') ILIKE $${queryParams.length}`);
+            whereClauses.push(`regexp_replace(TRIM(p.division), '^(SDO|Division of)[-\\s]+', '', 'i') ILIKE $${queryParams.length}`);
           }
         } else {
           queryParams.push(engineer_id);
@@ -10232,16 +10237,16 @@ app.get('/api/projects', async (req, res) => {
     // 2. Add your existing filters
     if (status) {
       queryParams.push(status);
-      whereClauses.push(`p.status = $${queryParams.length}`);
+      whereClauses.push(`TRIM(p.status) ILIKE TRIM($${queryParams.length})`);
     }
     if (region) {
       queryParams.push(region);
       whereClauses.push(`TRIM(p.region) ILIKE TRIM($${queryParams.length})`);
     }
     if (division) {
-      const normDiv = division.replace(/^(SDO|Division of)\s+/i, '').trim();
+      const normDiv = division.replace(/^(SDO|Division of)[-\s]+/i, '').trim();
       queryParams.push(normDiv);
-      whereClauses.push(`regexp_replace(TRIM(p.division), '^(SDO|Division of)\\s+', '', 'i') ILIKE $${queryParams.length}`);
+      whereClauses.push(`regexp_replace(TRIM(p.division), '^(SDO|Division of)[-\\s]+', '', 'i') ILIKE $${queryParams.length}`);
     }
     // NEW: Province Filter
     if (req.query.province) {
@@ -10266,17 +10271,17 @@ app.get('/api/projects', async (req, res) => {
     // NEW: Funding Year Filter
     if (req.query.year) {
       queryParams.push(req.query.year);
-      whereClauses.push(`p.funding_year = $${queryParams.length}`);
+      whereClauses.push(`TRIM(p.funding_year::text) ILIKE TRIM($${queryParams.length})`);
     }
     // NEW: Batch of Funds Filter
     if (req.query.batch) {
       queryParams.push(req.query.batch);
-      whereClauses.push(`p.batch_of_funds = $${queryParams.length}`);
+      whereClauses.push(`TRIM(p.batch_of_funds::text) ILIKE TRIM($${queryParams.length})`);
     }
     // NEW: Category Filter
     if (req.query.category) {
       queryParams.push(req.query.category);
-      whereClauses.push(`p.project_category = $${queryParams.length}`);
+      whereClauses.push(`TRIM(p.project_category) ILIKE TRIM($${queryParams.length})`);
     }
 
     // NEW: Program Type (Donated/BEFF) Filter
@@ -10302,6 +10307,11 @@ app.get('/api/projects', async (req, res) => {
     if (cl) {
       queryParams.push(Number(cl));
       whereClauses.push(`p.number_of_classrooms = $${queryParams.length}`);
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔍 [projects] Filter Query Params:', queryParams);
+      console.log('🔍 [projects] SQL WHERE Clauses:', whereClauses.join(' AND '));
     }
 
     if (whereClauses.length > 0) {

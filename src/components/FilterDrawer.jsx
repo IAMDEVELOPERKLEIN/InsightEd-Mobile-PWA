@@ -13,6 +13,9 @@ const FilterDrawer = ({
     initialCategories = [],
     initialYears = [],
     initialBatches = [],
+    categoryOptions = [],
+    yearOptions = [],
+    batchOptions = [],
     hideRegions = false,
     hideDivisions = false,
     hideProvinces = false,
@@ -71,9 +74,11 @@ const FilterDrawer = ({
             .filter(l => !selectedMunicipality || normalize(l.municipality) === normalize(selectedMunicipality))
             .map(l => l.legislative_district).filter(Boolean))].map(s => s.trim().toUpperCase());
 
-        const years = [...new Set(sourceData.map(p => p.funding_year || p.fundingYear).filter(Boolean).map(String).filter(Boolean))].sort((a,b) => b.localeCompare(a));
+        const derivedYears = [...new Set(sourceData.map(p => p.funding_year || p.fundingYear).filter(Boolean).map(String).filter(Boolean))].sort((a,b) => b.localeCompare(a));
+        const years = yearOptions.length > 0 ? yearOptions.map(String) : derivedYears;
 
-        const batches = [...new Set(sourceData.map(p => p.batch_of_funds || p.batchOfFunds).filter(Boolean).map(s => String(s).trim()).filter(Boolean))].sort();
+        const derivedBatches = [...new Set(sourceData.map(p => p.batch_of_funds || p.batchOfFunds).filter(Boolean).map(s => String(s).trim()).filter(Boolean))].sort();
+        const batches = batchOptions.length > 0 ? batchOptions : derivedBatches;
 
         if (DEBUG_FILTERS) {
             console.log('[FilterDrawer] DEBUG — first 3 projects:', sourceData.slice(0, 3).map(p => ({
@@ -84,16 +89,19 @@ const FilterDrawer = ({
             console.log('[FilterDrawer] DEBUG — derived years:', years, '| batches:', batches);
         }
 
+        const derivedCategories = [...new Set(sourceData.map(p => p.project_category || p.projectCategory).filter(Boolean))].map(s => s.trim()).filter(Boolean);
+        const categories = categoryOptions.length > 0 ? categoryOptions : derivedCategories;
+
         return {
             divisions: [...new Set(divisions)].sort(),
             provinces: [...new Set(provinces)].sort(),
             municipalities: [...new Set(municipalities)].sort(),
             districts: [...new Set(districts)].sort(),
             years,
-            categories: [...new Set(sourceData.map(p => p.project_category || p.projectCategory).filter(Boolean))].map(s => s.trim()).filter(Boolean),
+            categories,
             batches
         };
-    }, [projects, locations, selectedRegions, selectedDivision, selectedProvince, selectedMunicipality]);
+    }, [projects, locations, selectedRegions, selectedDivision, selectedProvince, selectedMunicipality, categoryOptions, yearOptions, batchOptions]);
 
     if (!isOpen) return null;
 
