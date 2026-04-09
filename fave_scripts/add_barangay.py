@@ -17,6 +17,11 @@ def add_barangay(region, province, barangay):
         conn = psycopg2.connect(database_url, sslmode='require')
         cur = conn.cursor()
 
+        # Force all caps for consistency
+        region = region.upper().strip()
+        province = province.upper().strip()
+        barangay = barangay.upper().strip()
+
         # Set other hierarchy fields to NULL as requested
         division = None
         district = None

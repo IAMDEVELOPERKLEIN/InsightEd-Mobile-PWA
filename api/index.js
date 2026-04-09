@@ -190,11 +190,11 @@ const { Pool } = pg;
 const pool = new Pool({
   connectionString: dbUrl,
   ssl: isLocal ? false : { rejectUnauthorized: false },
-  max: 20, // Optimized for Cluster Mode (assumes multiple instances; prevents DB saturation)
-  min: 2,  // Reduced from 5 to further save connections across cluster
+  max: 12, // Reduced from 20 to accommodate the 8-instance cluster within PgBouncer (150) limit.
+  min: 2,  
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000, // Reduced to 10s to fail fast
-  application_name: 'InsightEd_API_Primary'
+  connectionTimeoutMillis: 10000, 
+  application_name: 'InsightEd_API_Cluster'
 });
 
 pool.on('connect', (client) => {
@@ -444,8 +444,8 @@ setInterval(() => {
 
 app.use((req, res, next) => {
   const heapUsage = process.memoryUsage().heapUsed;
-  const HEAP_THRESHOLD = 800 * 1024 * 1024; // 800MB
-  const DELAY_THRESHOLD = 200; // 200ms
+  const HEAP_THRESHOLD = 950 * 1024 * 1024; // 950MB (Hawkeye Tuning)
+  const DELAY_THRESHOLD = 300; // 300ms (Reduced sensitivity for cluster stability)
 
   if (eventLoopDelay > DELAY_THRESHOLD || heapUsage > HEAP_THRESHOLD) {
     console.warn(`⚠️ [Admission-Control] REJECTING REQUEST - Delay: ${eventLoopDelay}ms | Heap: ${Math.round(heapUsage/1024/1024)}MB`);

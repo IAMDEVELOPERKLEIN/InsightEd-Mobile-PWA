@@ -52,17 +52,30 @@ conns_raw = parts_upper[1].strip() if len(parts_upper) > 1 else parts_upper[0].s
 
 # 1. Parse Logs
 now = time.time()
-u_staging, u_prod = set(), set()
+u_staging, u_prod, u_dash = set(), set(), set()
 err_5xx = 0
+
+def is_noise(path):
+    p = path.lower()
+    if any(x in p for x in ["sw.js", "favicon.ico", "maintenance_mode", "health"]): return True
+    if any(p.endswith(x) for x in [".png", ".jpg", ".jpeg", ".css", ".js", ".svg", ".ico", ".json", ".map"]): return True
+    return False
+
 for line in logs_raw.splitlines():
     try:
         if "health" in line.lower() or "urllib" in line.lower(): continue
         p = line.split()
+        if len(p) < 9: continue
+        
+        ip, path = p[0], p[6]
+        if is_noise(path): continue
+        
         dt = datetime.strptime(p[3].strip("["), "%d/%b/%Y:%H:%M:%S")
         if (now - dt.timestamp()) < 60:
             if p[8].startswith("5"): err_5xx += 1
-            if "/insighted-staging/" in line: u_staging.add(p[0])
-            else: u_prod.add(p[0])
+            if "/insighted-staging/" in line: u_staging.add(ip)
+            elif "/dashboard/" in line or "/stride-dashboard/" in line: u_dash.add(ip)
+            else: u_prod.add(ip)
     except: continue
 
 # 2. Parse Connections
@@ -77,7 +90,7 @@ for line in conns_raw.splitlines():
 
 data = json.loads(raw_full[1]) if raw_full[1].strip().startswith("[") else []
 print("-" * 80 + "\\033[K")
-print(" Global Nginx (60s)         | %d Pure Users / %d Server Errors\\033[K" % (len(u_prod)+len(u_staging), err_5xx))
+print(" Global Nginx (60s)         | %d Pure Users (Filtered Noise) / %d Server Errors\\033[K" % (len(u_prod)+len(u_staging)+len(u_dash), err_5xx))
 print("-" * 80 + "\\033[K")
 print(" PM2 SERVICE BREAKDOWN      | CPU   | RAM   | USR | DB | RST | UPTIME\\033[K")
 print("-" * 80 + "\\033[K")
@@ -95,7 +108,12 @@ for p in sorted(data, key=lambda x: x.get("name","")):
     mem = p.get("monit", {}).get("memory", 0) / 1073741824
     rst = p.get("pm2_env", {}).get("restart_time", 0)
     upt = fmt_up(p.get("pm2_env", {}).get("pm_uptime", 0))
-    usr = len(u_staging if "staging" in n.lower() else u_prod)
+    
+    # Precise Attribution
+    if "staging" in n.lower(): usr = len(u_staging)
+    elif "dashboard" in n.lower(): usr = len(u_dash)
+    else: usr = len(u_prod)
+    
     db = db_stats.get(str(p.get("pid","")), 0)
     print(" %-26s | %4.1f%% | %4.2fG | %3d | %2d | %3d | %s\\033[K" % (n, cpu, mem, usr, db, rst, upt))
 '
