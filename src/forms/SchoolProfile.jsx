@@ -70,7 +70,8 @@ const SchoolProfile = ({ embedded }) => {
         region: '', province: '', municipality: '', barangay: '',
         division: '', district: '', legDistrict: '',
         motherSchoolId: '', isAnnex: 'No', latitude: '', longitude: '',
-        curricularOffering: '', iern: ''
+        curricularOffering: '', iern: '',
+        hasSnedSelfContained: false, sned_self_contained_count: 0
     });
 
     const [originalData, setOriginalData] = useState(null);
@@ -127,7 +128,9 @@ const SchoolProfile = ({ embedded }) => {
             longitude: dbData.longitude || '',
             // 👇 THE FIX: Normalize the value from DB/Cache
             curricularOffering: normalizeOffering(dbData.curricular_offering || cachedOffering) || '',
-            iern: dbData.iern || ''
+            iern: dbData.iern || '',
+            hasSnedSelfContained: dbData.hasSnedSelfContained || false,
+            sned_self_contained_count: dbData.sned_self_contained_count || 0
         };
     };
 
@@ -849,6 +852,51 @@ const SchoolProfile = ({ embedded }) => {
                                                     onChange={handleChange}
                                                     className={inputClass}
                                                     placeholder="Enter Mother School ID"
+                                                    required
+                                                    disabled={isDummy}
+                                                />
+                                            </div>
+                                        )}
+
+                                        {/* SNED SELF-CONTAINED DECLARATION */}
+                                        <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 flex items-center justify-between">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Self-contained SNED Class?</label>
+                                                <p className="text-[10px] text-slate-400 font-medium">Does your school have classes for SNED learners?</p>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        name="hasSnedSelfContained"
+                                                        checked={formData.hasSnedSelfContained}
+                                                        onChange={(e) => setFormData(prev => ({
+                                                            ...prev,
+                                                            hasSnedSelfContained: e.target.checked,
+                                                            sned_self_contained_count: e.target.checked ? prev.sned_self_contained_count : 0
+                                                        }))}
+                                                        disabled={isDummy}
+                                                        className="sr-only peer"
+                                                    />
+                                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 dark:peer-focus:ring-emerald-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-emerald-600"></div>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        {formData.hasSnedSelfContained && (
+                                            <div className="p-4 bg-emerald-50/20 border-x border-b border-emerald-100/50 rounded-b-xl -mt-4 animate-in slide-in-from-top-2">
+                                                <label className={labelClass}>Total SNED Classes</label>
+                                                <input
+                                                    type="number"
+                                                    name="sned_self_contained_count"
+                                                    value={formData.sned_self_contained_count === 0 ? '' : formData.sned_self_contained_count}
+                                                    onChange={(e) => {
+                                                        const val = parseInt(e.target.value) || 0;
+                                                        setFormData(prev => ({ ...prev, sned_self_contained_count: val }));
+                                                    }}
+                                                    className={inputClass}
+                                                    placeholder="Enter number of classes"
+                                                    min="1"
                                                     required
                                                     disabled={isDummy}
                                                 />

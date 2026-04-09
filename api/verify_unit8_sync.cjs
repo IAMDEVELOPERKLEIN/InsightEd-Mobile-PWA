@@ -25,8 +25,24 @@ const pool = new Pool({
   ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
 });
 
+async function getConnectedClient() {
+  try {
+    const client = await pool.connect();
+    return client;
+  } catch (err) {
+    if (err.message.includes('pg_hba.conf') || err.message.includes('timeout')) {
+      console.warn('⚠️  Remote connection failed, attempting local fallback...');
+      const localPool = new Pool({
+        connectionString: 'postgresql://localhost:5432/insightEd',
+      });
+      return await localPool.connect();
+    }
+    throw err;
+  }
+}
+
 async function verify() {
-  const client = await pool.connect();
+  const client = await getConnectedClient();
   try {
     console.log('\n=== verify_unit8_sync: Unit 8 / school_location_profiles alignment check ===\n');
 

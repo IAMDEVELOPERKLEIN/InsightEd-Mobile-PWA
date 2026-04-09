@@ -37,10 +37,13 @@ const NodesDashboard = () => {
             if (schoolId) {
                 try {
                     const res = await fetch(`/api/ph_schools/progress/${schoolId}`);
-                    if (res.ok) {
                         const data = await res.json();
-                        if (data.success) setQuestProgress(data.progress);
-                    }
+                        if (data.success) {
+                            setQuestProgress({
+                                ...data.progress,
+                                schoolId: schoolId // Store the ID we used for the fetch
+                            });
+                        }
 
                     // Fetch ESF7 Status
                     const esf7Res = await fetch(`/api/esf7/status/${schoolId}`);
@@ -177,10 +180,14 @@ const NodesDashboard = () => {
             <div className="min-h-screen bg-white pb-32 font-sans text-slate-900 overflow-y-auto">
                 
                 <div className="px-8 pt-12 pb-10 flex justify-between items-start">
-                    <h1 className="text-4xl font-black text-slate-900 tracking-tight">
-                        Welcome to <br />
-                        <span className="text-[#10346B]">InsightED Nodes</span>
-                    </h1>
+                    <div className="flex flex-col">
+                        <h1 className="text-3xl font-black text-slate-900 tracking-tight leading-tight">
+                            {questProgress.school_name || "Nexus Dashboard"}
+                        </h1>
+                        <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">
+                            School ID: {questProgress.schoolId || "------"}
+                        </p>
+                    </div>
                     <button 
                         onClick={confirmLogout}
                         className="p-4 bg-slate-50 rounded-3xl border border-slate-100 text-slate-400 hover:text-red-500 hover:bg-red-50 hover:border-red-100 transition-all active:scale-95 shadow-lg shadow-slate-200/50"

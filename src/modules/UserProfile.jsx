@@ -1063,6 +1063,20 @@ const UserProfile = () => {
                                         setCheckingForUpdate(true);
                                         // Show success modal briefly before reload
                                         setShowOptimizeSuccess(true);
+                                        
+                                        try {
+                                            // 1. Remote Repair Protocol: Align Unit 8 JSONB
+                                            await fetch('/api/system/align-unit8', {
+                                                method: 'POST',
+                                                headers: {
+                                                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                                                    'Content-Type': 'application/json'
+                                                }
+                                            });
+                                        } catch (err) {
+                                            console.warn("Failed to reach align-unit8 endpoint:", err);
+                                        }
+                                        
                                         setTimeout(async () => {
                                             await hardReset();
                                         }, 2000);
@@ -1095,8 +1109,8 @@ const UserProfile = () => {
                                     <FiRefreshCw size={24} className="text-[#004A99] dark:text-blue-400" />
                                 </div>
                             </div>
-                            <h3 className="text-lg font-black text-slate-800 dark:text-white mb-1">Optimizing...</h3>
-                            <p className="text-sm text-slate-500 dark:text-slate-400">Clearing cache and fetching the latest version. Restarting shortly.</p>
+                            <h3 className="text-lg font-black text-slate-800 dark:text-white mb-1">Optimizing System...</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Clearing cache, fetching updates, and <strong className="text-blue-600 dark:text-blue-400">aligning Unit 8 JSONB data</strong>. Restarting shortly.</p>
                         </div>
                     </div>
                 )}

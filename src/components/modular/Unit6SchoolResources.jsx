@@ -309,10 +309,24 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
                 let mergedExpectedGrades = expectedGrades.filter(eg => !multigradeGrades.some(mg => mg.pairs.includes(eg.id)));
                 mergedExpectedGrades.push(...multigradeGrades);
+                
                 const spedAlsCount = parseInt(d.sped_learners_count || 0);
                 if (spedAlsCount > 0 || d.als_community_centers_count > 0) {
                     mergedExpectedGrades.push({ id: "sped_als", grade_level: "SPED/ALS", enrolled: spedAlsCount, sections: Math.max(1, parseInt(d.als_community_centers_count || 0)), isVerified: false });
                 }
+
+                // Self-contained SNED Class
+                const snedCount = parseInt(d.sned_class || d.sned_self_contained_count || 0);
+                if (d.hasSnedSelfContained || snedCount > 0) {
+                    mergedExpectedGrades.push({ 
+                        id: "sned_self_contained", 
+                        grade_level: "Self-contained SNED", 
+                        enrolled: parseInt(d.sned_learners_count || 0), // Use SNED count from Unit 2 if available
+                        sections: Math.max(1, snedCount), 
+                        isVerified: false 
+                    });
+                }
+
                 mergedExpectedGrades.sort((a,b) => {
                     const getSortOrder = (id) => (id === "kinder" ? 0 : id.startsWith("g") ? parseInt(id.replace("g", "")) : id.startsWith("mg_") ? 0.5 : 100);
                     return getSortOrder(a.id) - getSortOrder(b.id);

@@ -347,7 +347,13 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                     return !mgGradeNumbers.has(digit);
                 });
 
-                setAvailableGrades([...filteredMonogrades, ...mgGroups]);
+                const snedGrades = [];
+                // Use baseline (ph_schools) or Unit 2 counts (if available)
+                if (baseline.hasSnedSelfContained || (baseline.unit2_simplified_enrollment && (typeof baseline.unit2_simplified_enrollment === 'string' ? baseline.unit2_simplified_enrollment.includes('sned') : JSON.stringify(baseline.unit2_simplified_enrollment).includes('sned')))) {
+                    snedGrades.push({ id: "sned_self_contained", label: "SNED (Self-contained)", isMultigrade: false });
+                }
+
+                setAvailableGrades([...filteredMonogrades, ...mgGroups, ...snedGrades]);
 
 
                 // 4. RESTORE UNIT 7 DATA

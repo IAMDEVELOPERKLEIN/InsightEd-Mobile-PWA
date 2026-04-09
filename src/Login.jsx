@@ -98,10 +98,7 @@ const Login = () => {
     const [loading, setLoading] = useState(true);
     const [focusedInput, setFocusedInput] = useState(null);
     const [showForgotModal, setShowForgotModal] = useState(false);
-    const [resetEmail, setResetEmail] = useState('');
-    const [verificationEmail, setVerificationEmail] = useState(''); // NEW STATE
-    const [resetLoading, setResetLoading] = useState(false);
-    const [isNotFound, setIsNotFound] = useState(false);
+    const [showForgotPasscodeModal, setShowForgotPasscodeModal] = useState(false);
     const [loginMode, setLoginMode] = useState('password'); // 'password' | 'passcode'
     const [isSchoolHead, setIsSchoolHead] = useState(true);
     const [isPortalEnforced, setIsPortalEnforced] = useState(false); // NEW: Track if a portal is active
@@ -355,88 +352,7 @@ const Login = () => {
         }
     };
 
-    // --- 3. FORGOT PASSWORD HANDLER ---
-    const [isMatchedFlow, setIsMatchedFlow] = useState(false);
 
-    // Auto-lookup effect for Forgot Password
-    useEffect(() => {
-        const checkIdentifier = async () => {
-            const input = resetEmail.trim();
-            if (input.length < 3) {
-                setVerificationEmail('');
-                setIsMatchedFlow(false);
-                return;
-            }
-
-            try {
-                // Fetch email linked to this identifier (School ID or Email)
-                const res = await fetch(`/api/lookup-email/${encodeURIComponent(input)}`);
-                const data = await res.json();
-                if (res.ok && data.found) {
-                    setVerificationEmail(data.maskedEmail);
-                    setIsMatchedFlow(true);
-                    setIsNotFound(false);
-                } else {
-                    setVerificationEmail('');
-                    setIsMatchedFlow(false);
-                    setIsNotFound(!input.includes('@')); // Only show error for School IDs or specific unmatched identifiers
-                }
-            } catch (e) { 
-                console.error("Lookup failed", e);
-                setIsMatchedFlow(false);
-                setIsNotFound(false);
-            }
-        };
-
-        const timer = setTimeout(checkIdentifier, 1000); // Debounce 1.0s
-        return () => clearTimeout(timer);
-    }, [resetEmail]);
-
-    const handlePasswordReset = async (e) => {
-        e.preventDefault();
-        if (!resetEmail) return alert("Please enter your email or School ID.");
-
-        setResetLoading(true);
-        const input = resetEmail.trim();
-
-        if (isNotFound) {
-            alert("No email address is registered for this School ID in our system. Please contact your Division ICT Coordinator or System Administrator to update your account details.");
-            setResetLoading(false);
-            return;
-        }
-
-        // If we haven't matched yet and it's looking like a School ID, block
-        if (!isMatchedFlow && !input.includes('@')) {
-            alert("Validating ID... Please wait or check the ID.");
-            setResetLoading(false);
-            return;
-        }
-
-        try {
-            const res = await fetch('/api/forgot-password', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    identifier: input
-                })
-            });
-            const data = await res.json();
-
-            if (res.ok && data.success) {
-                alert(`Success! Reset link has been sent to your registered email: ${verificationEmail || input}`);
-                setShowForgotModal(false);
-                setVerificationEmail('');
-                setIsMatchedFlow(false);
-            } else {
-                alert("Failed: " + (data.error || "Unknown error"));
-            }
-        } catch (err) {
-            console.error("Reset Error:", err);
-            alert("Network error: " + err.message);
-        } finally {
-            setResetLoading(false);
-        }
-    };
 
 
     // --- 5. TROUBLESHOOT & UPDATES ---
@@ -627,10 +543,16 @@ const Login = () => {
 
                                     <button
                                         type="button"
-                                        onClick={() => { setResetEmail(loginId); setShowForgotModal(true); }}
+                                        onClick={() => {
+                                            if (loginMode === 'passcode') {
+                                                setShowForgotPasscodeModal(true);
+                                            } else {
+                                                setShowForgotModal(true);
+                                            }
+                                        }}
                                         className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase"
                                     >
-                                        Forgot Password?
+                                        {loginMode === 'passcode' ? 'Forgot Passcode?' : 'Forgot Password?'}
                                     </button>
                                 </div>
 
@@ -732,83 +654,65 @@ const Login = () => {
                     </svg>
                 </div>
 
-                {/* FORGOT PASSWORD MODAL */}
+                {/* FORGOT PASSWORD MODAL (Switch to Passcode Suggestion) */}
                 {showForgotModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-                        <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl relative">
-                             <h2 className="text-xl font-bold text-slate-800 mb-2">Reset Password</h2>
-                             <p className="text-sm text-slate-500 mb-4">
-                                 {isSchoolHead 
-                                     ? "Enter your School ID and we'll send a link to your registered email."
-                                     : "Enter your email address and we'll send you a link to reset your password."}
-                             </p>
- 
-                             <form onSubmit={handlePasswordReset}>
-                                 <div className="mb-4 space-y-3">
-                                     {/* INPUT 1: ID or EMAIL */}
-                                     <input
-                                         type="text"
-                                         value={resetEmail}
-                                         onChange={(e) => setResetEmail(e.target.value)}
-                                         placeholder={isSchoolHead ? "Enter your school ID" : "Enter your email or school ID"}
-                                         className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                                         required
-                                     />
-
-                                    {/* NOT FOUND ERROR */}
-                                    {isNotFound && resetEmail.length >= 3 && (
-                                        <div className="text-xs text-red-500 font-medium animate-in fade-in slide-in-from-top-1 ml-1">
-                                            No registered account found for this ID.
-                                        </div>
-                                    )}
-
-                                    {/* INPUT 2: VERIFICATION EMAIL (Extracted from Registration) */}
-                                    {resetEmail.length >= 3 && !isNotFound && (
-                                        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                                            <p className="text-xs text-blue-600 font-bold mb-1 ml-1 flex items-center gap-1">
-                                                {isMatchedFlow ? (
-                                                    <>
-                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-                                                            <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                                                        </svg>
-                                                        Registered Email (Extracted)
-                                                    </>
-                                                ) : resetEmail.includes('@') ? "Registered Email" : "Confirm Registered Email"}
-                                            </p>
-                                            <input
-                                                type="text"
-                                                value={isMatchedFlow ? verificationEmail : (resetEmail.includes('@') ? resetEmail : verificationEmail)}
-                                                onChange={(e) => !isMatchedFlow && !resetEmail.includes('@') && setVerificationEmail(e.target.value)}
-                                                readOnly={isMatchedFlow || resetEmail.includes('@')}
-                                                placeholder={isMatchedFlow ? "Fetching..." : "Enter your registered email address"}
-                                                className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none transition-all 
-                                                    ${(isMatchedFlow || resetEmail.includes('@'))
-                                                        ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
-                                                        : 'bg-blue-50/30 border-blue-100 text-blue-900 focus:ring-2 focus:ring-blue-500 placeholder:text-blue-300'
-                                                    }`}
-                                                required
-                                            />
-                                        </div>
-                                    )}
+                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl relative border border-white/20">
+                            <div className="text-center mb-6">
+                                <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                    </svg>
                                 </div>
+                                <h2 className="text-2xl font-black text-slate-800 tracking-tight">Forgot Password?</h2>
+                                <p className="text-slate-500 text-sm mt-3 leading-relaxed">
+                                    Don't worry! You can try logging in using your <span className="font-bold text-blue-600">6-digit Passcode</span> instead. 
+                                    It's faster and more secure.
+                                </p>
+                            </div>
 
-                                <div className="flex gap-3">
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowForgotModal(false)}
-                                        className="flex-1 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={resetLoading}
-                                        className="flex-1 py-3 bg-[#004A99] text-white font-bold rounded-xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 disabled:opacity-70"
-                                    >
-                                        {resetLoading ? 'Sending...' : 'Send Link'}
-                                    </button>
-                                </div>
-                            </form>
+                            <div className="space-y-3">
+                                <button
+                                    onClick={() => {
+                                        setLoginMode('passcode');
+                                        setShowForgotModal(false);
+                                    }}
+                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-500/30 transition-all active:scale-[0.98] uppercase tracking-widest text-[10px]"
+                                >
+                                    Switch to Passcode Login
+                                </button>
+                                <button
+                                    onClick={() => setShowForgotModal(false)}
+                                    className="w-full bg-slate-50 hover:bg-slate-100 text-slate-500 font-bold py-4 rounded-2xl transition-all active:scale-[0.98] uppercase tracking-widest text-[10px] border border-slate-100"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* FORGOT PASSCODE MODAL */}
+                {showForgotPasscodeModal && (
+                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl relative border border-white/20 text-center">
+                            <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                            </div>
+                            <h2 className="text-2xl font-black text-slate-800 tracking-tight">Retrieve Passcode</h2>
+                            <p className="text-slate-500 text-sm mt-3 mb-6 leading-relaxed">
+                                Please contact our support team at:<br/>
+                                <span className="font-black text-blue-600 text-base">support.stride@deped.gov.ph</span><br/>
+                                to retrieve or reset your passcode.
+                            </p>
+                            <button
+                                onClick={() => setShowForgotPasscodeModal(false)}
+                                className="w-full bg-slate-900 hover:bg-black text-white font-black py-4 rounded-2xl transition-all active:scale-[0.98] uppercase tracking-widest text-[10px]"
+                            >
+                                Close
+                            </button>
                         </div>
                     </div>
                 )}

@@ -18580,6 +18580,50 @@ app.post('/api/school-location', async (req, res) => {
 });
 
 // ==================================================================
+//               SYSTEM OPTIMIZATION & REPAIR ENDPOINTS
+// ==================================================================
+
+// POST /api/system/align-unit8
+app.post('/api/system/align-unit8', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided.' });
+  }
+  try {
+    const tokenStr = authHeader.split(' ')[1];
+    jwt.verify(tokenStr, process.env.JWT_SECRET || 'STRIDE_INSIGHTED_SECRET_2026_KEY_PROD');
+    
+    // Execute the JSONB alignment for all relevant Unit 8 columns
+    const columns = ['transportation_modes', 'hazards_experienced', 'water_proximity', 'natural_calamities', 'anthropogenic_threats'];
+    let conversions = [];
+    
+    for (const col of columns) {
+      await pool.query(`
+        DO $$
+        DECLARE col_type TEXT;
+        BEGIN
+          SELECT data_type INTO col_type
+          FROM information_schema.columns
+          WHERE table_name = 'school_location_profiles' AND column_name = '${col}';
+
+          IF col_type IS NOT NULL AND col_type != 'jsonb' THEN
+            ALTER TABLE school_location_profiles
+              ALTER COLUMN ${col} TYPE JSONB USING to_jsonb(${col});
+          END IF;
+        END $$;
+      `);
+      conversions.push(col);
+    }
+    
+    console.log(`[System Repair] Unit 8 JSONB alignment verified via API.`);
+    res.json({ success: true, message: "Unit 8 JSONB Alignment executed successfully.", converted: conversions });
+  } catch (err) {
+    console.error("❌ Align Unit 8 Error:", err.message);
+    res.status(500).json({ error: "Failed to align Unit 8", message: err.message });
+  }
+});
+
+// ==================================================================
 //               USER PROGRESS ENDPOINTS (Facade)
 // ==================================================================
 
