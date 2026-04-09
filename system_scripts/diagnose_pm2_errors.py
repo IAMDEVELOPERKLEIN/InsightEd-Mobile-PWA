@@ -125,7 +125,7 @@ THRESHOLDS = {
     "LATENCY_RED": 2000     # ms
 }
 
-def get_system_vitals():
+def get_system_vitals(source_name="Generic"):
     """Fetches real-time system metrics via SSH."""
     # Initialize vitals with explicit types to satisfy Pyre
     vitals = {
@@ -178,24 +178,30 @@ def get_system_vitals():
         vitals["disk"]["desc"] = f"Error: {str(e)}"
 
     # 4. DB Size & Latency & Active Sessions (Consolidated Query)
-    ENV_PATH = "/var/www/html/InsightEd-Mobile-PWA/.env"
+    base_path = "/var/www/html/InsightEd-Mobile-PWA" if "production" in str(source_name).lower() else "/var/www/html/InsightEd-Staging"
+    ENV_PATH = f"{base_path}/.env"
     
-    # We use current_database() to avoid hardcoding naming, and count active sessions
-    cmd = f"DB_URL=$(grep DATABASE_URL {ENV_PATH} | cut -d '=' -f2 | sed 's/\"//g'); " \
-          f"psql -Atc \"SELECT pg_size_pretty(pg_database_size(current_database())), (SELECT count(*) FROM pg_stat_activity WHERE state = 'active');\" $DB_URL"
+    # We use a robust query. current_database() can fail on some bouncers, so we just check connectivity
+    # and total sessions from pg_stat_activity if permissions allow.
+    # We strip query parameters (starting with ?) as psql doesn't support them all (e.g. prepare_threshold)
+    cmd = f"DB_URL=$(grep DATABASE_URL {ENV_PATH} | head -n 1 | cut -d '=' -f2- | sed 's/\"//g'); " \
+          f"CLEAN_URL=$(echo $DB_URL | cut -d '?' -f1); " \
+          f"if [ -z \"$DB_URL\" ]; then echo 'MISSING_URL'; else " \
+          f"psql -Atc \"SELECT 'READY'\" \"$CLEAN_URL\" > /dev/null 2>&1 && " \
+          f"psql -Atc \"SELECT pg_size_pretty(pg_database_size(current_database())), (SELECT count(*) FROM pg_stat_activity WHERE state = 'active');\" \"$CLEAN_URL\" || echo 'CON_ERR'; fi"
     
     start = pytime.time()
     stdout, stderr = run_remote_command(cmd)
     end = pytime.time()
     
-    if stdout:
+    if stdout and stdout.strip() != "CON_ERR" and stdout.strip() != "MISSING_URL":
         parts = stdout.strip().split('|')
         if len(parts) >= 2:
             vitals["db"]["size"] = parts[0].strip()
             vitals["db"]["sessions"] = parts[1].strip()
     else:
         vitals["db"]["size"] = "Error"
-        vitals["db"]["desc"] = stderr.strip()[:100]
+        vitals["db"]["desc"] = "Connection Failed (PgBouncer or Auth)" if stdout.strip() == "CON_ERR" else (stderr.strip()[:100] or "Unknown Error")
         vitals["db"]["status"] = "RED" # Explicitly flag errors as RED
     
     vitals["db"]["latency"] = int((end - start) * 1000)
@@ -317,7 +323,7 @@ def main():
             return "", ""
         
         run_remote_command = mock_run
-        vitals = get_system_vitals()
+        vitals = get_system_vitals("Mock")
         print_audit_report({}, "Mock Test Environment", vitals)
         return
         if not os.path.exists(args.file):
@@ -332,7 +338,7 @@ def main():
         app_name = args.app or ("insighted-backend" if args.env == "production" else "insighted-staging")
         print(f"📡 Remote Audit Initialized for {args.env.upper()} ({app_name})...")
         
-        vitals = get_system_vitals()
+        vitals = get_system_vitals(f"Remote {args.env.upper()}")
         cmd = f"pm2 logs {app_name} --lines {args.lines} --nostream"
         stdout, stderr = run_remote_command(cmd)
         
@@ -358,7 +364,7 @@ def main():
         
         for env_name, app_name in envs:
             print(f"\n📡 Auditing {env_name.upper()}...")
-            vitals = get_system_vitals()
+            vitals = get_system_vitals(f"Remote {env_name.upper()}")
             cmd = f"pm2 logs {app_name} --lines {args.lines} --nostream"
             stdout, stderr = run_remote_command(cmd)
             

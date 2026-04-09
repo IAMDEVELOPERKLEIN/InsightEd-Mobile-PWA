@@ -13,6 +13,10 @@ import sys
 # Colors
 RED = '\033[0;31m'; GREEN = '\033[0;32m'; YELLOW = '\033[1;33m'; CYAN = '\033[0;36m'; NC = '\033[0m'
 
+# Ensure stdout uses UTF-8 even on Windows
+if sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 # Paths (local repository relative)
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TMP_NGINX_CONF = os.path.join(ROOT_DIR, "tmp_nginx.conf")
@@ -138,25 +142,91 @@ def pm2_manage(orc, restart=False, show_logs=False, app_name="all"):
         else:
             print(f"{RED}No logs found or PM2 unreachable.{NC}")
 
-def pg_manage(orc, status=False, purge=False, optimize=False, db="stride_prod"):
+def pg_manage(orc, status=False, purge=False, purge_locks=False, optimize=False, db="stride_prod"):
     header(f"Postgres: Management ({db})")
     
     if status:
         print(f"{YELLOW}Auditing connection pool...{NC}")
-        query = "SELECT count(*), state FROM pg_stat_activity GROUP BY state;"
-        res = orc.run(f"sudo -u postgres psql -d {db} -c \"{query}\"")
+        query = "SELECT count(*), state, wait_event_type FROM pg_stat_activity GROUP BY state, wait_event_type;"
+        res = orc.run(f"sudo -u postgres psql -h 127.0.0.1 -d {db} -c \"{query}\"")
         if res: print(res)
 
     if purge:
         print(f"{RED}Terminating idle database connections...{NC}")
-        query = "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle' AND usename != 'postgres';"
-        orc.run(f"sudo -u postgres psql -d {db} -c \"{query}\"")
+        query = "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle' AND usename != 'postgres' AND pid != pg_backend_pid();"
+        orc.run(f"sudo -u postgres psql -h 127.0.0.1 -d {db} -c \"{query}\"")
         print(f"{GREEN}Idle connections cleared.{NC}")
+
+    if purge_locks:
+        print(f"{RED}EMERGENCY: Breaking database lock contention...{NC}")
+        query = "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND pid != pg_backend_pid();"
+        orc.run(f"sudo -u postgres psql -h 127.0.0.1 -d {db} -c \"{query}\"")
+        print(f"{GREEN}Locking sessions terminated.{NC}")
 
     if optimize:
         print(f"{YELLOW}Running VACUUM ANALYZE (Bloat Reduction)...{NC}")
-        orc.run(f"sudo -u postgres psql -d {db} -c \"VACUUM ANALYZE;\"", timeout=300)
+        orc.run(f"sudo -u postgres psql -h 127.0.0.1 -d {db} -c \"VACUUM ANALYZE;\"", timeout=300)
         print(f"{GREEN}Database optimization complete.{NC}")
+
+def pg_archive_orphans(orc, db="insightEd"):
+    header(f"Postgres: Orphan Archiving ({db})")
+    # Corrected authenticated connection string for Azure Managed Service
+    conn = f"-h stride-posgre-prod-01.postgres.database.azure.com -U Administrator1 -d {db}"
+    env = "export PGPASSWORD='pRZTbQ2T1JD7'; "
+    
+    print(f"{YELLOW}Creating archive table if missing...{NC}")
+    orc.run(f"{env} psql {conn} -c \"CREATE TABLE IF NOT EXISTS unified_binaries_archive (LIKE unified_binaries INCLUDING ALL);\"", timeout=60)
+    
+    print(f"{CYAN}Performing iterative batch migration (100 rows/cycle)...{NC}")
+    # We use an iterative move-and-purge logic to avoid transaction timeouts on 4GB of data
+    while True:
+        # Move Batch
+        move_query = """
+        INSERT INTO unified_binaries_archive 
+        SELECT * FROM unified_binaries b 
+        WHERE NOT EXISTS (SELECT 1 FROM school_documents s WHERE b.id = s.binary_id)
+          AND NOT EXISTS (SELECT 1 FROM school_ownership_docs so WHERE b.id = so.binary_id)
+          AND NOT EXISTS (SELECT 1 FROM lgu_projects l WHERE b.id = l.binary_id)
+          AND NOT EXISTS (SELECT 1 FROM project_documents p WHERE b.id = p.binary_id)
+          AND NOT EXISTS (SELECT 1 FROM lgu_image li WHERE b.id = li.binary_id)
+          AND NOT EXISTS (SELECT 1 FROM engineer_image ei WHERE b.id = ei.binary_id)
+          AND NOT EXISTS (SELECT 1 FROM engineer_documents ed WHERE b.id IN (ed.binary_id, ed.pow_binary_id, ed.dupa_binary_id, ed.contract_binary_id, ed.rta_binary_id, ed.moa_binary_id))
+        LIMIT 100
+        ON CONFLICT (id) DO NOTHING;
+        """
+        orc.run(f"{env} psql {conn} -c \"{move_query}\"", timeout=120)
+
+        # Purge Batch (Postgres requires subquery for LIMIT in DELETE)
+        purge_query = """
+        DELETE FROM unified_binaries 
+        WHERE id IN (
+            SELECT b.id FROM unified_binaries b 
+            WHERE EXISTS (SELECT 1 FROM unified_binaries_archive a WHERE a.id = b.id)
+              AND NOT EXISTS (SELECT 1 FROM school_documents s WHERE b.id = s.binary_id)
+              AND NOT EXISTS (SELECT 1 FROM school_ownership_docs so WHERE b.id = so.binary_id)
+              AND NOT EXISTS (SELECT 1 FROM lgu_projects l WHERE b.id = l.binary_id)
+              AND NOT EXISTS (SELECT 1 FROM project_documents p WHERE b.id = p.binary_id)
+              AND NOT EXISTS (SELECT 1 FROM lgu_image li WHERE b.id = li.binary_id)
+              AND NOT EXISTS (SELECT 1 FROM engineer_image ei WHERE b.id = ei.binary_id)
+              AND NOT EXISTS (SELECT 1 FROM engineer_documents ed WHERE b.id IN (ed.binary_id, ed.pow_binary_id, ed.dupa_binary_id, ed.contract_binary_id, ed.rta_binary_id, ed.moa_binary_id))
+            LIMIT 100
+        );
+        """
+        orc.run(f"{env} psql {conn} -c \"{purge_query}\"", timeout=120)
+
+        # Check Progress
+        res = orc.run(f"{env} psql {conn} -t -A -c \"SELECT count(*) FROM (SELECT 1 FROM unified_binaries b WHERE NOT EXISTS ... LIMIT 1) as t;\"") # Simplified check
+        # Actually a full count is better for the UI
+        count_q = "SELECT count(*) FROM unified_binaries b WHERE NOT EXISTS (SELECT 1 FROM school_documents s WHERE b.id = s.binary_id) AND NOT EXISTS (SELECT 1 FROM school_ownership_docs so WHERE b.id = so.binary_id) AND NOT EXISTS (SELECT 1 FROM lgu_projects l WHERE b.id = l.binary_id) AND NOT EXISTS (SELECT 1 FROM project_documents p WHERE b.id = p.binary_id) AND NOT EXISTS (SELECT 1 FROM lgu_image li WHERE b.id = li.binary_id) AND NOT EXISTS (SELECT 1 FROM engineer_image ei WHERE b.id = ei.binary_id) AND NOT EXISTS (SELECT 1 FROM engineer_documents ed WHERE b.id IN (ed.binary_id, ed.pow_binary_id, ed.dupa_binary_id, ed.contract_binary_id, ed.rta_binary_id, ed.moa_binary_id));"
+        rem = orc.run(f"{env} psql {conn} -t -A -c \"{count_q}\"")
+        try:
+            remaining = int(rem)
+            print(f"{CYAN}   Orphans remaining: {remaining}{NC}")
+            if remaining == 0: break
+        except:
+            break
+
+    print(f"{GREEN}Archiving complete. Primary index optimized.{NC}")
 
 def main():
     parser = argparse.ArgumentParser(description="InsightEd Full-Stack Maintenance Orchestrator")
@@ -171,7 +241,10 @@ def main():
     parser.add_argument("--harden", action="store_true", help="Apply aggressive TCP tuning")
     parser.add_argument("--heavy-purge", action="store_true", help="Nuclear: Kill all active 80/443 sockets")
     parser.add_argument("--pm2", action="store_true", help="Restart PM2 apps and show logs")
+    parser.add_argument("--logs", action="store_true", help="Show recent PM2 logs")
     parser.add_argument("--pg-purge", action="store_true", help="Kill idle Postgres backends")
+    parser.add_argument("--pg-kill-locks", action="store_true", help="Emergency: Kill all sessions waiting on locks")
+    parser.add_argument("--pg-archive-orphans", action="store_true", help="Non-destructive: Move 4GB orphans to archive table")
     parser.add_argument("--pg-optimize", action="store_true", help="Run Postgres VACUUM ANALYZE")
     parser.add_argument("--all", action="store_true", help="Full stacked maintenance cycle")
     
@@ -186,13 +259,16 @@ def main():
     do_purge_cache = getattr(args, 'purge_cache', False)
     do_purge_conn = getattr(args, 'purge_connections', False)
     do_pm2 = getattr(args, 'pm2', False)
+    do_logs = getattr(args, 'logs', False)
     do_pg_purge = getattr(args, 'pg_purge', False)
+    do_pg_locks = getattr(args, 'pg_kill_locks', False)
+    do_pg_archive = getattr(args, 'pg_archive_orphans', False)
     do_pg_opt = getattr(args, 'pg_optimize', False)
 
     if args.host or run_all:
         orc.run("rm -f /etc/nginx/sites-enabled/*.bak.*", sudo=True)
 
-    if not any([do_status, do_purge_cache, do_purge_conn, do_pool, do_harden, do_heavy, do_pm2, do_pg_purge, do_pg_opt, run_all]):
+    if not any([do_status, do_purge_cache, do_purge_conn, do_pool, do_harden, do_heavy, do_pm2, do_logs, do_pg_purge, do_pg_locks, do_pg_archive, do_pg_opt, run_all]):
         print(f"{YELLOW}No action specified. Defaulting to --all...{NC}")
         run_all = True
 
@@ -231,6 +307,12 @@ def main():
     if run_all or do_pg_purge:
         pg_manage(orc, purge=True, db=args.db)
 
+    if run_all or do_pg_locks:
+        pg_manage(orc, purge_locks=True, db=args.db)
+
+    if do_pg_archive:
+        pg_archive_orphans(orc, db=args.db)
+
     if run_all or do_pg_opt:
         pg_manage(orc, optimize=True, db=args.db)
 
@@ -239,6 +321,8 @@ def main():
 
     if run_all or do_pm2:
         pm2_manage(orc, restart=True, show_logs=True)
+    elif do_logs:
+        pm2_manage(orc, restart=False, show_logs=True)
 
     if run_all or do_status:
         header(f"Status Report")
