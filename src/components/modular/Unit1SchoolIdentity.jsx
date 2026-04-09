@@ -85,6 +85,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         school_head: "",
         contact_number: "",
         ownership: "",
+        ownership_multiple: [],
         google_drive_link: "",
         google_drive_file_id: "",
         google_drive_file_name: "",
@@ -216,8 +217,9 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 merged.division = takeValue(iernRow.Division, iernRow.division, iernRow.Schools_Division_Office || iernRow.SDO || merged.division);
                 merged.district = takeValue(iernRow.District, iernRow.district, iernRow.Schools_District || merged.district);
                 merged.leg_district = takeValue(iernRow.Legislative_District, iernRow.Leg_District, iernRow.leg_district || merged.leg_district);
-                merged.latitude = iernRow.Latitude || iernRow.latitude || merged.latitude;
-                merged.longitude = iernRow.Longitude || iernRow.longitude || merged.longitude;
+                // iernRow provides a registry fallback; ph_schools will override below if it has user-updated coords
+                merged.latitude = merged.latitude || iernRow.Latitude || iernRow.latitude;
+                merged.longitude = merged.longitude || iernRow.Longitude || iernRow.longitude;
                 merged.iern = iernRow.iern || iernRow.IERN || merged.iern;
             }
 
@@ -232,12 +234,16 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 merged.district = takeValue(merged.district, d.district, "");
                 merged.leg_district = takeValue(merged.leg_district, d.leg_district, "");
                 merged.curricular_offering = takeValue(merged.curricular_offering, normalizeOffering(d.curricular_offering), "");
-                merged.latitude = merged.latitude || d.latitude;
-                merged.longitude = merged.longitude || d.longitude;
+                // ph_schools coordinates take priority — they reflect user-updated values saved from registration or Unit 1 submit
+                if (d.latitude) merged.latitude = d.latitude;
+                if (d.longitude) merged.longitude = d.longitude;
                 merged.iern = merged.iern || d.iern;
                 merged.school_head = takeValue(merged.school_head, d.school_head, "");
                 merged.contact_number = takeValue(merged.contact_number, d.contact_number, "");
                 merged.ownership = takeValue(merged.ownership, d.ownership === "deped owned" ? "deped" : d.ownership, "");
+                merged.ownership_multiple = d.ownership_multiple
+                    ? (Array.isArray(d.ownership_multiple) ? d.ownership_multiple : (() => { try { return JSON.parse(d.ownership_multiple); } catch { return []; } })())
+                    : [];
                 merged.google_drive_link = takeValue(merged.google_drive_link, d.google_drive_link, "");
                 merged.google_drive_file_id = takeValue(merged.google_drive_file_id, d.google_drive_file_id, "");
                 merged.google_drive_file_name = takeValue(merged.google_drive_file_name, d.google_drive_file_name, "");
@@ -544,6 +550,10 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             }
         } else {
             setFormData(prev => ({ ...prev, [name]: value }));
+            // Broadcast offering change immediately so other units (Unit 2, 3, etc.) react without waiting for a save
+            if (name === 'curricular_offering' && value) {
+                localStorage.setItem("schoolOffering", value);
+            }
         }
     };
     const handleRegionChange = (e) => setFormData(prev => ({ ...prev, region: e.target.value, province: "", municipality: "", barangay: "", division: "", district: "" }));
@@ -552,15 +562,26 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const handleDivisionChange = (e) => setFormData(prev => ({ ...prev, division: e.target.value, district: "" }));
     const handleOwnershipChange = (e) => {
         setDriveLinkError("");
-        setFormData(prev => ({ 
-            ...prev, 
-            ownership: e.target.value, 
+        setFormData(prev => ({
+            ...prev,
+            ownership: e.target.value,
+            ownership_multiple: [],
             ownership_document_type: "",
-            google_drive_link: "", 
-            google_drive_file_id: "", 
-            google_drive_file_name: "", 
-            google_drive_thumbnail_url: "" 
+            google_drive_link: "",
+            google_drive_file_id: "",
+            google_drive_file_name: "",
+            google_drive_thumbnail_url: ""
         }));
+    };
+
+    const handleMultipleOwnershipToggle = (val) => {
+        setFormData(prev => {
+            const current = prev.ownership_multiple || [];
+            const updated = current.includes(val)
+                ? current.filter(v => v !== val)
+                : [...current, val];
+            return { ...prev, ownership_multiple: updated };
+        });
     };
     const handleSchoolTypeChange = (e) => setFormData(prev => ({ ...prev, school_type: e.target.value, mother_school_id: "", extension_mother_school_name: "" }));
     
@@ -718,6 +739,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 school_head: formData.school_head,
                 contact_number: formData.contact_number,
                 ownership: formData.ownership,
+                ownership_multiple: formData.ownership_multiple || [],
                 google_drive_thumbnail_url: formData.google_drive_thumbnail_url,
                 established_month: formData.established_month,
                 established_year: formData.established_year,
@@ -1115,14 +1137,24 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Ownership</span>
-                                            <p className="font-black text-slate-800 text-lg capitalize">{formData.ownership?.replace('_', ' ') || "—"}</p>
+                                            {formData.ownership === 'multiple' && formData.ownership_multiple?.length ? (
+                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                    {formData.ownership_multiple.map(o => (
+                                                        <span key={o} className="text-xs font-black bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full capitalize">{o.replace(/_/g, ' ')}</span>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="font-black text-slate-800 text-lg capitalize">{formData.ownership?.replace(/_/g, ' ') || "—"}</p>
+                                            )}
                                         </div>
                                         <div className="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center text-2xl">⚖️</div>
                                     </div>
+                                    {formData.ownership !== 'na' && (
                                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                                         <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">Document Type</span>
                                         <p className="font-bold text-slate-700 text-sm">{formData.ownership_document_type || "No document provided"}</p>
                                     </div>
+                                    )}
                                     {formData.local_file_path && (
                                         <div className="space-y-3">
                                             <div className="flex items-center justify-between">
@@ -1604,21 +1636,55 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block mb-2">Ownership</label>
                                             <select name="ownership" value={formData.ownership} onChange={handleOwnershipChange} className={chunkySelect}>
                                                 <option value="" disabled hidden style={{color: '#999'}}>Select Ownership...</option>
-                                                <option value="deped">DepEd Owned</option>
-                                                <option value="privately_owned">Privately Owned</option>
-                                                <option value="lgu_owned">LGU Owned</option>
+                                                <option value="deped">DepEd-owned</option>
+                                                <option value="lgu_owned">LGU-owned</option>
+                                                <option value="privately_owned">Privately-owned</option>
+                                                <option value="nga_owned">NGA-owned</option>
+                                                <option value="multiple">Multiple ownership</option>
+                                                <option value="na">N/A</option>
                                             </select>
                                         </div>
 
+                                        {/* Multiple Ownership — checkbox picker */}
+                                        {formData.ownership === 'multiple' && (
+                                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                                                className="space-y-2">
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Select categories below</label>
+                                                <div className="p-4 bg-white border-2 border-gray-100 rounded-3xl shadow-sm space-y-2">
+                                                    {[
+                                                        { value: 'deped', label: 'DepEd-owned' },
+                                                        { value: 'lgu_owned', label: 'LGU-owned' },
+                                                        { value: 'privately_owned', label: 'Privately-owned' },
+                                                        { value: 'nga_owned', label: 'NGA-owned' },
+                                                    ].map(({ value, label }) => {
+                                                        const selected = (formData.ownership_multiple || []).includes(value);
+                                                        return (
+                                                            <button
+                                                                key={value}
+                                                                type="button"
+                                                                onClick={() => handleMultipleOwnershipToggle(value)}
+                                                                className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all active:scale-[0.98] ${selected ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-500'}`}
+                                                            >
+                                                                <span className="text-sm font-bold">{label}</span>
+                                                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${selected ? 'border-blue-500 bg-blue-500' : 'border-gray-300'}`}>
+                                                                    {selected && <FiCheck className="w-4 h-4 text-white" strokeWidth={4} />}
+                                                                </div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </motion.div>
+                                        )}
+
                                         {/* Ownership Document Upload */}
-                                        {formData.ownership && (
+                                        {formData.ownership && formData.ownership !== 'na' && (
                                             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
                                                 className="space-y-3">
                                                 <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Document Type</label>
-                                                <select 
-                                                    name="ownership_document_type" 
-                                                    value={formData.ownership_document_type} 
-                                                    onChange={handleChange} 
+                                                <select
+                                                    name="ownership_document_type"
+                                                    value={formData.ownership_document_type}
+                                                    onChange={handleChange}
                                                     className={chunkySelect}
                                                 >
                                                     <option value="" disabled hidden style={{color: '#999'}}>Select Document Type...</option>
@@ -1637,25 +1703,31 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     <option value="Tax Declaration Only">Tax Declaration Only</option>
                                                     <option value="Extrajudicial Settlement">Extrajudicial Settlement</option>
                                                 </select>
-                                                
-                                                {/* Local Document Upload (Replaces GDrive) */}
+
+                                                {/* Local Document Upload */}
                                                 <div className="pt-2">
-                                                    <DocumentUpload 
-                                                        iern={formData.iern || formData.school_id} 
+                                                    <DocumentUpload
+                                                        iern={formData.iern || formData.school_id}
                                                         docType={formData.ownership_document_type}
                                                         initialFile={formData.local_file_path}
                                                         initialDocId={formData.ownership_doc_id}
                                                         initialFileSize={formData.local_file_size}
-                                                        onUploadSuccess={(path, id, name, size) => setFormData(prev => ({ 
-                                                            ...prev, 
-                                                            local_file_path: path, 
-                                                            ownership_doc_id: id, 
+                                                        onUploadSuccess={(path, id, name, size) => setFormData(prev => ({
+                                                            ...prev,
+                                                            local_file_path: path,
+                                                            ownership_doc_id: id,
                                                             local_file_name: name,
-                                                            local_file_size: size 
+                                                            local_file_size: size
                                                         }))}
                                                     />
-                                                    
-
+                                                    {/* PDF tip */}
+                                                    <div className="mt-3 flex items-start gap-2 px-4 py-3 bg-amber-50 border border-amber-100 rounded-2xl">
+                                                        <span className="text-amber-500 text-base leading-none mt-0.5">💡</span>
+                                                        <p className="text-[11px] font-semibold text-amber-700 leading-snug">
+                                                            <span className="font-black">Tip:</span> Compress your PDF online first to reduce file size for faster upload.
+                                                            Try <span className="font-black">ilovepdf.com</span> or <span className="font-black">smallpdf.com</span> — free and works in your browser.
+                                                        </p>
+                                                    </div>
                                                 </div>
                                             </motion.div>
                                         )}

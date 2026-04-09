@@ -147,7 +147,8 @@ const ModularDashboard = () => {
             await Promise.all(unitIds.map(async (i) => {
                 try {
                     const draft = await getUnitDraft(i, schoolId);
-                    if (draft) {
+                    // Auto-seeded drafts are baseline data, not real pending edits
+                    if (draft && !draft.isAutoSeeded) {
                         drafts[i] = true;
                     }
                 } catch (e) {

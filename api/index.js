@@ -1199,9 +1199,13 @@ const runAutoMigrations = async () => {
 
     // Unit 1: Ownership Document Type
     const columnPromises = [
-      checkAndAddColumn('ph_schools', 'ownership_document_type', 'TEXT', pool)
+      checkAndAddColumn('ph_schools', 'ownership_document_type', 'TEXT', pool),
+      checkAndAddColumn('ph_schools', 'ownership_multiple', 'TEXT', pool)
     ];
-    if (poolNew) columnPromises.push(checkAndAddColumn('ph_schools', 'ownership_document_type', 'TEXT', poolNew));
+    if (poolNew) {
+      columnPromises.push(checkAndAddColumn('ph_schools', 'ownership_document_type', 'TEXT', poolNew));
+      columnPromises.push(checkAndAddColumn('ph_schools', 'ownership_multiple', 'TEXT', poolNew));
+    }
     
     // Unit Updated At Timestamps
     for (let i = 1; i <= 10; i++) {
@@ -12260,6 +12264,36 @@ app.post('/api/save-school-resources', async (req, res) => {
       await pool.query('DELETE FROM ecart_batches WHERE school_id = $1', [data.schoolId]);
     }
 
+    // --- MARK UNIT 6 AS COMPLETE ---
+    // Resolve IERN for completion sync (mirrors pattern used by other unit endpoints)
+    let resourcesIern = data.iern;
+    if (!resourcesIern && anchorClause === 'school_id = $1') {
+      const iernRow = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [data.schoolId]);
+      resourcesIern = iernRow.rows[0]?.iern;
+    }
+    try {
+      if (resourcesIern) {
+        await pool.query(
+          `UPDATE ph_schools SET unit6 = 1, unit6_completed = TRUE, f7_resources = 1, updated_at = CURRENT_TIMESTAMP WHERE iern = $1`,
+          [resourcesIern]
+        );
+        await pool.query(
+          `INSERT INTO ph_school_completion (iern, school_id, unit6_completion)
+           VALUES ($1, $2, true)
+           ON CONFLICT (iern) DO UPDATE SET unit6_completion = true, updated_at = CURRENT_TIMESTAMP`,
+          [resourcesIern, data.schoolId]
+        );
+      } else {
+        await pool.query(
+          `UPDATE ph_schools SET unit6 = 1, unit6_completed = TRUE, f7_resources = 1, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1`,
+          [data.schoolId]
+        );
+      }
+      updateSchoolTotalCompletion(resourcesIern);
+    } catch (completionErr) {
+      console.error('[WARN] Failed to mark unit6 complete:', completionErr.message);
+    }
+
     res.json({ message: "Resources saved!" });
 
     // SNAPSHOT UPDATE (Primary)
@@ -12715,24 +12749,28 @@ app.post('/api/save-physical-facilities', async (req, res) => {
     await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE;`);
     await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_updated_at TIMESTAMP;`);
 
-    // Update ph_schools core record
-    if (definitiveIern) {
-        await client.query(`UPDATE ph_schools SET unit7_completed = $1, unit7 = $2, unit7_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit7_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE iern = $3`, [isUnit7Completed, isUnit7Completed ? 1 : 0, definitiveIern]);
-    } else {
-        await client.query(`UPDATE ph_schools SET unit7_completed = $1, unit7 = $2, unit7_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit7_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $3`, [isUnit7Completed, isUnit7Completed ? 1 : 0, sId]);
-    }
+    // Only update completion flags on a final submit — partial syncs (step navigation,
+    // building/repair modal saves) must never overwrite an already-completed unit7.
+    if (!data.isPartial) {
+      // Update ph_schools core record
+      if (definitiveIern) {
+          await client.query(`UPDATE ph_schools SET unit7_completed = $1, unit7 = $2, unit7_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit7_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE iern = $3`, [isUnit7Completed, isUnit7Completed ? 1 : 0, definitiveIern]);
+      } else {
+          await client.query(`UPDATE ph_schools SET unit7_completed = $1, unit7 = $2, unit7_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit7_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $3`, [isUnit7Completed, isUnit7Completed ? 1 : 0, sId]);
+      }
 
-    // --- SYNC COMPLETION (UI Unit 7 Facilities -> unit7_completion) ---
-    if (isUnit7Completed && definitiveIern) {
-        await client.query(`
-            INSERT INTO ph_school_completion (iern, school_id, unit7_completion)
-            VALUES ($1, $2, true)
-            ON CONFLICT (iern) DO UPDATE SET unit7_completion = true, updated_at = CURRENT_TIMESTAMP
-        `, [definitiveIern, sId]);
+      // --- SYNC COMPLETION (UI Unit 7 Facilities -> unit7_completion) ---
+      if (isUnit7Completed && definitiveIern) {
+          await client.query(`
+              INSERT INTO ph_school_completion (iern, school_id, unit7_completion)
+              VALUES ($1, $2, true)
+              ON CONFLICT (iern) DO UPDATE SET unit7_completion = true, updated_at = CURRENT_TIMESTAMP
+          `, [definitiveIern, sId]);
+      }
     }
 
     await client.query('COMMIT');
-    
+
     // Trigger total recalculation if completed
     if (isUnit7Completed && definitiveIern) {
         await updateSchoolTotalCompletion(definitiveIern);
@@ -17041,9 +17079,9 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         head_date_of_birth, head_date_hired, google_drive_link, google_drive_file_id,
         google_drive_file_name, google_drive_thumbnail_url, 
         local_file_path, local_file_name, local_file_size,
-        annex_details,
+        annex_details, ownership_multiple,
         unit1_updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, CURRENT_TIMESTAMP)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, CURRENT_TIMESTAMP)
       ON CONFLICT (iern) DO UPDATE SET
         school_id = EXCLUDED.school_id,
         school_name = EXCLUDED.school_name,
@@ -17084,6 +17122,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         local_file_name = EXCLUDED.local_file_name,
         local_file_size = EXCLUDED.local_file_size,
         annex_details = EXCLUDED.annex_details,
+        ownership_multiple = EXCLUDED.ownership_multiple,
         unit1_updated_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP;
     `;
@@ -17106,7 +17145,8 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.google_drive_link || null, data.google_drive_file_id || null,
       data.google_drive_file_name || null, data.google_drive_thumbnail_url || null,
       data.local_file_path || null, data.local_file_name || null, (data.local_file_size ? parseInt(data.local_file_size) : null),
-      data.annex_details ? JSON.stringify(data.annex_details) : null
+      data.annex_details ? JSON.stringify(data.annex_details) : null,
+      data.ownership_multiple ? JSON.stringify(data.ownership_multiple) : null
     ];
 
     // 1. Attempt an UPDATE first based on permanent IERN to safely allow school_id changes
@@ -17152,7 +17192,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
           head_date_hired = $32, google_drive_link = $33, google_drive_file_id = $34,
           google_drive_file_name = $35, google_drive_thumbnail_url = $36,
           local_file_path = $37, local_file_name = $38, local_file_size = $39,
-          annex_details = $40,
+          annex_details = $40, ownership_multiple = $41,
           unit1_updated_at = CURRENT_TIMESTAMP,
           updated_at = CURRENT_TIMESTAMP
         WHERE iern = $2

@@ -936,8 +936,9 @@ const Register = () => {
                             division: (src.division || src.Division || src.Schools_Division_Office || src.SDO || selectedDivision || "").trim(),
                             district: (src.district || src.District || src.Schools_District || selectedDistrict || "").trim(),
                             leg_district: (src.leg_district || src.Leg_District || src.Legislative_District || "").trim(),
-                            latitude: src.latitude || src.Latitude || "",
-                            longitude: src.longitude || src.Longitude || "",
+                            // selectedSchool has user-updated coordinates from map drag; registry is fallback only
+                            latitude: selectedSchool.latitude || src.latitude || src.Latitude || "",
+                            longitude: selectedSchool.longitude || src.longitude || src.Longitude || "",
                             iern: (src.iern || src.IERN || "").trim()
                         };
                         
