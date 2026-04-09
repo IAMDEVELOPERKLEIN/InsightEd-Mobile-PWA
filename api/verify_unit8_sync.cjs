@@ -91,7 +91,7 @@ async function verify() {
       null,                                          // $33 cellular_coverage
       false,                                         // $34 weather_isolation
       JSON.stringify([]),                            // $35 anthropogenic_threats
-      0                                              // $36 risk_index
+      1                                              // $36 risk_index
     ];
 
     if (DEBUG_MODE) {

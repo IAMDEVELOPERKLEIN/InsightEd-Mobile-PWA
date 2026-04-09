@@ -1,25 +1,36 @@
 const { Pool } = require('pg');
-require('dotenv').config();
 
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL
+    connectionString: "postgres://Administrator1:pRZTbQ2T1JD7@stride-posgre-prod-01.postgres.database.azure.com:5432/insightEd",
+    ssl: { rejectUnauthorized: false }
 });
 
-async function check() {
+async function main() {
     try {
-        const resDoc = await pool.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'school_documents'");
-        console.log('school_documents:');
-        console.log(JSON.stringify(resDoc.rows, null, 2));
+        console.log("--- PH_SCHOOL_COMPLETION SCHEMA ---");
+        const res = await pool.query(`
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'ph_school_completion'
+            ORDER BY ordinal_position
+        `);
+        console.table(res.rows);
 
-        const resOwn = await pool.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'school_ownership_docs'");
-        console.log('school_ownership_docs:');
-        console.log(JSON.stringify(resOwn.rows, null, 2));
+        console.log("\n--- PH_SCHOOLS SCHEMA (UNIT COLS) ---");
+        const res2 = await pool.query(`
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'ph_schools' 
+            AND (column_name LIKE 'unit%' OR column_name = 'unit_completion')
+            ORDER BY column_name
+        `);
+        console.table(res2.rows);
+
+        await pool.end();
     } catch (err) {
         console.error(err);
-    } finally {
-        await pool.end();
-        process.exit(0);
+        process.exit(1);
     }
 }
 
-check();
+main();

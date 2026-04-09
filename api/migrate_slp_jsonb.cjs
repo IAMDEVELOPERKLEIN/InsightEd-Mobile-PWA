@@ -19,7 +19,13 @@ const pool = new Pool({
   ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
 });
 
-const COLUMNS_TO_MIGRATE = ['transportation_modes', 'hazards_experienced'];
+const COLUMNS_TO_MIGRATE = [
+  'transportation_modes', 
+  'hazards_experienced', 
+  'water_proximity', 
+  'natural_calamities', 
+  'anthropogenic_threats'
+];
 
 async function getColumnType(client, columnName) {
   const res = await client.query(

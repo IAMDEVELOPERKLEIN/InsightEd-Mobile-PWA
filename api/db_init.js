@@ -56,6 +56,8 @@ const runMigrations = async (client, dbLabel) => {
             CREATE TABLE IF NOT EXISTS ph_school_completion (
                 iern VARCHAR(255) PRIMARY KEY,
                 school_id VARCHAR(255),
+                region TEXT,
+                division TEXT,
                 unit1_completion BOOLEAN DEFAULT false,
                 unit2_completion BOOLEAN DEFAULT false,
                 unit3_completion BOOLEAN DEFAULT false,
@@ -72,8 +74,24 @@ const runMigrations = async (client, dbLabel) => {
         await client.query(`
             ALTER TABLE ph_school_completion 
             ADD COLUMN IF NOT EXISTS school_id VARCHAR(255),
-            ADD COLUMN IF NOT EXISTS registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+            ADD COLUMN IF NOT EXISTS registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS region TEXT,
+            ADD COLUMN IF NOT EXISTS division TEXT;
         `).catch(() => {});
+
+        // Data Backfill: Populate region/division from schools_IERN (HAWKEYE Protocol)
+        await client.query(`
+            UPDATE ph_school_completion psc
+            SET 
+                region = si."Region",
+                division = si."Division"
+            FROM "schools_IERN" si
+            WHERE psc.school_id = si."SchoolID"
+              AND (psc.region IS NULL OR psc.division IS NULL);
+        `).catch(err => {
+            console.warn(`⚠️ [${dbLabel}] ph_school_completion backfill skipped:`, err.message);
+        });
+
         // console.log(`✅ [${dbLabel}] School Completion Table Initialized`);
     } catch (tableErr) {
         console.error(`❌ [${dbLabel}] Failed to init ph_school_completion table:`, tableErr.message);

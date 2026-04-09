@@ -1828,7 +1828,6 @@ const EFDHome = () => {
                 initialCategories={selectedCategories}
                 initialYears={selectedYears}
                 initialBatches={selectedBatches}
-                categoryOptions={allCategories}
                 yearOptions={allYears}
                 batchOptions={allBatches}
                 categoryOptions={projectCategories}
