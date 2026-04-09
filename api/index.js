@@ -445,15 +445,16 @@ setInterval(() => {
 app.use((req, res, next) => {
   const heapUsage = process.memoryUsage().heapUsed;
   const HEAP_THRESHOLD = 950 * 1024 * 1024; // 950MB (Hawkeye Tuning)
-  const DELAY_THRESHOLD = 300; // 300ms (Reduced sensitivity for cluster stability)
+  const DELAY_THRESHOLD = 400; // Increased from 300ms to allow for DB latency spikes
 
   if (eventLoopDelay > DELAY_THRESHOLD || heapUsage > HEAP_THRESHOLD) {
-    console.warn(`⚠️ [Admission-Control] REJECTING REQUEST - Delay: ${eventLoopDelay}ms | Heap: ${Math.round(heapUsage/1024/1024)}MB`);
+    console.warn(`⚠️ [Admission-Control] REJECTING ${req.method} ${req.path} - Delay: ${eventLoopDelay}ms | Heap: ${Math.round(heapUsage/1024/1024)}MB`);
     res.set('Retry-After', '5');
     return res.status(503).json({ 
       error: 'Service Temporarily Overloaded', 
       retry_after: 5,
-      reason: eventLoopDelay > DELAY_THRESHOLD ? 'high_latency' : 'memory_pressure'
+      reason: eventLoopDelay > DELAY_THRESHOLD ? 'high_latency' : 'memory_pressure',
+      path: req.path
     });
   }
   next();
@@ -1034,7 +1035,7 @@ async function updateSchoolTotalCompletion(iern) {
     // This avoids reading the stale ph_school_completion booleans which can diverge
     // when pgBouncer (transaction mode) drops a COMMIT mid-flight.
     const res = await pool.query(
-      `SELECT unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit9,
+      `SELECT school_id, unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit9,
               unit1_completed, unit2_completed, unit3_completed, unit4_completed,
               unit5_completed, unit6_completed, unit7_completed, unit9_completed
        FROM ph_schools WHERE iern = $1`,
@@ -1043,7 +1044,11 @@ async function updateSchoolTotalCompletion(iern) {
     if (res.rows.length === 0) return;
 
     const row = res.rows[0];
+    const schoolId = row.school_id;
     // DB column indices that correspond to display units 1–8
+    // DB column indices that correspond to display units 1-8
+    // Mapping: Unit 1-7 direct, Unit 9 maps to Unit 8 display.
+    // Unit 8 and Unit 10 are currently auxiliary/recent and may not be standard in 1-8 summary.
     const dbCols = [1, 2, 3, 4, 5, 6, 7, 9];
     let completedCount = 0;
     const boolValues = [];
@@ -1055,14 +1060,18 @@ async function updateSchoolTotalCompletion(iern) {
 
     const percentage = parseFloat(((completedCount / 8) * 100).toFixed(2));
 
-    // Sync booleans + total back to ph_school_completion (auto-commit, no transaction needed)
+    // Upsert booleans + total to ph_school_completion.
+    // INSERT...ON CONFLICT ensures a missing row is created rather than silently skipped.
     await pool.query(
-      `UPDATE ph_school_completion SET
+      `INSERT INTO ph_school_completion
+         (iern, school_id, unit1_completion, unit2_completion, unit3_completion, unit4_completion,
+          unit5_completion, unit6_completion, unit7_completion, unit8_completion, total_completion, updated_at)
+       VALUES ($10, $11, $2, $3, $4, $5, $6, $7, $8, $9, $1, CURRENT_TIMESTAMP)
+       ON CONFLICT (iern) DO UPDATE SET
          unit1_completion=$2, unit2_completion=$3, unit3_completion=$4, unit4_completion=$5,
          unit5_completion=$6, unit6_completion=$7, unit7_completion=$8, unit8_completion=$9,
-         total_completion=$1, updated_at=CURRENT_TIMESTAMP
-       WHERE iern=$10`,
-      [percentage, ...boolValues, iern]
+         total_completion=$1, updated_at=CURRENT_TIMESTAMP`,
+      [percentage, ...boolValues, iern, schoolId]
     );
 
     // Sync to ph_schools.unit_completion for monitoring dashboards
@@ -1439,7 +1448,7 @@ const runAutoMigrations = async () => {
     // transportation_modes and hazards_experienced may have been created as TEXT[].
     // The POST route now sends JSON strings; TEXT[] columns reject them with error 22P02.
     // This block is safe to run repeatedly — it is a no-op if the column is already JSONB.
-    for (const col of ['transportation_modes', 'hazards_experienced']) {
+    for (const col of ['transportation_modes', 'hazards_experienced', 'water_proximity', 'natural_calamities', 'anthropogenic_threats']) {
       await pool.query(`
         DO $$
         DECLARE col_type TEXT;
@@ -7966,11 +7975,10 @@ app.get('/api/locations/divisions', async (req, res) => {
   const { region } = req.query;
   try {
     const result = await pool.query(`
-      SELECT MAX("Division") as division 
-      FROM "schools_IERN" 
-      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
-      AND "Division" IS NOT NULL AND "Division" != '' 
-      GROUP BY UPPER(TRIM("Division"))
+      SELECT DISTINCT division 
+      FROM all_locations 
+      WHERE UPPER(TRIM(region)) = UPPER(TRIM($1)) 
+      AND division IS NOT NULL AND division != '' 
       ORDER BY division ASC
     `, [region]);
     const divisions = result.rows.map(r => r.division);
@@ -7983,12 +7991,11 @@ app.get('/api/locations/districts', async (req, res) => {
   const { region, division } = req.query;
   try {
     const result = await pool.query(`
-      SELECT MAX("District") as district 
-      FROM "schools_IERN" 
-      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
-      AND UPPER(TRIM("Division")) = UPPER(TRIM($2)) 
-      AND "District" IS NOT NULL AND "District" != '' 
-      GROUP BY UPPER(TRIM("District"))
+      SELECT DISTINCT district 
+      FROM all_locations 
+      WHERE UPPER(TRIM(region)) = UPPER(TRIM($1)) 
+      AND UPPER(TRIM(division)) = UPPER(TRIM($2)) 
+      AND district IS NOT NULL AND district != '' 
       ORDER BY district ASC
     `, [region, division]);
     const districts = result.rows.map(r => r.district);
@@ -8001,14 +8008,13 @@ app.get('/api/locations/leg-districts', async (req, res) => {
   const { region } = req.query;
   try {
     const result = await pool.query(`
-      SELECT MAX("Legislative_District") as leg_district 
-      FROM "schools_IERN" 
-      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
-      AND "Legislative_District" IS NOT NULL AND "Legislative_District" != '' 
-      GROUP BY UPPER(TRIM("Legislative_District"))
-      ORDER BY leg_district ASC
+      SELECT DISTINCT legislative_district 
+      FROM all_locations 
+      WHERE UPPER(TRIM(region)) = UPPER(TRIM($1)) 
+      AND legislative_district IS NOT NULL AND legislative_district != '' 
+      ORDER BY legislative_district ASC
     `, [region]);
-    const legDistricts = result.rows.map(r => r.leg_district);
+    const legDistricts = result.rows.map(r => r.legislative_district);
     if (region === 'Blank Region' && !legDistricts.includes('Blank District')) legDistricts.unshift('Blank District');
     res.json(legDistricts);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -12698,30 +12704,37 @@ app.post('/api/save-physical-facilities', async (req, res) => {
     const inventoryCount = (data.inventoryEntries && Array.isArray(data.inventoryEntries)) ? data.inventoryEntries.length : 0;
     const isUnit7Completed = (inventoryCount > 0 || data.has_no_building === true) && !data.isPartial;
 
+    // Resolve IERN definitively for completion table sync
+    let definitiveIern = data.iern;
+    if (!definitiveIern) {
+      const iernRow = await client.query('SELECT iern FROM ph_schools WHERE school_id = $1', [sId]);
+      definitiveIern = iernRow.rows[0]?.iern;
+    }
+
     await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE;`);
     await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_updated_at TIMESTAMP;`);
 
-    if (data.iern) {
-        await client.query(`UPDATE ph_schools SET unit7_completed = $1, unit7 = $2, unit7_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit7_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE iern = $3`, [isUnit7Completed, isUnit7Completed ? 1 : 0, data.iern]);
-
-        // --- SYNC COMPLETION (UI Unit 7 Facilities -> unit7_completion) ---
-        if (isUnit7Completed) {
-            await client.query(`
-                INSERT INTO ph_school_completion (iern, school_id, unit7_completion)
-                VALUES ($1, $2, true)
-                ON CONFLICT (iern) DO UPDATE SET unit7_completion = true, updated_at = CURRENT_TIMESTAMP
-            `, [data.iern, sId]);
-        }
+    // Update ph_schools core record
+    if (definitiveIern) {
+        await client.query(`UPDATE ph_schools SET unit7_completed = $1, unit7 = $2, unit7_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit7_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE iern = $3`, [isUnit7Completed, isUnit7Completed ? 1 : 0, definitiveIern]);
     } else {
         await client.query(`UPDATE ph_schools SET unit7_completed = $1, unit7 = $2, unit7_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit7_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $3`, [isUnit7Completed, isUnit7Completed ? 1 : 0, sId]);
+    }
+
+    // --- SYNC COMPLETION (UI Unit 7 Facilities -> unit7_completion) ---
+    if (isUnit7Completed && definitiveIern) {
+        await client.query(`
+            INSERT INTO ph_school_completion (iern, school_id, unit7_completion)
+            VALUES ($1, $2, true)
+            ON CONFLICT (iern) DO UPDATE SET unit7_completion = true, updated_at = CURRENT_TIMESTAMP
+        `, [definitiveIern, sId]);
     }
 
     await client.query('COMMIT');
     
     // Trigger total recalculation if completed
-    if (isUnit7Completed) {
-        const finalIern = data.iern || (await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [sId])).rows[0]?.iern;
-        if (finalIern) await updateSchoolTotalCompletion(finalIern);
+    if (isUnit7Completed && definitiveIern) {
+        await updateSchoolTotalCompletion(definitiveIern);
     }
     res.json({ success: true, message: "Facilities and details saved!" });
 
@@ -17780,16 +17793,21 @@ app.put('/api/ph_schools/:schoolId', async (req, res) => {
     const result = await pool.query(query, values);
 
     // --- SYNC COMPLETION (Generic Units) ---
-    if (data.unitId) {
+    // Trigger resync if: (a) caller passed an explicit unitId, OR
+    // (b) any unit*_completed flag is present in the payload (e.g. direct flag writes without unitId)
+    const hasCompletionFlag = Object.keys(data).some(k => /^unit\d+_completed$/.test(k));
+    if (data.unitId || hasCompletionFlag) {
         const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1 OR iern = $2', [schoolId, data.iern]);
         if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
             const iern = iernRes.rows[0].iern;
-            const unitCol = `unit${data.unitId}_completion`;
-            await pool.query(`
-                INSERT INTO ph_school_completion (iern, school_id, ${unitCol})
-                VALUES ($1, $2, true)
-                ON CONFLICT (iern) DO UPDATE SET ${unitCol} = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
-            `, [iern, schoolId]);
+            if (data.unitId) {
+                const unitCol = `unit${data.unitId}_completion`;
+                await pool.query(`
+                    INSERT INTO ph_school_completion (iern, school_id, ${unitCol})
+                    VALUES ($1, $2, true)
+                    ON CONFLICT (iern) DO UPDATE SET ${unitCol} = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+                `, [iern, schoolId]);
+            }
             await updateSchoolTotalCompletion(iern);
         }
     }
@@ -18494,7 +18512,7 @@ app.post('/api/school-location', async (req, res) => {
 
       // 2. Resync total completion — this also writes unit8_completion to ph_school_completion
       const iernForSync = validatedData.iern || (await pool.query('SELECT iern FROM ph_schools WHERE school_id=$1', [schoolId]).then(r => r.rows[0]?.iern));
-      if (iernForSync) updateSchoolTotalCompletion(iernForSync);
+      if (iernForSync) await updateSchoolTotalCompletion(iernForSync);
 
       console.log(`[Dashboard Integration] Unit 8 (Terrain) Flags updated for school ${schoolId}`);
     } catch (flagErr) {
@@ -18507,8 +18525,16 @@ app.post('/api/school-location', async (req, res) => {
       console.error("Zod Validation Error:", JSON.stringify(err.errors, null, 2));
       return res.status(400).json({ error: "Validation failed", details: err.errors });
     }
-    console.error("POST School Location Error:", err);
-    res.status(500).json({ error: "Internal Server Error" });
+    console.error("POST School Location Error:", err.message);
+    if (err.stack) console.error(err.stack);
+    res.status(500).json({ 
+      error: "Internal Server Error", 
+      message: err.message,
+      code: err.code,
+      detail: err.detail,
+      table: err.table,
+      constraint: err.constraint
+    });
   }
 });
 
@@ -19384,10 +19410,13 @@ app.post('/api/esf7/approve', async (req, res) => {
 
     if (iern) {
       await pool.query("UPDATE ESF7_Database SET status = 'VERIFIED' WHERE iern = $1 OR school_id = $2", [iern, school_id]);
-      await pool.query("UPDATE ph_schools SET unit7_completed = TRUE, updated_at = CURRENT_TIMESTAMP WHERE iern = $1 OR school_id = $2", [iern, school_id]);
+      await pool.query("UPDATE ph_schools SET unit7_completed = TRUE, unit7 = 1, unit7_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE iern = $1 OR school_id = $2", [iern, school_id]);
+      await updateSchoolTotalCompletion(iern);
     } else {
       await pool.query("UPDATE ESF7_Database SET status = 'VERIFIED' WHERE school_id = $1", [school_id]);
-      await pool.query("UPDATE ph_schools SET unit7_completed = TRUE, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1", [school_id]);
+      await pool.query("UPDATE ph_schools SET unit7_completed = TRUE, unit7 = 1, unit7_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1", [school_id]);
+      const iernLookup = (await pool.query('SELECT iern FROM ph_schools WHERE school_id=$1', [school_id])).rows[0]?.iern;
+      if (iernLookup) await updateSchoolTotalCompletion(iernLookup);
     }
 
     res.json({ success: true, message: "ESF7 submission verified and committed." });

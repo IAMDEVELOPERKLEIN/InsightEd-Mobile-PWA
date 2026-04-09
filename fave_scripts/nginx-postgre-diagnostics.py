@@ -38,9 +38,9 @@ def main():
                 echo "BNC_LIVE:"; sudo netstat -tpln | grep :6432 | wc -l;
                 echo "BNC_INSTANCES:"; pgrep -c pgbouncer 2>/dev/null || echo "0";
                 echo "BNC_CONNS:"; sudo ss -tnp | grep :6432 | grep ESTAB | wc -l;
-                echo "SHED_LIVE:"; sudo tail -n 1000 /var/log/nginx/access.log 2>/dev/null | grep ' 503 ' | wc -l;
+                echo "SHED_LIVE:"; sudo tail -n 1000 /var/log/nginx/access.log 2>/dev/null | grep -E ' 50[0-9] ' | wc -l;
                 echo "PM2_LIVE:"; pm2 jlist 2>/dev/null;
-                echo "APP_AUDIT:"; grep -E 'LOOP_DELAY_THRESHOLD|heap_limit' e:/InsightEd-Mobile-PWA/api/index.js 2>/dev/null
+                echo "APP_AUDIT:"; grep -E 'DELAY_THRESHOLD|HEAP_THRESHOLD|heap_limit' e:/InsightEd-Mobile-PWA/api/index.js 2>/dev/null
             )
             """.strip()
 
@@ -125,14 +125,15 @@ def main():
                     if len(p) >= 2:
                         key, val = p[0], p[1]
                         desc = {
-                            "LOOP_DELAY_THRESHOLD": "Max event loop lag (ms) before rejection",
+                            "DELAY_THRESHOLD": "Max event loop lag (ms) before rejection",
+                            "HEAP_THRESHOLD":  "Max RAM usage (B) before emergency shedding",
                             "heap_limit":           "Max RAM usage (MB) before emergency shedding"
                         }.get(key, "")
                         print("   %-30s | \033[1;32m%-8s\033[0m | %s\033[K" % (key, val, desc))
                 
                 shed_live = int(sections.get('SHED_LIVE', ['0'])[0])
-                status_503 = "\033[1;32mHEALTHY\033[0m" if shed_live == 0 else "\033[1;31mSHEDDING LOAD\033[0m"
-                print("   SYSTEM_HEALTH_STATUS           | %s | %d 503s in last 60s\033[K" % (status_503, shed_live))
+                status_5xx = "\033[1;32mHEALTHY\033[0m" if shed_live == 0 else "\033[1;31mERRORS/SHEDDING\033[0m"
+                print("   SYSTEM_HEALTH_STATUS           | %s | %d 5xx Errs in last 60s\033[K" % (status_5xx, shed_live))
                 
                 # 4. PM2 CLUSTER HEALTH
                 pm2_raw = "".join(sections.get('PM2_LIVE', []))
