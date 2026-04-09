@@ -347,7 +347,7 @@ const UserProfile = () => {
                     role: userData?.role || 'User',
                     ratings: feedbackRatings,
                     comment: feedbackComment,
-                    appVersion: '1.0.23'
+                    appVersion: import.meta.env.VITE_APP_VERSION || '1.0.0'
                 })
             });
 
@@ -606,7 +606,7 @@ const UserProfile = () => {
                     IE
                 </div>
                 <h2 className="text-[#004A99] dark:text-blue-300 mb-1.5 text-xl font-bold">InsightEd</h2>
-                <p className="text-gray-400 dark:text-gray-500 text-xs text-center">Version 1.0.0 (Beta)</p>
+                <p className="text-gray-400 dark:text-gray-500 text-xs text-center">Version {import.meta.env.VITE_APP_VERSION || '1.0.0'} (Beta)</p>
 
                 <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed my-5 text-left">
                     <strong>InsightEd</strong> is a comprehensive monitoring and management tool designed for the Department of Education.
@@ -985,7 +985,7 @@ const UserProfile = () => {
                 </button>
             </div>
 
-            <p className="text-center text-xs text-gray-400 dark:text-gray-600 mt-8">InsightEd Mobile app v1.0.23</p>
+            <p className="text-center text-xs text-gray-400 dark:text-gray-600 mt-8">InsightEd Mobile app v{import.meta.env.VITE_APP_VERSION || '1.0.0'}</p>
         </div>
     );
 

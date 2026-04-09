@@ -1,16 +1,24 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { readFileSync } from 'fs'
+
+// Read version from package.json — single source of truth
+const { version } = JSON.parse(readFileSync('./package.json', 'utf-8'));
 
 export default defineConfig({
-  base: './', // Use relative paths to be environment-agnostic
+  base: './',
+  define: {
+    // Exposes version to the app as import.meta.env.VITE_APP_VERSION
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(version),
+  },
   plugins: [
     react(),
     VitePWA({
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.js',
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       injectRegister: null,
       manifestFilename: 'manifest.json',
       devOptions: {
