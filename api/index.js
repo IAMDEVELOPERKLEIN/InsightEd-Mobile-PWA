@@ -12502,6 +12502,7 @@ app.post('/api/save-physical-facilities', async (req, res) => {
     await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_good INTEGER DEFAULT 0`).catch(() => {});
     await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_repair INTEGER DEFAULT 0`).catch(() => {});
     await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_demolition INTEGER DEFAULT 0`).catch(() => {});
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS has_no_building BOOLEAN DEFAULT FALSE`).catch(() => {});
     await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`).catch(() => {});
 
     await client.query('BEGIN');
@@ -12522,6 +12523,7 @@ app.post('/api/save-physical-facilities', async (req, res) => {
                 build_classrooms_good=$4,
                 build_classrooms_repair=$5,
                 build_classrooms_demolition=$6,
+                has_no_building=$7,
                 updated_at=CURRENT_TIMESTAMP
             WHERE ${anchorClause}
         `;
@@ -12532,7 +12534,8 @@ app.post('/api/save-physical-facilities', async (req, res) => {
       sanitize(data.build_classrooms_new),
       sanitize(data.build_classrooms_good),
       sanitize(data.build_classrooms_repair),
-      sanitize(data.build_classrooms_demolition)
+      sanitize(data.build_classrooms_demolition),
+      toBool(data.has_no_building || false)
     ]);
 
     // 2. Handle Repairs (ph_buildings_repairs)
@@ -12639,7 +12642,7 @@ app.post('/api/save-physical-facilities', async (req, res) => {
     // 5. Mark unit7_completed flag in ph_schools (UI Unit 7 -> DB Unit 7)
     // STRICT VALIDATION: Only mark as completed if there is at least one building in inventory
     const inventoryCount = (data.inventoryEntries && Array.isArray(data.inventoryEntries)) ? data.inventoryEntries.length : 0;
-    const isUnit7Completed = inventoryCount > 0 && !data.isPartial;
+    const isUnit7Completed = (inventoryCount > 0 || data.has_no_building === true) && !data.isPartial;
 
     await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE;`);
     await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_updated_at TIMESTAMP;`);
@@ -12684,7 +12687,8 @@ app.post('/api/save-physical-facilities', async (req, res) => {
             sanitize(data.build_classrooms_new),
             sanitize(data.build_classrooms_good),
             sanitize(data.build_classrooms_repair),
-            sanitize(data.build_classrooms_demolition)
+            sanitize(data.build_classrooms_demolition),
+            toBool(data.has_no_building || false)
           ]);
 
           // DW 2. Repairs
@@ -18132,10 +18136,12 @@ app.get('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
 
     // Check completion status from ph_schools (explicit flag only — no auto-complete inference)
     let completed = false;
+    let hasNoBuildingFlag = false;
     try {
-      const schRes = await pool.query('SELECT unit7_completed, unit10_completed FROM ph_schools WHERE school_id = $1', [schoolId]);
+      const schRes = await pool.query('SELECT unit7_completed, unit10_completed, has_no_building FROM ph_schools WHERE school_id = $1', [schoolId]);
       if (schRes.rows.length > 0) {
         completed = schRes.rows[0].unit7_completed === true || schRes.rows[0].unit10_completed === true;
+        hasNoBuildingFlag = schRes.rows[0].has_no_building === true;
       }
     } catch (e) {
       console.warn(`Could not check unit7_completed/unit10_completed for ${schoolId}:`, e.message);
@@ -18147,7 +18153,8 @@ app.get('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
         inventory: inventory,
         repairs: repRes.rows || [],
         demolitions: demRes.rows || [],
-        isCompleted: completed
+        isCompleted: completed,
+        has_no_building: hasNoBuildingFlag
       }
     });
 

@@ -141,6 +141,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
     const [isCertified, setIsCertified] = useState(false);
     const [showDraftModal, setShowDraftModal] = useState(false);
     const [schoolData, setSchoolData] = useState(null);
+    const [hasNoBuilding, setHasNoBuilding] = useState(false); 
     const [savedData, setSavedData] = useState(null);
     const [currentPage, setCurrentPage] = useState(1); // 1-5 Wizard Stages
     const [buildingTypes, setBuildingTypes] = useState(() => {
@@ -365,6 +366,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                     setRepairAssessments(draft.repairAssessments || []);
                     setSpaces(draft.spaces || []);
                     setHasRepair(draft.hasRepair);
+                    setHasNoBuilding(draft.hasNoBuilding || false);
                     setIsReadOnly(false);
                     setShowWelcomeBack(true);
                     setTimeout(() => setShowWelcomeBack(false), 3000);
@@ -388,8 +390,9 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             if (res.ok) {
                 const json = await res.json();
                 if (json.success && json.data) {
-                    const { inventory, repairs, isCompleted } = json.data;
+                    const { inventory, repairs, isCompleted, has_no_building } = json.data;
                     setBuildings(inventory);
+                    setHasNoBuilding(has_no_building || false);
                     const allRooms = [];
                     inventory.forEach(b => {
                         if (b.rooms && Array.isArray(b.rooms)) {
@@ -917,7 +920,8 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 build_classrooms_total, build_classrooms_new, build_classrooms_good,
                 build_classrooms_repair, build_classrooms_demolition,
                 // Reconstruction Metadata
-                spaces: spaces
+                spaces: spaces,
+                has_no_building: hasNoBuilding
             };
 
             if (!navigator.onLine) {
@@ -989,7 +993,8 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                     schoolId, school_id: schoolId, iern: schoolData?.iern,
                     inventoryEntries: buildings, rooms: roomsData, repairEntries: repairPayload,
                     build_classrooms_total: roomsData.length,
-                    spaces: spaces
+                    spaces: spaces,
+                    has_no_building: hasNoBuilding
                 };
 
                 await addModularToOutbox({
@@ -1023,7 +1028,8 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             roomsData,
             repairAssessments,
             spaces,
-            hasRepair
+            hasRepair,
+            hasNoBuilding
         };
         await saveUnitDraft(7, schoolId, draftData);
         navigate("/modular-dashboard");
@@ -1068,6 +1074,16 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                         <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight">Facilities Summary</h1>
                         <p className="text-slate-500 font-medium mt-2 italic">"Comprehensive audit of campus infrastructure"</p>
                     </div>
+
+                    {hasNoBuilding && (
+                        <div className="bg-amber-50 border-2 border-amber-200 rounded-[2.5rem] p-8 text-center shadow-sm">
+                            <div className="text-4xl mb-4">📢</div>
+                            <h4 className="text-amber-800 font-black text-xl uppercase tracking-tight">Confirmed: No Buildings</h4>
+                            <p className="text-amber-600 text-[11px] font-bold mt-2 uppercase tracking-widest leading-relaxed">
+                                This school has officially reported having no physical building structures on site.
+                            </p>
+                        </div>
+                    )}
 
                     {/* High Level Metrics */}
                     <div className="grid grid-cols-2 gap-4">
@@ -1521,58 +1537,61 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                             </h2>
                             <p className="text-gray-500 mb-6 font-medium">Log the physical structures on your campus.</p>
 
-                            {/* Inventory Area */}
-                            <div className="space-y-6">
-                                {/* Card List */}
-                                {allBuildings.length > 0 && (
-                                    <div className="space-y-4">
-                                        {allBuildings.map(b => (
-                                            <div key={b.id} className="bg-white p-5 rounded-3xl shadow-sm border-2 border-gray-100 flex justify-between items-center">
-                                                <div>
-                                                    <h4 className="font-black text-xl text-gray-800">{b.building_name}</h4>
-                                                    <div className="flex gap-2 mt-1">
-                                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${b.status === 'Newly Built' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
-                                                            {b.status}
-                                                        </span>
-                                                    </div>
-                                                    <p className="text-sm font-bold text-gray-500 mt-1">{b.category} &bull; {b.storey} Storey &bull; {roomsData.filter(r => r.building_local_id === b.id).length} Rooms</p>
-                                                </div>
-                                                <div className="flex flex-col gap-2">
-                                                    <button onClick={() => handleEditBuilding(b)} className="p-3 bg-indigo-50 text-indigo-500 rounded-xl hover:bg-indigo-100 transition-colors">
-                                                        <FiEdit2 className="w-5 h-5" />
-                                                    </button>
-                                                    <button onClick={() => handleDeleteBuilding(b.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors">
-                                                        <FiTrash2 className="w-5 h-5" />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                            {/* Inventory Area - Only show if hasNoBuilding is FALSE */}
+                            {!hasNoBuilding ? (
+                                <div className="space-y-6 mb-8">
+                                    {/* Add Button - Moved to TOP */}
+                                    {!showBuildingModal && (
+                                        <motion.button
+                                            initial={{ opacity: 0, scale: 0.9 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            onClick={() => setShowBuildingModal(true)}
+                                            className="bg-indigo-50 w-full py-4 rounded-2xl text-indigo-600 font-black text-lg border-2 border-indigo-200 border-dashed hover:bg-indigo-100 hover:border-indigo-300 transition-all flex justify-center items-center gap-2 shadow-sm"
+                                        >
+                                            <FiPlus className="w-6 h-6" /> Register Building
+                                        </motion.button>
+                                    )}
 
-                                {/* Add Button */}
-                                {!showBuildingModal ? (
-                                    <motion.button
-                                        initial={{ opacity: 0, scale: 0.9 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        onClick={() => setShowBuildingModal(true)}
-                                        className="bg-indigo-50 w-full py-4 rounded-2xl text-indigo-600 font-black text-lg border-2 border-indigo-200 border-dashed hover:bg-indigo-100 hover:border-indigo-300 transition-all flex justify-center items-center gap-2"
-                                    >
-                                        <FiPlus className="w-6 h-6" /> Register Building
-                                    </motion.button>
-                                ) : (
-                                    /* Form Area */
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="bg-white p-6 rounded-[2rem] shadow-xl border border-gray-200"
-                                    >
-                                        <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
-                                            <h3 className="font-black text-2xl text-gray-800">Building Details</h3>
-                                            <button onClick={() => setShowBuildingModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full">
-                                                <FiX className="w-6 h-6" />
-                                            </button>
+                                    {/* Card List of Registered Buildings */}
+                                    {allBuildings.length > 0 && (
+                                        <div className="space-y-4">
+                                            {allBuildings.map(b => (
+                                                <div key={b.id} className="bg-white p-5 rounded-3xl shadow-sm border-2 border-gray-100 flex justify-between items-center group hover:border-indigo-200 transition-all">
+                                                    <div>
+                                                        <h4 className="font-black text-xl text-gray-800 tracking-tight uppercase">{b.building_name}</h4>
+                                                        <div className="flex gap-2 mt-1">
+                                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${b.status === 'Newly Built' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                                {b.status}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-sm font-bold text-gray-500 mt-1 uppercase tracking-tighter">{b.category} &bull; {b.storey}nd Floor &bull; {roomsData.filter(r => r.building_local_id === b.id).length} Units</p>
+                                                    </div>
+                                                    <div className="flex flex-col gap-2">
+                                                        <button onClick={() => handleEditBuilding(b)} className="p-3 bg-indigo-50 text-indigo-500 rounded-xl hover:bg-indigo-100 transition-colors">
+                                                            <FiEdit2 className="w-5 h-5" />
+                                                        </button>
+                                                        <button onClick={() => handleDeleteBuilding(b.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors">
+                                                            <FiTrash2 className="w-5 h-5" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
+                                    )}
+
+                                    {/* Registration Form / Modal */}
+                                    {showBuildingModal && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="bg-white p-6 rounded-[2rem] shadow-xl border border-gray-200"
+                                        >
+                                            <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
+                                                <h3 className="font-black text-2xl text-gray-800">Building Details</h3>
+                                                <button onClick={() => setShowBuildingModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full">
+                                                    <FiX className="w-6 h-6" />
+                                                </button>
+                                            </div>
 
                                         <div className="space-y-5">
                                             <div>
@@ -1771,6 +1790,49 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                     </motion.div>
                                 )}
                             </div>
+                            ) : (
+                                <div className="bg-slate-100 rounded-3xl p-10 text-center border-2 border-slate-200 border-dashed">
+                                    <div className="text-5xl mb-4 grayscale">🏢</div>
+                                    <h4 className="font-black text-slate-400 uppercase tracking-widest text-lg">Infrastructure Disabled</h4>
+                                    <p className="text-slate-400 text-sm font-medium mt-2">You have confirmed that this school has no buildings. Uncheck the box below to register structures.</p>
+                                </div>
+                            )}
+
+                            {/* No Building Confirmation Section - Moved to BOTTOM & Removed if buildings exist or if the header/button is clicked */}
+                            {(allBuildings.length === 0 && !showBuildingModal) && (
+                                <div className={`mt-6 p-6 rounded-3xl border-2 transition-all ${hasNoBuilding ? 'bg-amber-50 border-amber-500 shadow-lg shadow-amber-100' : 'bg-white border-gray-100 hover:border-amber-200'}`}>
+                                    <label className="flex items-start gap-4 cursor-pointer group">
+                                        <div className="relative flex items-center mt-1">
+                                            <input
+                                                type="checkbox"
+                                                checked={hasNoBuilding}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) {
+                                                        const confirm = window.confirm("Selecting this will confirm that this school has no physical buildings. Are you sure?");
+                                                        if (confirm) {
+                                                            setHasNoBuilding(true);
+                                                            setBuildings([]);
+                                                            setRoomsData([]);
+                                                            setRepairAssessments([]);
+                                                        }
+                                                    } else {
+                                                        setHasNoBuilding(false);
+                                                    }
+                                                }}
+                                                className="w-6 h-6 rounded-lg border-2 border-gray-300 text-amber-600 focus:ring-amber-500 transition-all cursor-pointer"
+                                            />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="font-black text-gray-800 text-lg leading-tight group-hover:text-amber-700 transition-colors">
+                                                Confirm: This school has NO building 🚩
+                                            </p>
+                                            <p className="text-gray-500 text-sm mt-1 font-medium leading-relaxed">
+                                                Check this ONLY if there are zero physical learning or administrative structures on the campus lot.
+                                            </p>
+                                        </div>
+                                    </label>
+                                </div>
+                            )}
                         </motion.div>
                     )}
 
