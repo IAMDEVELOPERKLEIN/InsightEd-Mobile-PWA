@@ -70,6 +70,3 @@ verify_*.mjs
 *.tar.gz
 *.zip
 *.tmp.tar.gz
-
-# System Utilities
-system_scripts/cleanup_school_interactive.js
