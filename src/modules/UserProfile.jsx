@@ -89,6 +89,10 @@ const UserProfile = () => {
     const [checkingForUpdate, setCheckingForUpdate] = useState(false);
     const [showUpdateModal, setShowUpdateModal] = useState(false);
 
+    // Optimize App Modal State
+    const [showOptimizeConfirm, setShowOptimizeConfirm] = useState(false);
+    const [showOptimizeSuccess, setShowOptimizeSuccess] = useState(false);
+
     // FAQ Accordion State
     const [openFaqIndex, setOpenFaqIndex] = useState(null);
 
@@ -343,7 +347,7 @@ const UserProfile = () => {
                     role: userData?.role || 'User',
                     ratings: feedbackRatings,
                     comment: feedbackComment,
-                    appVersion: '1.1.0'
+                    appVersion: import.meta.env.VITE_APP_VERSION || '1.0.0'
                 })
             });
 
@@ -602,7 +606,7 @@ const UserProfile = () => {
                     IE
                 </div>
                 <h2 className="text-[#004A99] dark:text-blue-300 mb-1.5 text-xl font-bold">InsightEd</h2>
-                <p className="text-gray-400 dark:text-gray-500 text-xs text-center">Version 1.0.0 (Beta)</p>
+                <p className="text-gray-400 dark:text-gray-500 text-xs text-center">Version {import.meta.env.VITE_APP_VERSION || '1.0.0'} (Beta)</p>
 
                 <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed my-5 text-left">
                     <strong>InsightEd</strong> is a comprehensive monitoring and management tool designed for the Department of Education.
@@ -908,59 +912,31 @@ const UserProfile = () => {
                     </div>
                 </div>
 
-                {/* Troubleshoot / Hard Reset */}
-                <button
-                    onClick={() => {
-                        if (window.confirm("Troubleshoot: This will clear the app cache and refresh the latest version. Continue?")) {
-                            hardReset();
-                        }
-                    }}
-                    className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
-                >
-                    <div className="flex items-center gap-4">
-                        <div className="w-9 h-9 rounded-lg flex justify-center items-center bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300">
-                            <FiTool size={20} />
-                        </div>
-                        <div className="text-left">
-                            <span className="text-[15px] font-medium text-gray-700 dark:text-gray-200 block">
-                                Troubleshoot
-                            </span>
-                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold uppercase tracking-wide">
-                                Clear Cache & Restart
-                            </span>
-                        </div>
-                    </div>
-                </button>
-
-                {/* Check for Updates */}
+                {/* Optimize App - Merged Update & Troubleshoot */}
                 <button
                     disabled={checkingForUpdate}
-                    onClick={isUpdateAvailable ? updateApp : handleCheckUpdate}
+                    onClick={() => setShowOptimizeConfirm(true)}
                     className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
                 >
                     <div className="flex items-center gap-4">
-                        <div className={`w-9 h-9 rounded-lg flex justify-center items-center ${isUpdateAvailable ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-300'}`}>
+                        <div className="w-9 h-9 rounded-lg flex justify-center items-center bg-blue-50 dark:bg-blue-900/30 text-[#004A99] dark:text-blue-300">
                             {checkingForUpdate ? (
                                 <FiRefreshCw size={20} className="animate-spin" />
-                            ) : isUpdateAvailable ? (
-                                <FiDownloadCloud size={20} />
                             ) : (
                                 <FiRefreshCw size={20} />
                             )}
                         </div>
                         <div className="text-left">
-                            <span className="text-[15px] font-medium text-gray-700 dark:text-gray-200 block">
-                                {isUpdateAvailable ? "Update Available" : "Check for Updates"}
+                            <span className="text-[15px] font-bold text-gray-700 dark:text-gray-200 block">
+                                Optimize App
                             </span>
-                            {isUpdateAvailable && (
-                                <span className="text-[10px] text-green-600 dark:text-green-400 font-semibold uppercase tracking-wide">
-                                    Tap to Install
-                                </span>
-                            )}
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold uppercase tracking-wide">
+                                Check for Updates & Repair
+                            </span>
                         </div>
                     </div>
                     {checkingForUpdate ? (
-                        <span className="text-xs text-gray-400">Checking...</span>
+                        <span className="text-xs text-gray-400">Optimizing...</span>
                     ) : (
                         <FiChevronRight size={20} className="text-gray-300 dark:text-gray-500" />
                     )}
@@ -1009,7 +985,7 @@ const UserProfile = () => {
                 </button>
             </div>
 
-            <p className="text-center text-xs text-gray-400 dark:text-gray-600 mt-8">InsightEd Mobile app v1.0.22</p>
+            <p className="text-center text-xs text-gray-400 dark:text-gray-600 mt-8">InsightEd Mobile app v{import.meta.env.VITE_APP_VERSION || '1.0.0'}</p>
         </div>
     );
 
@@ -1062,6 +1038,68 @@ const UserProfile = () => {
                 
                 {/* Security Verification Modal */}
                 {renderSecurityModal()}
+
+                {/* Optimize App — Confirm Modal */}
+                {showOptimizeConfirm && (
+                    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-t-3xl sm:rounded-3xl shadow-2xl p-6 pb-10 sm:pb-6 animate-in slide-in-from-bottom-10 duration-500">
+                            <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-6 sm:hidden" />
+
+                            {/* Icon */}
+                            <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center mx-auto mb-5">
+                                <FiRefreshCw size={30} className="text-[#004A99] dark:text-blue-400" />
+                            </div>
+
+                            <h3 className="text-xl font-black text-slate-800 dark:text-white text-center mb-2">Optimize App?</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 text-center leading-relaxed mb-8">
+                                This will clear the temporary system cache and fetch the latest version.
+                                The app will <strong className="text-slate-700 dark:text-slate-200">automatically restart</strong> after optimization.
+                            </p>
+
+                            <div className="flex flex-col gap-3">
+                                <button
+                                    onClick={async () => {
+                                        setShowOptimizeConfirm(false);
+                                        setCheckingForUpdate(true);
+                                        // Show success modal briefly before reload
+                                        setShowOptimizeSuccess(true);
+                                        setTimeout(async () => {
+                                            await hardReset();
+                                        }, 2000);
+                                    }}
+                                    className="w-full py-4 bg-gradient-to-br from-[#004A99] to-indigo-700 dark:from-blue-600 dark:to-indigo-500 text-white rounded-2xl font-black shadow-lg shadow-blue-500/30 active:scale-95 transition-all flex justify-center items-center gap-2"
+                                >
+                                    <FiRefreshCw size={18} />
+                                    Yes, Optimize Now
+                                </button>
+                                <button
+                                    onClick={() => setShowOptimizeConfirm(false)}
+                                    className="w-full py-4 bg-transparent text-slate-500 dark:text-slate-400 font-bold hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Optimize App — Success Modal */}
+                {showOptimizeSuccess && (
+                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-slate-800 w-full max-w-xs rounded-3xl shadow-2xl p-8 text-center animate-in zoom-in-95 duration-500">
+                            {/* Spinning loader */}
+                            <div className="relative w-20 h-20 mx-auto mb-5">
+                                <div className="absolute inset-0 rounded-full border-4 border-blue-100 dark:border-blue-900/40" />
+                                <div className="absolute inset-0 rounded-full border-4 border-t-[#004A99] dark:border-t-blue-400 animate-spin" />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <FiRefreshCw size={24} className="text-[#004A99] dark:text-blue-400" />
+                                </div>
+                            </div>
+                            <h3 className="text-lg font-black text-slate-800 dark:text-white mb-1">Optimizing...</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Clearing cache and fetching the latest version. Restarting shortly.</p>
+                        </div>
+                    </div>
+                )}
             </div>
         </PageTransition>
     );

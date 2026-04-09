@@ -13,74 +13,76 @@ export const ServiceWorkerProvider = ({ children }) => {
 
     useEffect(() => {
         if ('serviceWorker' in navigator) {
-            // Dynamically determine the base path from Vite's import.meta.env
             const basePath = import.meta.env.BASE_URL || '/';
-            // In Vite Dev mode, the PWA plugin exposes the SW at 'dev-sw.js?dev-sw' with ES module type.
             const swFileName = import.meta.env.DEV ? 'dev-sw.js?dev-sw' : 'sw.js';
-            const swUrl = `${basePath}${swFileName}`.replace('//', '/');
+            // Version is auto-injected from package.json by vite.config.js at build time
+            const APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.0.0';
+            const swUrl = `${basePath}${swFileName}?v=${APP_VERSION}`.replace('//', '/');
 
             const registerSW = async () => {
                 try {
-                    const reg = await navigator.serviceWorker.register(swUrl, { 
+                    const reg = await navigator.serviceWorker.register(swUrl, {
                         scope: basePath,
                         type: import.meta.env.DEV ? 'module' : 'classic'
                     });
                     setRegistration(reg);
                     console.log('InsightEd PWA Registered at:', reg.scope);
 
-                    // Check for updates periodically (optional, but good practice)
-                    setInterval(() => {
-                        reg.update();
-                    }, 60 * 60 * 1000); // Check every hour
+                    // Helper: track a newly installing worker and fire modal when ready
+                    const trackInstall = (worker) => {
+                        worker.addEventListener('statechange', () => {
+                            console.log('[SW] Worker state changed to:', worker.state);
+                            // 'installed' + existing controller = update waiting to activate
+                            if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+                                console.log('[SW] New version waiting — showing update modal.');
+                                setIsUpdateAvailable(true);
+                            }
+                        });
+                    };
 
-                    // 1. Check if there's ALREADY a waiting worker (update ready)
-                    if (reg.waiting) {
+                    // 1. Page loaded and update was already waiting (e.g. user refreshed)
+                    if (reg.waiting && navigator.serviceWorker.controller) {
+                        console.log('[SW] Waiting worker found on load.');
                         setIsUpdateAvailable(true);
                     }
 
-                    // 2. Check if there's an installing worker (update in progress)
-                    // If the page loads while SW is installing, we must listen to it here.
+                    // 2. Update was in the middle of installing when page loaded
                     if (reg.installing) {
-                        const sw = reg.installing;
-                        sw.addEventListener('statechange', () => {
-                            if (sw.state === 'installed' && navigator.serviceWorker.controller) {
-                                setIsUpdateAvailable(true);
-                            }
-                        });
+                        trackInstall(reg.installing);
                     }
 
-                    // 3. Listen for future updates
+                    // 3. Listen for future updates found during the session
                     reg.addEventListener('updatefound', () => {
-                        const newWorker = reg.installing;
-                        console.log('New service worker installing...');
-
-                        newWorker.addEventListener('statechange', () => {
-                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                console.log('New service worker installed and waiting.');
-                                setIsUpdateAvailable(true);
-                            }
-                        });
+                        console.log('[SW] updatefound — new worker installing...');
+                        if (reg.installing) {
+                            trackInstall(reg.installing);
+                        }
                     });
 
+                    // 4. Periodic background check every 30 minutes
+                    setInterval(() => { reg.update(); }, 30 * 60 * 1000);
 
-                    // 4. Check for updates on Window Focus / Visibility Change (AGGRESSIVE MODE)
+                    // 5. Check on visibility restore (user switches back to tab/app)
                     document.addEventListener('visibilitychange', () => {
                         if (document.visibilityState === 'visible') {
-                            console.log('[SW] App visible, checking for updates...');
+                            console.log('[SW] Visibility restored — checking for updates...');
                             reg.update();
                         }
                     });
 
+                    // 6. Check on window focus (desktop browser tab focus)
                     window.addEventListener('focus', () => {
-                        console.log('[SW] Window focused, checking for updates...');
+                        console.log('[SW] Window focused — checking for updates...');
                         reg.update();
                     });
 
-                    // 5. Check if ?forceUpdate=1 is in URL
+                    // 7. URL flag for manual force-update during support
                     if (window.location.search.includes('forceUpdate=1')) {
-                        console.warn('[SW] Force Update triggered via URL.');
-                        hardReset();
+                        console.warn('[SW] forceUpdate=1 flag detected — triggering hard reset.');
+                        // hardReset is defined below, call after a tick
+                        setTimeout(() => hardReset(), 100);
                     }
+
                 } catch (err) {
                     console.error('PWA Registration Failed:', err);
                 }
@@ -88,14 +90,13 @@ export const ServiceWorkerProvider = ({ children }) => {
 
             registerSW();
 
-            // Listen for controller change (reload happened)
-
-            // Listen for controller change (reload happened)
+            // When SW controller changes (new SW activated), reload to load new assets
             let refreshing = false;
             navigator.serviceWorker.addEventListener('controllerchange', () => {
                 if (!refreshing) {
-                    window.location.reload();
+                    console.log('[SW] Controller changed — reloading for new version.');
                     refreshing = true;
+                    window.location.reload();
                 }
             });
         }

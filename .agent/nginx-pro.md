@@ -1,9 +1,9 @@
 ---
 skill_name: vm-nginx-navigator-pro
-version: 1.0.0
+version: 1.1.0
 framework: google-antigravity-awesome-skills
 agent_role: infrastructure-vibe-coder
-description: Equips the agent with advanced capabilities for navigating virtual machines, managing file structures, and writing highly optimized Nginx configurations for seamless frontend-backend integration.
+description: Equips the agent with advanced capabilities for navigating virtual machines, managing file structures, and writing highly optimized Nginx configurations for seamless frontend-backend integration. Now includes PWA Cache Hardening patterns for zero-downtime updates.
 ---
 
 # 🚀 Skill: VM Navigation & Nginx Optimization Expert
@@ -125,3 +125,146 @@ server {
         log_not_found off;
     }
 }
+```
+
+---
+
+## 🛡️ PWA Cache Hardening (InsightEd Pattern)
+
+### Problem
+PWAs using Service Workers can get users "stuck" on an old version of the app even after a deployment. This is caused by the browser's HTTP cache storing `sw.js` and `index.html` and never asking the server for new ones.
+
+### Root Cause Chain
+```
+Browser HTTP Cache holds old sw.js
+→ Old SW serves old precached JS/CSS bundles
+→ User sees old app version indefinitely
+→ "Troubleshoot" button reloads but reloads old index.html from HTTP cache
+→ Loop continues
+```
+
+### Three-Layer Defense Strategy
+
+**Layer 1: Nginx — Kill HTTP Cache for Critical Files**
+Add a dedicated block for the Service Worker **before** the general frontend block. Location block specificity (exact/prefix > regex > standard) ensures `sw.js` is matched first.
+
+```nginx
+# Layer 1a: Service Worker — NEVER cache (must be before the general /app/ block)
+location /insighted/sw.js {
+    alias /var/www/html/InsightEd-Mobile-PWA/dist/sw.js;
+    add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0";
+    expires off;
+    proxy_no_cache 1;
+}
+
+# Layer 1b: Frontend SPA with nested index.html no-cache
+location /insighted/ {
+    alias /var/www/html/InsightEd-Mobile-PWA/dist/;
+    try_files $uri $uri/ /insighted/index.html;
+
+    # Nested location: force browser to revalidate index.html on every visit
+    location ~* /insighted/index\.html$ {
+        add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0";
+        expires off;
+    }
+}
+```
+
+> ⚠️ **Agent Rule:** The `sw.js` location block MUST come before the general `location /app/` block, otherwise Nginx's prefix matching will swallow it.
+
+**Layer 2: HTML Meta Tags — Client-Side Fail-safe**
+Add to `index.html` `<head>` for browsers that ignore server headers:
+```html
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+```
+
+**Layer 3: SW Registration Cache-Buster — App Code**
+In `ServiceWorkerContext.jsx`, append a version string to the SW registration URL:
+```js
+const APP_VERSION = '1.0.23'; // Increment on every release
+const swUrl = `${basePath}sw.js?v=${APP_VERSION}`.replace('//', '/');
+```
+This tricks the browser into treating it as a new resource every release, bypassing all caches.
+
+### What is NOT affected
+| Data Store | Affected by no-cache? | Why |
+| :--- | :--- | :--- |
+| **Service Worker Precache** | ❌ No | It's a browser-side DB, independent of HTTP headers |
+| **IndexedDB (Drafts/Outbox)** | ❌ No | Completely separate from HTTP cache layer |
+| **LocalStorage** | ❌ No | Browser-managed, not touched by Nginx |
+| **Offline Mode** | ❌ No | SW intercepts before hitting the network |
+
+### Validation Commands
+After applying the Nginx changes:
+```bash
+# 1. Test config syntax
+sudo nginx -t
+
+# 2. Apply changes
+sudo systemctl restart nginx
+
+# 3. Verify headers on sw.js
+curl -I https://stride.deped.gov.ph/insighted/sw.js | grep -i cache
+
+# 4. Verify headers on index.html
+curl -I https://stride.deped.gov.ph/insighted/ | grep -i cache
+
+# Expected output for both:
+# Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0
+```
+
+---
+
+## 🔬 Live Verification Report — stride.deped.gov.ph (April 9, 2026)
+
+### Test Commands Run
+```bash
+# Test 1: HTTPS path (user-facing traffic)
+curl -I https://stride.deped.gov.ph/sw.js | grep -i cache
+
+# Test 2: HTTP path (VM-direct traffic)
+curl -I http://stride.deped.gov.ph/sw.js | grep -i cache
+```
+
+### Results
+
+**HTTPS (user-facing):**
+```
+HTTP/2 200
+Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate  ✅
+x-nextjs-cache: HIT
+```
+
+**HTTP (VM-direct):**
+```
+HTTP/1.1 301 Moved Permanently   → Redirects to https://
+(No Cache-Control — redirect body only, 195 bytes)
+```
+
+### Architecture Discovery
+This verification revealed that `stride.deped.gov.ph` has a **dual-environment architecture**:
+
+| Traffic Path | Handler | Cache-Control Status |
+| :--- | :--- | :--- |
+| `https://` (all user traffic) | **Vercel CDN** | ✅ `no-cache, no-store, must-revalidate` confirmed |
+| `http://` port 80 | **Nginx VM** | ✅ Redirects to HTTPS (301) |
+| VM direct `http://` (internal) | **Nginx → Express :5000** | ✅ Config updated with PWA hardening blocks |
+
+### Agent Rule: Dual-Environment Awareness
+> ⚠️ When `x-nextjs-cache` appears in response headers, the request is being served by **Vercel**, not the local Nginx VM. This is identifiable via `curl -I https://`.
+> For this project, `https://` = Vercel, `http://` VM-direct = Nginx → Express.
+> Always test **both** paths when debugging caching issues.
+
+### Final Protection Status (as of April 9, 2026)
+
+| Layer | File | Status |
+| :--- | :--- | :--- |
+| Vercel HTTPS (user traffic) | `sw.js` | ✅ `no-cache` confirmed live |
+| Nginx VM config | `deploy/nginx/stride.conf` | ✅ PWA hardening blocks added |
+| App SW registration | `src/context/ServiceWorkerContext.jsx` | ✅ `?v=1.0.23` cache-buster added |
+| HTML entry point | `index.html` | ✅ Anti-cache `<meta>` tags added |
+| UI button | `src/modules/UserProfile.jsx` | ✅ "Optimize App" merged button implemented |
+| App version string | `UserProfile.jsx` + `ServiceWorkerContext.jsx` | ✅ Bumped to `v1.0.23` |
+
