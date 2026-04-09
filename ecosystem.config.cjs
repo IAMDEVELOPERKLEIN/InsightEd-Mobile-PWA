@@ -10,7 +10,10 @@ module.exports = {
         PORT: 5001,
         NODE_ENV: "staging",
         UPLOAD_DIR: "/tmp/insighted-pdf-tmp"
-      }
+      },
+      kill_timeout: 5000,
+      wait_ready: true,
+      listen_timeout: 10000
     },
     {
       name: "insighted-backend",
@@ -22,7 +25,10 @@ module.exports = {
         PORT: 5000,
         NODE_ENV: "production",
         UPLOAD_DIR: "/tmp/insighted-pdf-tmp"
-      }
+      },
+      kill_timeout: 5000,
+      wait_ready: true,
+      listen_timeout: 10000
     }
   ]
 };

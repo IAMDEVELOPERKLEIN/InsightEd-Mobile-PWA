@@ -155,8 +155,8 @@ const { Pool } = pg;
 const pool = new Pool({
   connectionString: dbUrl,
   ssl: isLocal ? false : { rejectUnauthorized: false },
-  max: 80, // Optimized for Cluster Mode (assuming 16 cores, 16*80 = 1280 < 1718)
-  min: 5,  // Pre-warmed connections
+  max: 20, // Optimized for Cluster Mode (assumes multiple instances; prevents DB saturation)
+  min: 2,  // Reduced from 5 to further save connections across cluster
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000, // Reduced to 10s to fail fast
   application_name: 'InsightEd_API_Primary'
@@ -18655,22 +18655,43 @@ const startServer = async () => {
       console.log(`================================================\n`);
     });
 
-    // Graceful Shutdown Handlers
-    process.on('SIGINT', () => {
-      console.log('🛑 Received SIGINT (Ctrl+C or PM2). Shutting down...');
-      server.close(() => {
-        console.log('👋 Server closed.');
-        process.exit(0);
+    // Graceful Shutdown Handlers (Hardened for Cluster Mode)
+    const gracefulShutdown = async (signal) => {
+      console.log(`🛑 Received ${signal}. Shutting down gracefully...`);
+      
+      // Stop accepting new requests
+      server.close(async () => {
+        console.log('👋 HTTP server closed.');
+        
+        try {
+          // Close DB Pools
+          if (pool) {
+            console.log('💾 Closing Primary DB pool...');
+            await pool.end();
+            console.log('✅ Primary DB pool closed.');
+          }
+          if (poolNew) {
+            console.log('💾 Closing Secondary DB pool...');
+            await poolNew.end();
+            console.log('✅ Secondary DB pool closed.');
+          }
+        } catch (err) {
+          console.error('❌ Error during shutdown:', err.message);
+        } finally {
+          console.log('🏁 Process exiting.');
+          process.exit(0);
+        }
       });
-    });
 
-    process.on('SIGTERM', () => {
-      console.log('🛑 Received SIGTERM. Shutting down...');
-      server.close(() => {
-        console.log('👋 Server closed.');
-        process.exit(0);
-      });
-    });
+      // Force exit after 10s if graceful shutdown hangs
+      setTimeout(() => {
+        console.error('⚠️ Shutdown timed out, forcing exit.');
+        process.exit(1);
+      }, 10000);
+    };
+
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
   } catch (err) {
     console.error("❌ Failed to start server:", err.message);
