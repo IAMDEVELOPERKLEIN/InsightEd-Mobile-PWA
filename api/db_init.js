@@ -1222,6 +1222,9 @@ const runMigrations = async (client, dbLabel) => {
         `);
         await client.query(`CREATE INDEX IF NOT EXISTS idx_ph_schools_division  ON ph_schools(division);`);
         await client.query(`CREATE INDEX IF NOT EXISTS idx_ph_schools_region    ON ph_schools(region);`);
+        
+        // Compound index for regional dashboard aggregations (HAWKEYE Protocol)
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_ph_schools_regional_summary ON ph_schools(region, division);`);
 
         console.log(`✅ [${dbLabel}] ph_schools canonical schema (Unit 1-9) ensured`);
     } catch (migErr) {
@@ -1358,7 +1361,9 @@ const runMigrations = async (client, dbLabel) => {
         await client.query(`ALTER TABLE engineer_image ADD COLUMN IF NOT EXISTS ipc TEXT;`);
 
         // B-tree indices for fast IPC-based lookups across all asset tables
-        await client.query(`CREATE INDEX IF NOT EXISTS idx_engineer_form_ipc      ON engineer_form(ipc);`);
+        // B-tree indices for fast IPC-based lookups across all asset tables
+        // Redundant global index removed; keeping partial index for efficiency
+        
         await client.query(`CREATE INDEX IF NOT EXISTS idx_engineer_image_ipc     ON engineer_image(ipc);`);
         await client.query(`CREATE INDEX IF NOT EXISTS idx_engineer_documents_ipc ON engineer_documents(ipc);`);
 

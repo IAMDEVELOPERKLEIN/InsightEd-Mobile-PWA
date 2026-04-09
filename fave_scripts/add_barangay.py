@@ -6,7 +6,7 @@ import sys
 # Load environment variables from .env file in the parent directory
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
-def add_barangay(region, province, municipality, barangay):
+def add_barangay(region, province, barangay):
     database_url = os.getenv('DATABASE_URL')
     if not database_url:
         print("❌ Error: DATABASE_URL not found in .env file.")
@@ -17,43 +17,39 @@ def add_barangay(region, province, municipality, barangay):
         conn = psycopg2.connect(database_url, sslmode='require')
         cur = conn.cursor()
 
-        # 1. First, verify that the region/province/municipality combination exists
-        loc_check_query = """
-            SELECT DISTINCT region, province, municipality 
-            FROM ph_barangays 
-            WHERE UPPER(TRIM(region)) = UPPER(TRIM(%s)) 
-              AND UPPER(TRIM(province)) = UPPER(TRIM(%s)) 
-              AND UPPER(TRIM(municipality)) = UPPER(TRIM(%s))
-        """
-        cur.execute(loc_check_query, (region, province, municipality))
-        if not cur.fetchone():
-            print(f"\n[❌] Error: The location '{municipality}, {province} ({region})' was not found in the database.")
-            print("Please ensure the spelling matches the existing records exactly.")
-            cur.close()
-            conn.close()
-            return
+        # Set other hierarchy fields to NULL as requested
+        division = None
+        district = None
+        municipality = None
+        legislative_district = None
 
-        # 2. Check if the barangay already exists in the given municipality
+        print(f"ℹ️ Creating barangay mapping in 'all_new_locations' for Province: {province}")
+        print(f"   (Municipality, Division, District, and Legislative District will be set to NULL)")
+
+        # 1. Check if the exact combination already exists in all_new_locations
         check_query = """
-            SELECT id FROM ph_barangays 
+            SELECT id FROM all_new_locations 
             WHERE UPPER(TRIM(region)) = UPPER(TRIM(%s)) 
               AND UPPER(TRIM(province)) = UPPER(TRIM(%s)) 
-              AND UPPER(TRIM(municipality)) = UPPER(TRIM(%s)) 
+              AND division IS NULL
+              AND district IS NULL
+              AND municipality IS NULL
+              AND legislative_district IS NULL
               AND UPPER(TRIM(barangay)) = UPPER(TRIM(%s))
         """
-        cur.execute(check_query, (region, province, municipality, barangay))
+        cur.execute(check_query, (region, province, barangay))
         
         if cur.fetchone():
-            print(f"\n[!] Barangay '{barangay}' already exists in {municipality}, {province} ({region}).")
+            print(f"\n[!] Barangay '{barangay}' already exists in 'all_new_locations' for {province} ({region}).")
         else:
-            # 3. Insert the new barangay
+            # 2. Insert the new barangay mapping
             insert_query = """
-                INSERT INTO ph_barangays (region, province, municipality, barangay) 
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO all_new_locations (region, province, division, district, municipality, legislative_district, barangay) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
-            cur.execute(insert_query, (region, province, municipality, barangay))
+            cur.execute(insert_query, (region, province, division, district, municipality, legislative_district, barangay))
             conn.commit()
-            print(f"\n[✅] Successfully added '{barangay}' to {municipality}, {province} ({region}).")
+            print(f"\n[✅] Successfully added Barangay '{barangay}' to 'all_new_locations' for {province} ({region}).")
 
         cur.close()
         conn.close()
@@ -62,17 +58,16 @@ def add_barangay(region, province, municipality, barangay):
         print(f"\n[ERROR] Database Error: {str(e)}")
 
 if __name__ == "__main__":
-    print("--- Add Barangay to Database ---")
+    print("--- Add Barangay to Database (all_new_locations) ---")
     try:
-        region = input("Enter Region (e.g., Region III): ").strip()
-        province = input("Enter Province (e.g., BULACAN): ").strip()
-        municipality = input("Enter Municipality (e.g., CITY OF MALOLOS (Capital)): ").strip()
+        region = input("Enter Region (e.g., REGION III, CARAGA): ").strip()
+        province = input("Enter Province (e.g., BULACAN, DAVAO DEL SUR): ").strip()
         barangay = input("Enter Barangay Name to Add: ").strip()
 
-        if not all([region, province, municipality, barangay]):
+        if not all([region, province, barangay]):
             print("❌ Error: All fields are required.")
         else:
-            add_barangay(region, province, municipality, barangay)
+            add_barangay(region, province, barangay)
             
     except KeyboardInterrupt:
         print("\nExiting...")
