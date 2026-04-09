@@ -1028,43 +1028,52 @@ const getDBUnitFromUIUnit = (uiUnit) => {
 
 async function updateSchoolTotalCompletion(iern) {
   if (!iern) return;
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    const res = await client.query('SELECT * FROM ph_school_completion WHERE iern = $1', [iern]);
-    if (res.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return;
-    }
+    // Read from ph_schools — the authoritative source for unit flags.
+    // DB columns unit1–unit7 and unit9 map to display units 1–8 (unit9 = terrain/location).
+    // This avoids reading the stale ph_school_completion booleans which can diverge
+    // when pgBouncer (transaction mode) drops a COMMIT mid-flight.
+    const res = await pool.query(
+      `SELECT unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit9,
+              unit1_completed, unit2_completed, unit3_completed, unit4_completed,
+              unit5_completed, unit6_completed, unit7_completed, unit9_completed
+       FROM ph_schools WHERE iern = $1`,
+      [iern]
+    );
+    if (res.rows.length === 0) return;
 
     const row = res.rows[0];
+    // DB column indices that correspond to display units 1–8
+    const dbCols = [1, 2, 3, 4, 5, 6, 7, 9];
     let completedCount = 0;
-    // Check Unit 1 to 8 (the 8 school-head data collection units)
-    for (let i = 1; i <= 8; i++) {
-        if (row[`unit${i}_completion`] === true) completedCount++;
+    const boolValues = [];
+    for (const idx of dbCols) {
+      const done = (parseInt(row[`unit${idx}`]) === 1 || row[`unit${idx}_completed`] === true);
+      boolValues.push(done);
+      if (done) completedCount++;
     }
 
-    const totalStats = 8;
-    const percentage = parseFloat(((completedCount / totalStats) * 100).toFixed(2));
+    const percentage = parseFloat(((completedCount / 8) * 100).toFixed(2));
 
-    await client.query(
-        'UPDATE ph_school_completion SET total_completion = $1, updated_at = CURRENT_TIMESTAMP WHERE iern = $2',
-        [percentage, iern]
+    // Sync booleans + total back to ph_school_completion (auto-commit, no transaction needed)
+    await pool.query(
+      `UPDATE ph_school_completion SET
+         unit1_completion=$2, unit2_completion=$3, unit3_completion=$4, unit4_completion=$5,
+         unit5_completion=$6, unit6_completion=$7, unit7_completion=$8, unit8_completion=$9,
+         total_completion=$1, updated_at=CURRENT_TIMESTAMP
+       WHERE iern=$10`,
+      [percentage, ...boolValues, iern]
     );
 
-    // Also sync back to ph_schools for legacy compatibility (unit_completion column)
-    await client.query(
-        'UPDATE ph_schools SET unit_completion = $1 WHERE iern = $2',
-        [percentage, iern]
+    // Sync to ph_schools.unit_completion for monitoring dashboards
+    await pool.query(
+      'UPDATE ph_schools SET unit_completion=$1 WHERE iern=$2',
+      [percentage, iern]
     );
 
-    await client.query('COMMIT');
     console.log(`[SYNC] Updated completion for ${iern}: ${percentage}% (${completedCount}/8)`);
   } catch (err) {
-    if (client) await client.query('ROLLBACK');
     console.error(`[ERROR] updateSchoolTotalCompletion failed for ${iern}:`, err.message);
-  } finally {
-    client.release();
   }
 }
 
@@ -10046,6 +10055,51 @@ app.patch('/api/agency-dashboard/projects/:id/liquidation', async (req, res) => 
 });
 
 // ==================================================================
+//         ADMIN: COMPLETION RESYNC
+// ==================================================================
+
+/**
+ * POST /api/admin/resync-completion
+ * Re-derives unit_completion from ph_schools authoritative flags for
+ * one school (body: { school_id }) or all schools (body: { all: true }).
+ * Fixes divergence caused by pgBouncer transaction-mode drops or
+ * missing unit8_completion writes.
+ */
+app.post('/api/admin/resync-completion', async (req, res) => {
+  const { school_id, all } = req.body || {};
+  try {
+    let rows;
+    if (all) {
+      const r = await pool.query(
+        `SELECT school_id, iern FROM ph_schools WHERE iern IS NOT NULL`
+      );
+      rows = r.rows;
+    } else if (school_id) {
+      const r = await pool.query(
+        `SELECT school_id, iern FROM ph_schools WHERE school_id = $1 AND iern IS NOT NULL`,
+        [school_id]
+      );
+      rows = r.rows;
+    } else {
+      return res.status(400).json({ error: 'Provide school_id or all:true' });
+    }
+
+    if (rows.length === 0) return res.status(404).json({ error: 'No matching schools found' });
+
+    let updated = 0;
+    for (const row of rows) {
+      await updateSchoolTotalCompletion(row.iern);
+      updated++;
+    }
+
+    res.json({ success: true, updated });
+  } catch (err) {
+    console.error('[resync-completion] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================================================================
 //         HRODI / EFD DASHBOARD PERFORMANCE ENDPOINTS
 // ==================================================================
 
@@ -18437,6 +18491,10 @@ app.post('/api/school-location', async (req, res) => {
         'UPDATE ph_schools SET unit9_completed = $2, unit9 = $3, unit9_updated_at = CASE WHEN $2 = TRUE THEN CURRENT_TIMESTAMP ELSE unit9_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1',
         [schoolId, isUnit8Completed, isUnit8Completed ? 1 : 0]
       );
+
+      // 2. Resync total completion — this also writes unit8_completion to ph_school_completion
+      const iernForSync = validatedData.iern || (await pool.query('SELECT iern FROM ph_schools WHERE school_id=$1', [schoolId]).then(r => r.rows[0]?.iern));
+      if (iernForSync) updateSchoolTotalCompletion(iernForSync);
 
       console.log(`[Dashboard Integration] Unit 8 (Terrain) Flags updated for school ${schoolId}`);
     } catch (flagErr) {
