@@ -40,7 +40,7 @@ def main():
                 echo "BNC_CONNS:"; sudo ss -tnp | grep :6432 | grep ESTAB | wc -l;
                 echo "SHED_LIVE:"; sudo tail -n 1000 /var/log/nginx/access.log 2>/dev/null | grep -E ' 50[0-9] ' | wc -l;
                 echo "PM2_LIVE:"; pm2 jlist 2>/dev/null;
-                echo "APP_AUDIT:"; grep -E 'DELAY_THRESHOLD|HEAP_THRESHOLD|heap_limit' e:/InsightEd-Mobile-PWA/api/index.js 2>/dev/null
+                echo "APP_AUDIT:"; grep -E 'DELAY_THRESHOLD|HEAP_THRESHOLD|heap_limit' /var/www/html/InsightEd-Mobile-PWA/api/index.js 2>/dev/null
             )
             """.strip()
 
