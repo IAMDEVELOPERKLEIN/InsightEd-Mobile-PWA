@@ -13,7 +13,8 @@ module.exports = {
       },
       kill_timeout: 5000,
       wait_ready: true,
-      listen_timeout: 10000
+      listen_timeout: 10000,
+      max_memory_restart: '1G'
     },
     {
       name: "insighted-backend",
@@ -28,7 +29,8 @@ module.exports = {
       },
       kill_timeout: 5000,
       wait_ready: true,
-      listen_timeout: 10000
+      listen_timeout: 10000,
+      max_memory_restart: '1G'
     }
   ]
 };

@@ -432,6 +432,33 @@ app.use(cors({
 app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
+// --- [Admission Control] Load Shedding & Resource Monitoring ---
+// Protects the event loop from locking up during traffic spikes by returning 503 Service Unavailable
+let eventLoopDelay = 0;
+setInterval(() => {
+  const start = Date.now();
+  setImmediate(() => {
+    eventLoopDelay = Date.now() - start;
+  });
+}, 1000);
+
+app.use((req, res, next) => {
+  const heapUsage = process.memoryUsage().heapUsed;
+  const HEAP_THRESHOLD = 800 * 1024 * 1024; // 800MB
+  const DELAY_THRESHOLD = 200; // 200ms
+
+  if (eventLoopDelay > DELAY_THRESHOLD || heapUsage > HEAP_THRESHOLD) {
+    console.warn(`⚠️ [Admission-Control] REJECTING REQUEST - Delay: ${eventLoopDelay}ms | Heap: ${Math.round(heapUsage/1024/1024)}MB`);
+    res.set('Retry-After', '5');
+    return res.status(503).json({ 
+      error: 'Service Temporarily Overloaded', 
+      retry_after: 5,
+      reason: eventLoopDelay > DELAY_THRESHOLD ? 'high_latency' : 'memory_pressure'
+    });
+  }
+  next();
+});
+
 // --- SCHOOL DOCS STORAGE ---
 // --- SCHOOL DOCS STORAGE (Staged in Temp) ---
 const schoolDocsStorage = multer.diskStorage({
@@ -1001,9 +1028,14 @@ const getDBUnitFromUIUnit = (uiUnit) => {
 
 async function updateSchoolTotalCompletion(iern) {
   if (!iern) return;
+  const client = await pool.connect();
   try {
-    const res = await pool.query('SELECT * FROM ph_school_completion WHERE iern = $1', [iern]);
-    if (res.rows.length === 0) return;
+    await client.query('BEGIN');
+    const res = await client.query('SELECT * FROM ph_school_completion WHERE iern = $1', [iern]);
+    if (res.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return;
+    }
 
     const row = res.rows[0];
     let completedCount = 0;
@@ -1015,20 +1047,24 @@ async function updateSchoolTotalCompletion(iern) {
     const totalStats = 8;
     const percentage = parseFloat(((completedCount / totalStats) * 100).toFixed(2));
 
-    await pool.query(
+    await client.query(
         'UPDATE ph_school_completion SET total_completion = $1, updated_at = CURRENT_TIMESTAMP WHERE iern = $2',
         [percentage, iern]
     );
 
     // Also sync back to ph_schools for legacy compatibility (unit_completion column)
-    await pool.query(
+    await client.query(
         'UPDATE ph_schools SET unit_completion = $1 WHERE iern = $2',
         [percentage, iern]
     );
 
+    await client.query('COMMIT');
     console.log(`[SYNC] Updated completion for ${iern}: ${percentage}% (${completedCount}/8)`);
   } catch (err) {
+    if (client) await client.query('ROLLBACK');
     console.error(`[ERROR] updateSchoolTotalCompletion failed for ${iern}:`, err.message);
+  } finally {
+    client.release();
   }
 }
 
@@ -11581,52 +11617,65 @@ app.post('/api/save-organized-classes', async (req, res) => {
             WHERE school_id = $1
         `;
 
-    const result = await pool.query(query, [
-      data.schoolId,
-      data.kinder,
-      data.g1, data.g2, data.g3, data.g4, data.g5, data.g6,
-      data.g7, data.g8, data.g9, data.g10,
-      data.g11, data.g12,
-
-      data.cntLessG1 || 0, data.cntWithinG1 || 0, data.cntAboveG1 || 0,
-      data.cntLessG2 || 0, data.cntWithinG2 || 0, data.cntAboveG2 || 0,
-      data.cntLessG3 || 0, data.cntWithinG3 || 0, data.cntAboveG3 || 0,
-      data.cntLessG4 || 0, data.cntWithinG4 || 0, data.cntAboveG4 || 0,
-      data.cntLessG5 || 0, data.cntWithinG5 || 0, data.cntAboveG5 || 0,
-      data.cntLessG6 || 0, data.cntWithinG6 || 0, data.cntAboveG6 || 0,
-      data.cntLessG7 || 0, data.cntWithinG7 || 0, data.cntAboveG7 || 0,
-      data.cntLessG8 || 0, data.cntWithinG8 || 0, data.cntAboveG8 || 0,
-      data.cntLessG9 || 0, data.cntWithinG9 || 0, data.cntAboveG9 || 0,
-      data.cntLessG10 || 0, data.cntWithinG10 || 0, data.cntAboveG10 || 0,
-      data.cntLessG11 || 0, data.cntWithinG11 || 0, data.cntAboveG11 || 0,
-      data.cntLessG12 || 0, data.cntWithinG12 || 0, data.cntAboveG12 || 0,
-
-      data.cntLessKinder || 0, data.cntWithinKinder || 0, data.cntAboveKinder || 0,
-
-      JSON.stringify(data.multigradeClasses) || '[]'
-    ]);
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "School Profile not found (Check School ID)" });
-    }
-
-    res.json({ message: "Classes saved successfully!" });
-
-    // --- SYNC COMPLETION (Unit 4 -> unit4_completion) ---
+    const clientSync = await pool.connect();
     try {
-      const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [data.schoolId]);
+      await clientSync.query('BEGIN');
+      const result = await clientSync.query(query, [
+        data.schoolId,
+        data.kinder,
+        data.g1, data.g2, data.g3, data.g4, data.g5, data.g6,
+        data.g7, data.g8, data.g9, data.g10,
+        data.g11, data.g12,
+
+        data.cntLessG1 || 0, data.cntWithinG1 || 0, data.cntAboveG1 || 0,
+        data.cntLessG2 || 0, data.cntWithinG2 || 0, data.cntAboveG2 || 0,
+        data.cntLessG3 || 0, data.cntWithinG3 || 0, data.cntAboveG3 || 0,
+        data.cntLessG4 || 0, data.cntWithinG4 || 0, data.cntAboveG4 || 0,
+        data.cntLessG5 || 0, data.cntWithinG5 || 0, data.cntAboveG5 || 0,
+        data.cntLessG6 || 0, data.cntWithinG6 || 0, data.cntAboveG6 || 0,
+        data.cntLessG7 || 0, data.cntWithinG7 || 0, data.cntAboveG7 || 0,
+        data.cntLessG8 || 0, data.cntWithinG8 || 0, data.cntAboveG8 || 0,
+        data.cntLessG9 || 0, data.cntWithinG9 || 0, data.cntAboveG9 || 0,
+        data.cntLessG10 || 0, data.cntWithinG10 || 0, data.cntAboveG10 || 0,
+        data.cntLessG11 || 0, data.cntWithinG11 || 0, data.cntAboveG11 || 0,
+        data.cntLessG12 || 0, data.cntWithinG12 || 0, data.cntAboveG12 || 0,
+
+        data.cntLessKinder || 0, data.cntWithinKinder || 0, data.cntAboveKinder || 0,
+
+        JSON.stringify(data.multigradeClasses) || '[]'
+      ]);
+
+      if (result.rowCount === 0) {
+        await clientSync.query('ROLLBACK');
+        return res.status(404).json({ error: "School Profile not found (Check School ID)" });
+      }
+
+      // --- SYNC COMPLETION (Unit 4 -> unit4_completion) ---
+      const iernRes = await clientSync.query('SELECT iern FROM ph_schools WHERE school_id = $1', [data.schoolId]);
       if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
         const iern = iernRes.rows[0].iern;
-        await pool.query('UPDATE ph_schools SET unit4_completed = TRUE, unit4 = 1 WHERE iern = $1', [iern]);
-        await pool.query(`
+        await clientSync.query('UPDATE ph_schools SET unit4_completed = TRUE, unit4 = 1 WHERE iern = $1', [iern]);
+        await clientSync.query(`
           INSERT INTO ph_school_completion (iern, school_id, unit4_completion)
           VALUES ($1, $2, true)
           ON CONFLICT (iern) DO UPDATE SET unit4_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
         `, [iern, data.schoolId]);
+        
+        await clientSync.query('COMMIT');
+        // Recalculate total percentage (async call with its own internal transaction)
         updateSchoolTotalCompletion(iern);
+      } else {
+        await clientSync.query('COMMIT'); // Commit if no IERN found (the main update still succeeded)
       }
+      
+      res.json({ message: "Classes saved successfully!" });
+
     } catch (e) {
-      console.warn("[Unit 4 Sync Error]:", e.message);
+      if (clientSync) await clientSync.query('ROLLBACK');
+      console.error("Critical error in save-organized-classes:", e.message);
+      if (!res.headersSent) res.status(500).json({ error: e.message });
+    } finally {
+      clientSync.release();
     }
     // SNAPSHOT UPDATE (Primary)
     /* Truly removed now */
@@ -12765,26 +12814,41 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
     console.log(`[Specialization Save] UID: ${d.uid}`);
     console.log(`[Specialization Save] General Teaching: ${d.spec_general_teaching}, ECE Teaching: ${d.spec_ece_teaching}`);
 
-    const result = await pool.query(query, values);
-    if (result.rowCount === 0) return res.status(404).json({ error: "Profile not found" });
-
-    res.json({ success: true });
-
-    // --- SYNC COMPLETION (Unit 6 -> unit6_completion) ---
+    const client = await pool.connect();
     try {
-      const spRes = await pool.query("SELECT school_id, iern FROM ph_schools WHERE submitted_by = $1", [d.uid]);
+      await client.query('BEGIN');
+      const result = await client.query(query, values);
+      if (result.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: "Profile not found" });
+      }
+
+      // --- SYNC COMPLETION (Unit 6 -> unit6_completion) ---
+      const spRes = await client.query("SELECT school_id, iern FROM ph_schools WHERE submitted_by = $1", [d.uid]);
       if (spRes.rows.length > 0) {
         const { school_id, iern } = spRes.rows[0];
-        await pool.query('UPDATE ph_schools SET unit6_completed = TRUE, unit6 = 1 WHERE iern = $1', [iern]);
-        await pool.query(`
+        await client.query('UPDATE ph_schools SET unit6_completed = TRUE, unit6 = 1 WHERE iern = $1', [iern]);
+        await client.query(`
           INSERT INTO ph_school_completion (iern, school_id, unit6_completion)
           VALUES ($1, $2, true)
           ON CONFLICT (iern) DO UPDATE SET unit6_completion = true, updated_at = CURRENT_TIMESTAMP
         `, [iern, school_id]);
+        
+        await client.query('COMMIT');
+        // Recalculate total percentage (async call)
         updateSchoolTotalCompletion(iern);
+      } else {
+        await client.query('COMMIT');
       }
+      
+      res.json({ success: true });
+
     } catch (e) {
-      console.warn("Unit 6 Sync Error", e);
+      if (client) await client.query('ROLLBACK');
+      console.error("Critical error in save-teacher-specialization:", e.message);
+      if (!res.headersSent) res.status(500).json({ error: e.message });
+    } finally {
+      client.release();
     }
     // SNAPSHOT UPDATE (UID to School ID)
     try {
@@ -18732,6 +18796,11 @@ const startServer = async () => {
       console.log(`🚀 Time: ${new Date().toLocaleString()}`);
       console.log(`🔗 APP READY: http://localhost:5173/`);
       console.log(`================================================\n`);
+      
+      // Signal PM2 that the application is ready (supports wait_ready: true)
+      if (process.send) {
+        process.send('ready');
+      }
     });
 
     // Graceful Shutdown Handlers (Hardened for Cluster Mode)

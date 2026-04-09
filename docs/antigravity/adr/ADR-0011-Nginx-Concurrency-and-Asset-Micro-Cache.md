@@ -28,9 +28,8 @@ The existing `$connection_upgrade` map used `'' close`, which set `Connection: c
 worker_processes       auto;
 worker_rlimit_nofile   8192;
 
-events {
-    worker_connections 4096;
-    multi_accept       on;
+    worker_connections 32768; # Aggressive limit
+    multi_accept       on;    # Optimizes load absorption by accepting all new connections in one sweep
     use                epoll;
 }
 
