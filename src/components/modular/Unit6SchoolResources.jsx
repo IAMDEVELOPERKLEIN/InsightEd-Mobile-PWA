@@ -107,6 +107,9 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         two_seater_wood_steel_func: "", two_seater_wood_steel_broken: "",
         wooden_chair_only_func: "", wooden_chair_only_broken: "",
         plastic_chair_only_func: "", plastic_chair_only_broken: "",
+        // Sharing state
+        is_sharing: false,
+        shared_with: [], 
     };
     const [currentGradeForm, setCurrentGradeForm] = useState(initialGradeForm);
 
@@ -381,15 +384,41 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     };
 
     const handleSaveGradeLevel = () => {
+        const sharingPartners = currentGradeForm.is_sharing ? currentGradeForm.shared_with : [];
 
         setGradesData(prev => prev.map(grade => {
+            // 1. Update the Current (Parent) Grade
             if (grade.id === selectedGradeId) {
                 return {
                     ...grade,
                     ...currentGradeForm,
+                    is_sharing_parent: currentGradeForm.is_sharing && sharingPartners.length > 0,
+                    is_shared_child: false, // Parent can't be a child
+                    sharing_parent_id: null,
                     isVerified: true
                 };
             }
+            
+            // 2. Update the Sharing Partners (Children)
+            if (sharingPartners.includes(grade.id)) {
+                return {
+                    ...grade,
+                    // Reset all counts for children as they share the parent's resources
+                    armchair_wood_func: "0", armchair_wood_broken: "0",
+                    armchair_plastic_func: "0", armchair_plastic_broken: "0",
+                    armchair_plastic_steel_func: "0", armchair_plastic_steel_broken: "0",
+                    individual_table_chair_func: "0", individual_table_chair_broken: "0",
+                    two_seater_wood_func: "0", two_seater_wood_broken: "0",
+                    two_seater_wood_steel_func: "0", two_seater_wood_steel_broken: "0",
+                    wooden_chair_only_func: "0", wooden_chair_only_broken: "0",
+                    plastic_chair_only_func: "0", plastic_chair_only_broken: "0",
+                    is_sharing_parent: false,
+                    is_shared_child: true,
+                    sharing_parent_id: selectedGradeId,
+                    isVerified: true
+                };
+            }
+            
             return grade;
         }));
 
@@ -400,6 +429,19 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     };
 
     const openGradeModal = (grade) => {
+        // If this is a child grade, we should probably suggest editing the parent
+        if (grade.is_shared_child && grade.sharing_parent_id) {
+            const parent = gradesData.find(g => g.id === grade.sharing_parent_id);
+            if (parent && !window.confirm(`This grade level shares resources with ${parent.grade_level}. Do you want to edit the shared resources instead?`)) {
+                // If they say no, let them edit independently (break the link)
+                // We'll handle breaking the link by just opening it and letting them save.
+            } else if (parent) {
+                // Open parent instead
+                openGradeModal(parent);
+                return;
+            }
+        }
+
         setSelectedGradeId(grade.id);
         setCurrentGradeForm({
             armchair_wood_func: grade.armchair_wood_func || "",
@@ -418,6 +460,8 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             wooden_chair_only_broken: grade.wooden_chair_only_broken || "",
             plastic_chair_only_func: grade.plastic_chair_only_func || "",
             plastic_chair_only_broken: grade.plastic_chair_only_broken || "",
+            is_sharing: grade.is_sharing || (grade.is_sharing_parent && grade.shared_with?.length > 0) || false,
+            shared_with: grade.shared_with || [],
         });
         setGradeValidationConfirm("");
         setShowGradeModal(true);
@@ -435,9 +479,17 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         const totalCapacity = aw + ap + aps + itc + (tsw * 2) + (tsws * 2) + wco + pco;
         
         const activeGrade = gradesData.find(g => g.id === selectedGradeId);
-        const enrolled = activeGrade ? parseInt(activeGrade.enrolled) : 0;
+        let totalEnrolled = activeGrade ? parseInt(activeGrade.enrolled || 0) : 0;
+
+        // If sharing, add the enrollment of all partners
+        if (currentGradeForm.is_sharing && currentGradeForm.shared_with?.length > 0) {
+            currentGradeForm.shared_with.forEach(id => {
+                const partner = gradesData.find(p => p.id === id);
+                if (partner) totalEnrolled += parseInt(partner.enrolled || 0);
+            });
+        }
         
-        return { capacity: totalCapacity, diff: totalCapacity - enrolled, isOk: totalCapacity >= enrolled };
+        return { capacity: totalCapacity, enrolled: totalEnrolled, diff: totalCapacity - totalEnrolled, isOk: totalCapacity >= totalEnrolled };
     }, [currentGradeForm, gradesData, selectedGradeId]);
 
     // Validation to proceed
@@ -854,21 +906,44 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                             <div className="p-6 space-y-4">
                                 {gradesData.filter(g => g.isVerified).map(g => {
                                     const total = (parseInt(g.armchair_wood_func)||0) + (parseInt(g.armchair_plastic_func)||0) + (parseInt(g.armchair_plastic_steel_func)||0) + (parseInt(g.individual_table_chair_func)||0) + ((parseInt(g.two_seater_wood_func)||0)*2) + ((parseInt(g.two_seater_wood_steel_func)||0)*2) + (parseInt(g.wooden_chair_only_func)||0) + (parseInt(g.plastic_chair_only_func)||0);
-                                    const shortage = total < (parseInt(g.enrolled)||0);
+                                    
+                                    // Logic for shortage in review mode
+                                    let enrolledCount = parseInt(g.enrolled)||0;
+                                    let subtitle = `${g.enrolled} Enrolled · ${total} Functional Seats`;
+                                    let isParent = g.is_sharing_parent && g.shared_with?.length > 0;
+                                    let isChild = g.is_shared_child;
+
+                                    if (isParent) {
+                                        g.shared_with.forEach(id => {
+                                            const p = gradesData.find(x => x.id === id);
+                                            if (p) enrolledCount += parseInt(p.enrolled || 0);
+                                        });
+                                        subtitle = `Shared with ${g.shared_with.length} grades · ${total} Total Seats`;
+                                    } else if (isChild) {
+                                        const parent = gradesData.find(p => p.id === g.sharing_parent_id);
+                                        subtitle = `Shares seats with ${parent ? parent.grade_level : 'another grade'}`;
+                                    }
+
+                                    const shortage = !isChild && total < enrolledCount;
+
                                     return (
                                         <div key={g.id} className="flex items-center justify-between group">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-[10px] font-black text-slate-400">
-                                                    {g.grade_level.slice(0,3).toUpperCase()}
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-[10px] font-black ${isChild ? 'bg-indigo-50 text-indigo-400' : 'bg-slate-50 text-slate-400'}`}>
+                                                    {isChild ? "🔗" : g.grade_level.slice(0,3).toUpperCase()}
                                                 </div>
                                                 <div>
                                                     <h4 className="font-black text-slate-800 text-[13px]">{g.grade_level}</h4>
                                                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
-                                                        {g.enrolled} Enrolled · {total} Functional Seats
+                                                        {subtitle}
                                                     </p>
                                                 </div>
                                             </div>
-                                            {shortage ? (
+                                            {isChild ? (
+                                                <div className="bg-indigo-50 text-indigo-500 p-2 rounded-lg">
+                                                    <FiCheckCircle className="w-4 h-4" />
+                                                </div>
+                                            ) : shortage ? (
                                                 <div className="bg-rose-50 text-rose-600 p-2 rounded-lg" title="Shortage">
                                                     <FiAlertTriangle className="w-4 h-4" />
                                                 </div>
@@ -1092,28 +1167,35 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     </div>
                                 ) : (
                                     <div className="space-y-3 mb-4">
-                                        {gradesData.map((item) => (
-                                            <motion.div 
-                                                key={item.id} 
-                                                onClick={() => openGradeModal(item)}
-                                                initial={{ opacity: 0, y: 10 }} 
-                                                animate={{ opacity: 1, y: 0 }} 
-                                                className={`bg-white border-2 rounded-2xl p-4 flex items-center justify-between shadow-sm cursor-pointer transition-all active:scale-95 ${item.isVerified ? 'border-emerald-200' : 'border-amber-200 hover:border-amber-300'}`}
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black ${item.isVerified ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-500'}`}>
-                                                        {item.isVerified ? <FiCheckCircle className="w-6 h-6" /> : "⚠️"}
+                                        {gradesData.map((item) => {
+                                            const isChild = item.is_shared_child;
+                                            const parent = isChild ? gradesData.find(p => p.id === item.sharing_parent_id) : null;
+
+                                            return (
+                                                <motion.div 
+                                                    key={item.id} 
+                                                    onClick={() => openGradeModal(item)}
+                                                    initial={{ opacity: 0, y: 10 }} 
+                                                    animate={{ opacity: 1, y: 0 }} 
+                                                    className={`bg-white border-2 rounded-2xl p-4 flex items-center justify-between shadow-sm cursor-pointer transition-all active:scale-95 ${item.isVerified ? (isChild ? 'border-indigo-100 opacity-90' : 'border-emerald-200') : 'border-amber-200 hover:border-amber-300'}`}
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black ${isChild ? 'bg-indigo-50 text-indigo-400' : (item.isVerified ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-500')}`}>
+                                                            {isChild ? "🔗" : (item.isVerified ? <FiCheckCircle className="w-6 h-6" /> : "⚠️")}
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-bold text-gray-800 text-base leading-tight">{item.grade_level}</p>
+                                                            <p className="text-xs font-medium text-gray-400 mt-0.5">
+                                                                {isChild ? `Shares seats with ${parent ? parent.grade_level : 'another grade'}` : `${item.enrolled} Enrolled · ${item.sections} Sections`}
+                                                            </p>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <p className="font-bold text-gray-800 text-base leading-tight">{item.grade_level}</p>
-                                                        <p className="text-xs font-medium text-gray-400 mt-0.5">{item.enrolled} Enrolled · {item.sections} Sections</p>
+                                                    <div className={`px-3 py-1 mr-2 rounded-lg text-xs font-black uppercase tracking-wider ${isChild ? 'bg-indigo-100 text-indigo-700' : (item.isVerified ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700')}`}>
+                                                        {isChild ? "Shared" : (item.isVerified ? "Verified" : "Audit")}
                                                     </div>
-                                                </div>
-                                                <div className={`px-3 py-1 mr-2 rounded-lg text-xs font-black uppercase tracking-wider ${item.isVerified ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                                                    {item.isVerified ? "Verified" : "Audit"}
-                                                </div>
-                                            </motion.div>
-                                        ))}
+                                                </motion.div>
+                                            );
+                                        })}
                                     </div>
                                 )}
 
@@ -1929,6 +2011,64 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="plastic_chair_only_func" value={currentGradeForm.plastic_chair_only_func} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
                                                 <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="plastic_chair_only_broken" value={currentGradeForm.plastic_chair_only_broken} onChange={handleGradeFormChange} min="0" placeholder="" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
                                             </div>
+                                        </div>
+
+                                        {/* SHARED SEATS OPTION */}
+                                        <div className="bg-slate-50 border-2 border-slate-100 rounded-[2.5rem] p-6 mt-8">
+                                            <div className="flex items-center gap-2 mb-4">
+                                                <span className="text-xl">🔗</span>
+                                                <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">Shared Capacity Option</h4>
+                                            </div>
+                                            <p className="text-xs font-bold text-slate-500 mb-4 leading-relaxed">
+                                                Are these physical seats shared with other grade levels? (e.g., multigrade setup or shift sharing)
+                                            </p>
+                                            
+                                            <div className="flex gap-3 mb-5">
+                                                <button 
+                                                    onClick={() => setCurrentGradeForm(p => ({...p, is_sharing: true}))} 
+                                                    className={`${toggleBtnBase} !py-3 ${currentGradeForm.is_sharing ? toggleBtnActive : toggleBtnInactive}`}
+                                                >
+                                                    Yes, shared
+                                                </button>
+                                                <button 
+                                                    onClick={() => setCurrentGradeForm(p => ({...p, is_sharing: false, shared_with: []}))} 
+                                                    className={`${toggleBtnBase} !py-3 ${!currentGradeForm.is_sharing ? toggleBtnActive : toggleBtnInactive}`}
+                                                >
+                                                    Separate
+                                                </button>
+                                            </div>
+
+                                            <AnimatePresence>
+                                                {currentGradeForm.is_sharing && (
+                                                    <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden space-y-3">
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Select sharing partners:</p>
+                                                        <div className="grid grid-cols-1 gap-2">
+                                                            {gradesData
+                                                                .filter(g => g.id !== selectedGradeId && !g.is_shared_child)
+                                                                .map(grade => (
+                                                                    <div 
+                                                                        key={grade.id}
+                                                                        onClick={() => {
+                                                                            const current = currentGradeForm.shared_with || [];
+                                                                            if (current.includes(grade.id)) {
+                                                                                setCurrentGradeForm(p => ({...p, shared_with: current.filter(id => id !== grade.id)}));
+                                                                            } else {
+                                                                                setCurrentGradeForm(p => ({...p, shared_with: [...current, grade.id]}));
+                                                                            }
+                                                                        }}
+                                                                        className={`p-3 rounded-2xl border-2 flex items-center justify-between transition-all cursor-pointer ${currentGradeForm.shared_with.includes(grade.id) ? 'bg-white border-indigo-500 shadow-sm' : 'bg-slate-100/50 border-transparent text-slate-400'}`}
+                                                                    >
+                                                                        <span className="text-xs font-black">{grade.grade_level}</span>
+                                                                        {currentGradeForm.shared_with.includes(grade.id) ? <FiCheckCircle className="text-indigo-500" /> : <div className="w-4 h-4 rounded-full border-2 border-slate-200" />}
+                                                                    </div>
+                                                                ))}
+                                                        </div>
+                                                        <p className="text-[9px] font-bold text-indigo-400 italic mt-2 px-1">
+                                                            * Selected grades will be marked as "Verified" automatically with 0 unique seats.
+                                                        </p>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
                                         </div>
                                     </div>
                                 </div>

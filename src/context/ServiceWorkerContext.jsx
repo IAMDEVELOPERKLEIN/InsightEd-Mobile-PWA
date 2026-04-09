@@ -17,7 +17,8 @@ export const ServiceWorkerProvider = ({ children }) => {
             const basePath = import.meta.env.BASE_URL || '/';
             // In Vite Dev mode, the PWA plugin exposes the SW at 'dev-sw.js?dev-sw' with ES module type.
             const swFileName = import.meta.env.DEV ? 'dev-sw.js?dev-sw' : 'sw.js';
-            const swUrl = `${basePath}${swFileName}`.replace('//', '/');
+            const APP_VERSION = '1.0.23'; // Increment this whenever you release
+            const swUrl = `${basePath}${swFileName}?v=${APP_VERSION}`.replace('//', '/');
 
             const registerSW = async () => {
                 try {

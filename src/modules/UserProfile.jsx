@@ -343,7 +343,7 @@ const UserProfile = () => {
                     role: userData?.role || 'User',
                     ratings: feedbackRatings,
                     comment: feedbackComment,
-                    appVersion: '1.1.0'
+                    appVersion: '1.0.23'
                 })
             });
 
@@ -908,59 +908,36 @@ const UserProfile = () => {
                     </div>
                 </div>
 
-                {/* Troubleshoot / Hard Reset */}
+                {/* Optimize App - Merged Update & Troubleshoot */}
                 <button
-                    onClick={() => {
-                        if (window.confirm("Troubleshoot: This will clear the app cache and refresh the latest version. Continue?")) {
-                            hardReset();
+                    disabled={checkingForUpdate}
+                    onClick={async () => {
+                        if (window.confirm("Optimize App: This will clear temporary system cache and check for the latest version. The app will restart. Continue?")) {
+                            setCheckingForUpdate(true);
+                            await hardReset();
                         }
                     }}
                     className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
                 >
                     <div className="flex items-center gap-4">
-                        <div className="w-9 h-9 rounded-lg flex justify-center items-center bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300">
-                            <FiTool size={20} />
-                        </div>
-                        <div className="text-left">
-                            <span className="text-[15px] font-medium text-gray-700 dark:text-gray-200 block">
-                                Troubleshoot
-                            </span>
-                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold uppercase tracking-wide">
-                                Clear Cache & Restart
-                            </span>
-                        </div>
-                    </div>
-                </button>
-
-                {/* Check for Updates */}
-                <button
-                    disabled={checkingForUpdate}
-                    onClick={isUpdateAvailable ? updateApp : handleCheckUpdate}
-                    className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
-                >
-                    <div className="flex items-center gap-4">
-                        <div className={`w-9 h-9 rounded-lg flex justify-center items-center ${isUpdateAvailable ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-300'}`}>
+                        <div className="w-9 h-9 rounded-lg flex justify-center items-center bg-blue-50 dark:bg-blue-900/30 text-[#004A99] dark:text-blue-300">
                             {checkingForUpdate ? (
                                 <FiRefreshCw size={20} className="animate-spin" />
-                            ) : isUpdateAvailable ? (
-                                <FiDownloadCloud size={20} />
                             ) : (
                                 <FiRefreshCw size={20} />
                             )}
                         </div>
                         <div className="text-left">
-                            <span className="text-[15px] font-medium text-gray-700 dark:text-gray-200 block">
-                                {isUpdateAvailable ? "Update Available" : "Check for Updates"}
+                            <span className="text-[15px] font-bold text-gray-700 dark:text-gray-200 block">
+                                Optimize App
                             </span>
-                            {isUpdateAvailable && (
-                                <span className="text-[10px] text-green-600 dark:text-green-400 font-semibold uppercase tracking-wide">
-                                    Tap to Install
-                                </span>
-                            )}
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold uppercase tracking-wide">
+                                Check for Updates & Repair
+                            </span>
                         </div>
                     </div>
                     {checkingForUpdate ? (
-                        <span className="text-xs text-gray-400">Checking...</span>
+                        <span className="text-xs text-gray-400">Optimizing...</span>
                     ) : (
                         <FiChevronRight size={20} className="text-gray-300 dark:text-gray-500" />
                     )}
@@ -1009,7 +986,7 @@ const UserProfile = () => {
                 </button>
             </div>
 
-            <p className="text-center text-xs text-gray-400 dark:text-gray-600 mt-8">InsightEd Mobile app v1.0.22</p>
+            <p className="text-center text-xs text-gray-400 dark:text-gray-600 mt-8">InsightEd Mobile app v1.0.23</p>
         </div>
     );
 

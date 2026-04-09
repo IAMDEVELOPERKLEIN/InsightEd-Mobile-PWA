@@ -238,7 +238,8 @@ const hardenSchoolsIernSchema = async (client) => {
             ADD COLUMN IF NOT EXISTS "Latitude" NUMERIC(10, 7),
             ADD COLUMN IF NOT EXISTS "Longitude" NUMERIC(10, 7),
             ADD COLUMN IF NOT EXISTS "Mother_School_ID" TEXT,
-            ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'Active';
+            ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'Active',
+            ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
         `);
         
         await client.query('UPDATE "schools_IERN" SET "status" = \'Active\' WHERE "status" IS NULL');
@@ -5703,7 +5704,7 @@ app.post('/api/sdo/convert-school', async (req, res) => {
     const sharedIern = originalRes.rows[0].iern;
 
     // 2. Archive the Old School ID
-    await client.query('UPDATE "schools_IERN" SET "status" = \'Archived\' WHERE "SchoolID" = $1', [old_school_id]);
+    await client.query('UPDATE "schools_IERN" SET "status" = \'Archived\', "updated_at" = CURRENT_TIMESTAMP WHERE "SchoolID" = $1', [old_school_id]);
 
     // 3. Log the Conversion in pending_schools (Audit Record)
     const auditRes = await client.query(`
@@ -5728,9 +5729,9 @@ app.post('/api/sdo/convert-school', async (req, res) => {
       INSERT INTO "schools_IERN" (
         "SchoolID", iern, "School_Name", "Region", "Division", "District", "Province", "Municipality", 
         "Legislative_District", "Barangay", "Street_Address", "Curricular_Offering",
-        "Latitude", "Longitude", "Mother_School_ID", "status"
+        "Latitude", "Longitude", "Mother_School_ID", "status", "updated_at"
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'Active')
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'Active', CURRENT_TIMESTAMP)
     `, [
       school_id, sharedIern, school_name, region, division, district, province, municipality,
       leg_district, barangay, street_address, curricular_offering,
@@ -5896,9 +5897,9 @@ app.post('/api/sdo/submit-school', async (req, res) => {
             INSERT INTO "schools_IERN" (
                 "SchoolID", iern, "School_Name", "Region", "Division", "District", "Province", "Municipality", 
                 "Legislative_District", "Barangay", "Street_Address", "Curricular_Offering",
-                "Latitude", "Longitude", "Mother_School_ID", "status"
+                "Latitude", "Longitude", "Mother_School_ID", "status", "updated_at"
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'Active')
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'Active', CURRENT_TIMESTAMP)
         `, [
             school_id, newIern, school_name, region, division, district, province, municipality,
             leg_district, barangay, street_address, curricular_offering,
@@ -6428,9 +6429,9 @@ app.post('/api/admin/approve-school/:pending_id', async (req, res) => {
       INSERT INTO "schools_IERN" (
         "iern", "SchoolID", "School_Name", "Region", "Division", "District", "Province", 
         "Municipality", "Legislative_District", "Barangay", "Street_Address", 
-        "Mother_School_ID", "Curricular_Offering", "Latitude", "Longitude"
+        "Mother_School_ID", "Curricular_Offering", "Latitude", "Longitude", "updated_at"
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP)
       ON CONFLICT ("SchoolID") DO UPDATE SET
         "iern" = EXCLUDED."iern",
         "School_Name" = EXCLUDED."School_Name",
@@ -6445,7 +6446,8 @@ app.post('/api/admin/approve-school/:pending_id', async (req, res) => {
         "Mother_School_ID" = EXCLUDED."Mother_School_ID",
         "Curricular_Offering" = EXCLUDED."Curricular_Offering",
         "Latitude" = EXCLUDED."Latitude",
-        "Longitude" = EXCLUDED."Longitude"
+        "Longitude" = EXCLUDED."Longitude",
+        "updated_at" = CURRENT_TIMESTAMP
     `, [
       newIern, school.school_id, school.school_name, school.region, school.division, 
       school.district, school.province, school.municipality, school.leg_district, 
