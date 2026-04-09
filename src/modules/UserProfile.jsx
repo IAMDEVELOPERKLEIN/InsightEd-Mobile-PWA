@@ -89,6 +89,10 @@ const UserProfile = () => {
     const [checkingForUpdate, setCheckingForUpdate] = useState(false);
     const [showUpdateModal, setShowUpdateModal] = useState(false);
 
+    // Optimize App Modal State
+    const [showOptimizeConfirm, setShowOptimizeConfirm] = useState(false);
+    const [showOptimizeSuccess, setShowOptimizeSuccess] = useState(false);
+
     // FAQ Accordion State
     const [openFaqIndex, setOpenFaqIndex] = useState(null);
 
@@ -911,12 +915,7 @@ const UserProfile = () => {
                 {/* Optimize App - Merged Update & Troubleshoot */}
                 <button
                     disabled={checkingForUpdate}
-                    onClick={async () => {
-                        if (window.confirm("Optimize App: This will clear temporary system cache and check for the latest version. The app will restart. Continue?")) {
-                            setCheckingForUpdate(true);
-                            await hardReset();
-                        }
-                    }}
+                    onClick={() => setShowOptimizeConfirm(true)}
                     className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
                 >
                     <div className="flex items-center gap-4">
@@ -1039,6 +1038,68 @@ const UserProfile = () => {
                 
                 {/* Security Verification Modal */}
                 {renderSecurityModal()}
+
+                {/* Optimize App — Confirm Modal */}
+                {showOptimizeConfirm && (
+                    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-t-3xl sm:rounded-3xl shadow-2xl p-6 pb-10 sm:pb-6 animate-in slide-in-from-bottom-10 duration-500">
+                            <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-6 sm:hidden" />
+
+                            {/* Icon */}
+                            <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center mx-auto mb-5">
+                                <FiRefreshCw size={30} className="text-[#004A99] dark:text-blue-400" />
+                            </div>
+
+                            <h3 className="text-xl font-black text-slate-800 dark:text-white text-center mb-2">Optimize App?</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 text-center leading-relaxed mb-8">
+                                This will clear the temporary system cache and fetch the latest version.
+                                The app will <strong className="text-slate-700 dark:text-slate-200">automatically restart</strong> after optimization.
+                            </p>
+
+                            <div className="flex flex-col gap-3">
+                                <button
+                                    onClick={async () => {
+                                        setShowOptimizeConfirm(false);
+                                        setCheckingForUpdate(true);
+                                        // Show success modal briefly before reload
+                                        setShowOptimizeSuccess(true);
+                                        setTimeout(async () => {
+                                            await hardReset();
+                                        }, 2000);
+                                    }}
+                                    className="w-full py-4 bg-gradient-to-br from-[#004A99] to-indigo-700 dark:from-blue-600 dark:to-indigo-500 text-white rounded-2xl font-black shadow-lg shadow-blue-500/30 active:scale-95 transition-all flex justify-center items-center gap-2"
+                                >
+                                    <FiRefreshCw size={18} />
+                                    Yes, Optimize Now
+                                </button>
+                                <button
+                                    onClick={() => setShowOptimizeConfirm(false)}
+                                    className="w-full py-4 bg-transparent text-slate-500 dark:text-slate-400 font-bold hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Optimize App — Success Modal */}
+                {showOptimizeSuccess && (
+                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-slate-800 w-full max-w-xs rounded-3xl shadow-2xl p-8 text-center animate-in zoom-in-95 duration-500">
+                            {/* Spinning loader */}
+                            <div className="relative w-20 h-20 mx-auto mb-5">
+                                <div className="absolute inset-0 rounded-full border-4 border-blue-100 dark:border-blue-900/40" />
+                                <div className="absolute inset-0 rounded-full border-4 border-t-[#004A99] dark:border-t-blue-400 animate-spin" />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <FiRefreshCw size={24} className="text-[#004A99] dark:text-blue-400" />
+                                </div>
+                            </div>
+                            <h3 className="text-lg font-black text-slate-800 dark:text-white mb-1">Optimizing...</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Clearing cache and fetching the latest version. Restarting shortly.</p>
+                        </div>
+                    </div>
+                )}
             </div>
         </PageTransition>
     );
