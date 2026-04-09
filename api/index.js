@@ -94,6 +94,12 @@ function normalizeProjectCategory(raw) {
   return trimmed;
 }
 
+// --- LOCATION NORMALIZER (ensures system-wide casing consistency) ---
+function normalizeLocationField(val) {
+  if (!val || typeof val !== 'string') return val;
+  return val.trim().toUpperCase();
+}
+
 // --- ZOD VALIDATION SCHEMAS (Resilience v6.0) ---
 const PasscodeSchema = z.string().length(6).regex(/^\d+$/, "Passcode must be exactly 6 digits.");
 
@@ -103,12 +109,12 @@ const RegisterUserSchema = z.object({
   role: z.string().min(1, "Role is required."),
   firstName: z.string().optional(),
   lastName: z.string().optional(),
-  region: z.string().optional(),
-  division: z.string().optional(),
-  province: z.string().optional(),
-  city: z.string().optional(),
-  barangay: z.string().optional(),
-  office: z.string().optional(),
+  region: z.string().optional().transform(normalizeLocationField),
+  division: z.string().optional().transform(normalizeLocationField),
+  province: z.string().optional().transform(normalizeLocationField),
+  city: z.string().optional().transform(normalizeLocationField),
+  barangay: z.string().optional().transform(normalizeLocationField),
+  office: z.string().optional().transform(normalizeLocationField),
   position: z.string().optional(),
   contactNumber: z.string().optional(),
   altEmail: z.string().email().optional().or(z.literal("")),
@@ -141,13 +147,13 @@ const RegisterSchoolSchema = z.object({
   schoolData: z.object({
     school_id: z.string().min(1),
     school_name: z.string().min(1),
-    region: z.string().optional(),
-    province: z.string().optional(),
-    division: z.string().optional(),
-    district: z.string().optional(),
-    municipality: z.string().optional(),
-    legislative_district: z.string().optional(),
-    barangay: z.string().optional(),
+    region: z.string().optional().transform(normalizeLocationField),
+    province: z.string().optional().transform(normalizeLocationField),
+    division: z.string().optional().transform(normalizeLocationField),
+    district: z.string().optional().transform(normalizeLocationField),
+    municipality: z.string().optional().transform(normalizeLocationField),
+    legislative_district: z.string().optional().transform(normalizeLocationField),
+    barangay: z.string().optional().transform(normalizeLocationField),
     mother_school_id: z.string().optional(),
     latitude: z.union([z.number(), z.string()]).optional(),
     longitude: z.union([z.number(), z.string()]).optional(),
@@ -164,13 +170,13 @@ const RegisterBetaSchema = z.object({
   schoolData: z.object({
     school_id: z.string().min(1),
     school_name: z.string().optional().nullable(),
-    region: z.string().optional().nullable(),
-    division: z.string().optional().nullable(),
-    province: z.string().optional().nullable(),
-    municipality: z.string().optional().nullable(),
-    district: z.string().optional().nullable(),
-    legislative_district: z.string().optional().nullable(),
-    barangay: z.string().optional().nullable(),
+    region: z.string().optional().nullable().transform(normalizeLocationField),
+    division: z.string().optional().nullable().transform(normalizeLocationField),
+    province: z.string().optional().nullable().transform(normalizeLocationField),
+    municipality: z.string().optional().nullable().transform(normalizeLocationField),
+    district: z.string().optional().nullable().transform(normalizeLocationField),
+    legislative_district: z.string().optional().nullable().transform(normalizeLocationField),
+    barangay: z.string().optional().nullable().transform(normalizeLocationField),
     latitude: z.union([z.number(), z.string()]).optional().nullable(),
     longitude: z.union([z.number(), z.string()]).optional().nullable()
   }),
