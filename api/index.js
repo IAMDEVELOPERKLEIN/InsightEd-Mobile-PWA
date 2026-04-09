@@ -189,7 +189,8 @@ console.log(`🔌 Database Connection: ${isLocal ? 'Local' : 'Remote'} (${dbUrl.
 const { Pool } = pg;
 const pool = new Pool({
   connectionString: dbUrl,
-  ssl: isLocal ? false : { rejectUnauthorized: false },
+  ssl: false,
+
   max: 12, // Reduced from 20 to accommodate the 8-instance cluster within PgBouncer (150) limit.
   min: 2,  
   idleTimeoutMillis: 30000,
