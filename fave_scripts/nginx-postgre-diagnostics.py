@@ -47,15 +47,25 @@ def main():
             stdin, stdout, stderr = client.exec_command(infra_cmd)
             raw = stdout.read().decode('utf-8')
             
-            # Simple Tag-based Parser
+            # Simple Tag-based Parser (Enhanced for whitespace)
             sections = {}
             current_tag = None
             for line in raw.splitlines():
-                if line.endswith(":"): current_tag = line[:-1]; sections[current_tag] = []
-                elif current_tag: sections[current_tag].append(line.strip())
+                clean_line = line.strip()
+                if clean_line.endswith(":"): 
+                    current_tag = clean_line[:-1]
+                    sections[current_tag] = []
+                elif current_tag: 
+                    sections[current_tag].append(clean_line)
 
+            # --- 2. Separate DB Latency Check (More reliable timing) ---
+            db_start = time.time()
+            client.exec_command('sudo -u postgres psql -t -c "SELECT 1"')
+            dl_val = (time.time() - db_start) * 1000
+            
             # --- PARSING & UI ---
             try:
+                # [Previous UI sections for NGINX and DB AUDIT remain here...]
                 # 1. NGINX Hardening
                 print(" \033[1;36m[1. NGINX CONCURRENCY & CACHING]\033[0m\033[K")
                 for l in sections.get('NX_AUDIT', []):
@@ -104,6 +114,9 @@ def main():
                 
                 bnc_conns = int(sections.get('BNC_CONNS', ['0'])[0])
                 print("   TOTAL_POOLED_CONNECTIONS       | \033[1;33m%-8d\033[0m | Concurrent client-to-bouncer load\033[K" % bnc_conns)
+                
+                dl_color = "\033[1;32m" if dl_val < 200 else "\033[1;33m" if dl_val < 1000 else "\033[1;31m"
+                print("   DATABASE_CONN_LATENCY          | %s%-8.2fms\033[0m | Connection + SELECT 1 overhead (via SSH)\033[K" % (dl_color, dl_val))
                 
                 print("\033[K")
                 print(" \033[1;36m[3. APPLICATION ADMISSION CONTROL]\033[0m\033[K")

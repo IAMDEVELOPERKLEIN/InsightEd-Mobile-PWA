@@ -154,11 +154,10 @@ const AnimatedRoutes = () => {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [checkingMaintenance, setCheckingMaintenance] = useState(true);
 
-  // Check Maintenance Status on Route Change
+  // Check Maintenance Status periodically (Reduced from per-route check to every 5 mins)
   useEffect(() => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout
-
+    
     const checkMaintenance = async () => {
       try {
         const res = await fetch('/api/settings/maintenance_mode', { signal: controller.signal });
@@ -166,23 +165,23 @@ const AnimatedRoutes = () => {
         const data = text ? JSON.parse(text) : {};
         setMaintenanceMode(data.value === 'true');
       } catch (err) {
-        if (err.name === 'AbortError') {
-          console.warn("Maintenance check timed out, proceeding anyway.");
-        } else {
+        if (err.name !== 'AbortError') {
           console.error("Maintenance Check Failed:", err);
         }
       } finally {
-        clearTimeout(timeoutId);
         setCheckingMaintenance(false);
       }
     };
-    checkMaintenance();
+
+    checkMaintenance(); // Initial check on mount
+    
+    const intervalId = setInterval(checkMaintenance, 300000); // Poll every 5 minutes
     
     return () => {
-      clearTimeout(timeoutId);
+      clearInterval(intervalId);
       controller.abort();
     };
-  }, [location.pathname]); // Re-check on nav
+  }, []); // Run ONLY on mount
 
   if (checkingMaintenance) {
     return (
