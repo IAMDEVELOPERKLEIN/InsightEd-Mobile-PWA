@@ -6399,6 +6399,87 @@ app.get('/api/sdo/location-coordinates', async (req, res) => {
     res.status(500).json({ error: "Failed to fetch coordinates" });
   }
 });
+
+// GET - SDO User Details lookup by school_id (Restricted to same division)
+app.get('/api/sdo/user-details/:school_id', async (req, res) => {
+  const { school_id } = req.params;
+  let { region, division } = req.query;
+
+  if (!region || !division) {
+    return res.status(400).json({ error: "SDO Region and Division are required for restriction" });
+  }
+
+  // Normalize division
+  division = normalizeDivision(division);
+
+  try {
+    const query = `
+      SELECT 
+        u.region, 
+        u.division, 
+        s."District" as district, 
+        u.school_id, 
+        u.email, 
+        u.contact_number, 
+        u.passcode
+      FROM users u
+      LEFT JOIN "schools_IERN" s ON u.school_id = s."SchoolID"
+      WHERE u.school_id = $1 
+        AND UPPER(TRIM(u.region)) = UPPER(TRIM($2))
+        AND (UPPER(TRIM(u.division)) = UPPER(TRIM($3)) OR UPPER(TRIM(u.division)) = UPPER(TRIM('SDO ' || $3)))
+    `;
+    const result = await pool.query(query, [school_id, region, division]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "User not found or is outside your division jurisdiction." });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Fetch SDO User Details Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// POST - SDO Set User Passcode (Restricted)
+app.post('/api/sdo/set-passcode', async (req, res) => {
+  const { school_id, passcode, region, division } = req.body;
+
+  if (!school_id || !passcode || !region || !division) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  const normalizedDivision = normalizeDivision(division);
+
+  try {
+    // 1. Verify jurisdiction before update
+    const verifyQuery = `
+      SELECT uid FROM users 
+      WHERE school_id = $1 
+        AND UPPER(TRIM(region)) = UPPER(TRIM($2))
+        AND (UPPER(TRIM(division)) = UPPER(TRIM($3)) OR UPPER(TRIM(division)) = UPPER(TRIM('SDO ' || $3)))
+    `;
+    const verifyRes = await pool.query(verifyQuery, [school_id, region, normalizedDivision]);
+
+    if (verifyRes.rows.length === 0) {
+      return res.status(403).json({ error: "Unauthorized: School ID does not belong to your division." });
+    }
+
+    // 2. Perform Update
+    await pool.query('UPDATE users SET passcode = $1 WHERE school_id = $2', [passcode, school_id]);
+
+    // Dual Write
+    if (poolNew) {
+      await poolNew.query('UPDATE users SET passcode = $1 WHERE school_id = $2', [passcode, school_id])
+        .catch(e => console.error("Dual-Write Passcode Update Error:", e.message));
+    }
+
+    res.json({ success: true, message: "Passcode updated successfully" });
+  } catch (err) {
+    console.error("Set Passcode Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 // POST - admin Approve School
 // --- CHATBOT KNOWLEDGE TEACHING ---
 app.post('/api/admin/teach', async (req, res) => {
