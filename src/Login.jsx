@@ -727,8 +727,8 @@ const Login = () => {
                             </div>
                             <h2 className="text-2xl font-black text-slate-800 tracking-tight">Retrieve Passcode</h2>
                             <p className="text-slate-500 text-sm mt-3 mb-6 leading-relaxed">
-                                Please contact our support team at:<br/>
-                                <span className="font-black text-blue-600 text-base">support.stride@deped.gov.ph</span><br/>
+                                If you forgot your passcode, please contact your<br/>
+                                <span className="font-black text-blue-600 text-base uppercase tracking-tight">Division Planning Officers</span><br/>
                                 to retrieve or reset your passcode.
                             </p>
                             <button

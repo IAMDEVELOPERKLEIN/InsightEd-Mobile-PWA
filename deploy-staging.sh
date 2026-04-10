@@ -55,6 +55,7 @@ ssh -o StrictHostKeyChecking=no -o BatchMode=yes $USER@$SERVER_IP "
   pm2 flush
 
   # Run Forensic Healer (Handles Nginx, Python deps, and PM2)
+  sed -i 's/\r$//' forensic_heal.sh
   chmod +x forensic_heal.sh
   ./forensic_heal.sh
 "
