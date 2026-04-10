@@ -117,7 +117,7 @@ async function run() {
         );
         after.rows.forEach(r => console.log(`   [${r.cnt}] "${r.project_category}"`));
         console.log(`   Total distinct values: ${after.rows.length}\n`);
-
+        
         console.log('✅ Category normalization complete!');
     } catch (e) {
         console.error('❌ ERROR:', e.message);
