@@ -50,7 +50,18 @@ This document outlines the core competencies and methodologies required for a Se
 * **Technical Debt Management:**
     * Accurately quantifying technical debt and advocating for its resolution during sprint planning by demonstrating its impact on future velocity and system stability.
 
-## 5. Agent Workflow & Compliance
+## 5. Database Concurrency & Performance: Slipstream Scaling
+*Ensuring the database remains responsive under high load by avoiding blocking operations and connection starvation.*
+
+* **Strict DDL/DML Separation:**
+    * **No DDL on Hot Paths:** Never execute `ALTER TABLE` or other structural changes within request handlers. DDL operations acquire `AccessExclusiveLock`, which bricks the system by stalling all other queries.
+    * **Boot-Level Migrations:** Schema changes must be encapsulated in idempotent, boot-level initialization scripts (e.g., `initUnit7Schema`).
+    * **Advisory Locking:** Use `pg_try_advisory_lock` during boot to ensure only one cluster worker manages migrations, preventing race conditions.
+* **Connection Management & Decoupling:**
+    * **Asynchronous Analytics:** Transition non-critical secondary operations (e.g., `updateSchoolTotalCompletion`) to fire-and-forget or background workers. Free the database socket instantly.
+    * **Pool Starvation Prevention:** prioritize "Fail-Fast" timeouts over large queues. Fix root cause locks rather than masking them with larger connection pools.
+
+## 6. Agent Workflow & Compliance
 *Ensuring all AI agents maintain consistency and transparency within the workspace.*
 
 * **Mandatory Architectural Alignment:** Agents **MUST** create an implementation plan in `/claude/[feature_name]_plan.md` before executing any structural or logic changes.

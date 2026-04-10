@@ -1172,17 +1172,17 @@ const DetailedProjInfo = () => {
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <SectionHeader title="Administrative Location" />
             <div className="grid grid-cols-2 gap-4 mb-2">
-                <Field label="Region" name="region" value={project.region} />
-                <Field label="Division" name="division" value={project.division} />
+                <Field label="Region" name="region" value={project.region?.toUpperCase()} />
+                <Field label="Division" name="division" value={project.division?.toUpperCase()} />
             </div>
             <div className="grid grid-cols-2 gap-4 mb-2">
-                <Field label="Province" name="province" value={project.province} />
-                <Field label="Municipality / City" name="municipality" value={project.municipality} />
+                <Field label="Province" name="province" value={project.province?.toUpperCase()} />
+                <Field label="Municipality / City" name="municipality" value={project.municipality?.toUpperCase()} />
             </div>
             {(project.legislative_district || project.barangay) && (
                 <div className="grid grid-cols-2 gap-4 mb-2">
-                    {project.legislative_district && <Field label="Legislative District" name="legislative_district" value={project.legislative_district} />}
-                    {project.barangay && <Field label="Barangay" name="barangay" value={project.barangay} />}
+                    {project.legislative_district && <Field label="Legislative District" name="legislative_district" value={project.legislative_district?.toUpperCase()} />}
+                    {project.barangay && <Field label="Barangay" name="barangay" value={project.barangay?.toUpperCase()} />}
                 </div>
             )}
 

@@ -162,7 +162,7 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
                 ...data, 
                 school_id: schoolId, 
                 iern,
-                // Robust verification: ensure all arrays are formatted correctly before flight to avoid 22P02 mismatched issues on backend
+                // Systematic Resilience: Use raw arrays. Zod backend + robust DB casts will handle JSONB correctly.
                 transportation_modes: tryParse(data.transportation_modes),
                 hazards_experienced: tryParse(data.hazards_experienced),
                 water_proximity: tryParse(data.water_proximity),
@@ -196,52 +196,59 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
                 if (onSaveSuccess) onSaveSuccess(result.data);
                 setIsSuccessModalOpen(true);
             } else {
-                const details = result.details ? result.details.map(d => `${d.path.join('.')}: ${d.message}`).join('\n') : "Server returned an unexpected failure. A JSONB alignment issue may be present.";
+                const details = result.details ? result.details.map(d => `${d.path.join('.')}: ${d.message}`).join('\n') : (result.error || result.message || "Server returned an unexpected failure. The database might have rejected the data (e.g. NaN formatting).");
                 
                 // Detailed debugging log per .agent/mad-debugger.md
                 console.groupCollapsed(`%c❌ EXCEPTION: Unit 8 Sync Failure [Status ${res.status}]`, "background: #8b0000; color: #fff; padding: 4px; font-weight: bold;");
-                console.error(`🛑 Error Details:\n${details}`);
+                console.error(`🛑 Error Message: ${result.error || result.message || 'Unknown server error'}`);
+                if (result.details) console.table(result.details);
                 if (result.flattened) console.log("📦 Flattened Validation Errors:", result.flattened);
                 
                 console.groupCollapsed('%c🛠️ Launch Interactive Auto-Healer Script (Click to Expand)', 'background: #800080; color: #fff; padding: 6px; border-radius: 4px; font-weight: bold; font-size: 1.1em;');
                 console.log('%cCopy and execute the async script below to begin the step-by-step self-healing process for Unit 8 forms:', 'color: #e066ff; font-style: italic;');
                 
                 const diagnosticScript = `
-// --- Unit 8 Auto-Healer Engine ---
+// --- Unit 8 Precision Auto-Healer (v2.0) ---
 (async function runSelfHealingDiagnostics() {
-    console.group("%c🚑 Starting Unit 8 Auto-Healer...", "color: #ff9900; font-size: 1.2em; font-weight: bold;");
+    console.group("%c🚑 Starting Unit 8 Structural Audit...", "color: #ff9900; font-size: 1.2em; font-weight: bold;");
     
     // STEP 1: Identify State Constraints
     console.log("%c[Step 1] Diagnosing Local State...", "color: #00ccff; font-weight: bold;");
     const token = localStorage.getItem('token');
     if (!token) console.error("No authorization token found. You may be logged out.");
     
-    // STEP 2: Triggering Database Auto-Alignment
-    console.log("%c[Step 2] Auto-Fixing Environment (Hot-patching DB Schema)...", "color: #00ccff; font-weight: bold;");
+    // STEP 2: Triggering Database Auto-Alignment (Read-Only Audit)
+    console.log("%c[Step 2] Executing Safe Database Audit...", "color: #00ccff; font-weight: bold;");
     try {
         const alignRes = await fetch('/api/system/align-unit8', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
         });
         const alignData = await alignRes.json();
-        console.log("🔧 JSONB Alignment API Output:", alignData);
+        if (alignData.converted && alignData.converted.length > 0) {
+            console.warn("🔧 Columns requiring alignment detected:", alignData.converted);
+            console.info("Re-aligning these columns requires a server restart to trigger [db_init.js] migrations.");
+        } else {
+            console.log("✅ Schema alignment verified. No TEXT-to-JSONB issues found.");
+        }
     } catch(e) {
-        console.error("Alignment script failed to run:", e);
+        console.error("Audit script failed to run:", e);
     }
 
-    // STEP 3: Confirm Changes
-    console.log("%c[Step 3] Running Verification Test...", "color: #00ccff; font-weight: bold;");
-    console.log("Re-saving Unit 8 requires manual trigger or dispatch event.");
-    
-    console.log("%c[Step 4] Recommendations...", "color: #00ccff; font-weight: bold;");
+    // STEP 3: Diagnostic Recommendations
+    console.log("%c[Step 3] Recommendations...", "color: #00ccff; font-weight: bold;");
     console.table([
         { 
-            Issue: "JSONB Mismatch", 
-            Action_Required: "Ensure all arrays are explicitly passed through tryParse logic.",
+            Issue: "Backend Refusal (500)", 
+            Action_Required: "Check VM logs with 'pm2 logs'. Likely a NaN value or malformed JSONB payload.",
+        },
+        { 
+            Issue: "Validation Error (400)", 
+            Action_Required: "Fix the UI field highlighted in the validation details above.",
         }
     ]);
     
-    console.log("🏁 Self-Healing Complete. Please re-submit Unit 8.");
+    console.log("🏁 Self-Healing Check Complete.");
     console.groupEnd();
 })();
 // --------------------------------------

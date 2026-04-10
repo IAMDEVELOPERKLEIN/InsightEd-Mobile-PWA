@@ -58,6 +58,7 @@ const WASH_CATEGORIES = [
 
 const WATER_SOURCES = [
     "Piped line from local service provider",
+    "Piped line + Natural Water Source",
     "Natural resources (Deep well, Spring, Rainwater)",
     "No water source"
 ];
@@ -316,13 +317,16 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 }
 
                 // Self-contained SNED Class
-                const snedCount = parseInt(d.sned_class || d.sned_self_contained_count || 0);
-                if (d.hasSnedSelfContained || snedCount > 0) {
+                // [SNED RECONSTRUCTION FIX] - Alignment with Unit 2 Beta
+                const snedSections = parseInt(d.sned_organized_class_count || d.sned_class || 0);
+                const snedEnrolled = parseInt(d.sned_self_contained_count || d.sned_learners_count || 0);
+
+                if (d.hasSnedSelfContained || snedSections > 0 || snedEnrolled > 0) {
                     mergedExpectedGrades.push({ 
                         id: "sned_self_contained", 
                         grade_level: "Self-contained SNED", 
-                        enrolled: parseInt(d.sned_learners_count || 0), // Use SNED count from Unit 2 if available
-                        sections: Math.max(1, snedCount), 
+                        enrolled: snedEnrolled, 
+                        sections: Math.max(1, snedSections), 
                         isVerified: false 
                     });
                 }
@@ -367,7 +371,16 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     setSavedData(d);
                     setIsReviewMode(true);
                 } else if (draft && !propReadOnly) {
+                    console.log("🔄 [Unit 6] Restoring from Draft:", draft);
                     setCurrentPhase(draft.currentPhase || 1);
+                    if (draft.gradesData) setGradesData(draft.gradesData);
+                    if (draft.generalRoomsData) setGeneralRoomsData(draft.generalRoomsData);
+                    if (draft.ictData) setIctData(prev => ({ ...prev, ...draft.ictData }));
+                    if (draft.hasEcart !== undefined) setHasEcart(draft.hasEcart);
+                    if (draft.eCarts) setECarts(draft.eCarts);
+                    if (draft.washData) setWashData(prev => ({ ...prev, ...draft.washData }));
+                    if (draft.utilitiesData) setUtilitiesData(prev => ({ ...prev, ...draft.utilitiesData }));
+                    
                     setIsReviewMode(false);
                     setShowWelcomeBack(true);
                     setTimeout(() => setShowWelcomeBack(false), 3000);
@@ -654,7 +667,7 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         
         // Critical Status Validation for Water
         if (washData.water_source === "Natural resources (Deep well, Spring, Rainwater)" || washData.water_source === "No water source") {
-            if ((washData.confirm_no_piped_text || "").toLowerCase() !== "confirm") isValid = false;
+            if ((washData.confirm_no_piped_text || "").trim().toLowerCase() !== "confirm") isValid = false;
         }
         
         return { isValid, errors };
@@ -675,33 +688,44 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         
         // Critical Status Validation for Electricity
         if (utilitiesData.utility_electricity === "No electricity" || utilitiesData.utility_electricity === "Off-grid supply") {
-            if ((utilitiesData.confirm_no_grid_text || "").toLowerCase() !== "confirm") return false;
+            if ((utilitiesData.confirm_no_grid_text || "").trim().toLowerCase() !== "confirm") return false;
         }
 
         // Critical Status Validation for Internet
         if (utilitiesData.utility_internet_yesno === false || (utilitiesData.utility_internet_yesno === true && utilitiesData.utility_internet_type && utilitiesData.utility_internet_type !== "Wired (Fiber/DSL/Cable)")) {
-            if ((utilitiesData.confirm_no_wired_text || "").toLowerCase() !== "confirm") return false;
+            if ((utilitiesData.confirm_no_wired_text || "").trim().toLowerCase() !== "confirm") return false;
         }
 
         return true;
     }, [utilitiesData]);
 
     const handleSaveDraftAndExit = async () => {
-        const storedId = localStorage.getItem("schoolId");
-        if (!storedId) return;
+        console.log("💾 [Unit 6] handleSaveDraftAndExit triggered");
+        const storedId = targetSchoolId || localStorage.getItem("schoolId");
+        if (!storedId) {
+            console.error("❌ [Unit 6] No schoolId found for saving draft!");
+            return;
+        }
 
-        const draftData = {
-            currentPhase,
-            gradesData,
-            generalRoomsData,
-            ictData,
-            hasEcart,
-            eCarts,
-            washData,
-            utilitiesData
-        };
-        await saveUnitDraft(6, storedId, draftData);
-        navigate("/modular-dashboard");
+        try {
+            const draftData = {
+                currentPhase,
+                gradesData,
+                generalRoomsData,
+                ictData,
+                hasEcart,
+                eCarts,
+                washData,
+                utilitiesData
+            };
+            console.log("📝 [Unit 6] Saving Draft Payload:", draftData);
+            await saveUnitDraft(6, storedId, draftData);
+            console.log("✅ [Unit 6] Draft saved successfully.");
+            navigate("/modular-dashboard");
+        } catch (err) {
+            console.error("❌ [Unit 6] Failed to save draft:", err);
+            alert("Draft saving failed. Please check your connection or storage.");
+        }
     };
 
     const handleFinalSubmit = async () => {
@@ -733,10 +757,10 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 u7_wash_common_seats_cond: washData.common_seats_cond,
                 u7_wash_pwd_seats_cond: washData.pwd_seats_cond,
                 u7_wash_faucets_cond: washData.faucets_cond,
-                u7_confirm_no_grid: (utilitiesData.confirm_no_grid_text || "").toLowerCase() === "confirm",
-                u7_confirm_no_piped: (washData.confirm_no_piped_text || "").toLowerCase() === "confirm",
-                u7_confirm_zero_wash: (washData.confirm_zero_wash_text || "").toLowerCase() === "confirm",
-                u7_confirm_no_wired: (utilitiesData.confirm_no_wired_text || "").toLowerCase() === "confirm",
+                u7_confirm_no_grid: (utilitiesData.confirm_no_grid_text || "").trim().toLowerCase() === "confirm",
+                u7_confirm_no_piped: (washData.confirm_no_piped_text || "").trim().toLowerCase() === "confirm",
+                u7_confirm_zero_wash: (washData.confirm_zero_wash_text || "").trim().toLowerCase() === "confirm",
+                u7_confirm_no_wired: (utilitiesData.confirm_no_wired_text || "").trim().toLowerCase() === "confirm",
                 u7_utility_internet_type: utilitiesData.utility_internet_type,
                 iern: iern
             };
@@ -2125,7 +2149,7 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                             </div>
                             <div className="p-5 border-t border-gray-100 flex gap-3 bg-white rounded-b-3xl">
                                 <button 
-                                    disabled={gradeStats.diff !== 0 && gradeValidationConfirm.toLowerCase() !== "confirm"}
+                                    disabled={gradeStats.diff !== 0 && gradeValidationConfirm.trim().toLowerCase() !== "confirm"}
                                     onClick={handleSaveGradeLevel} 
                                     className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-indigo-500 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50"
                                 >

@@ -52,11 +52,6 @@ def delete_registration():
         print("❌ Error: School ID cannot be empty.")
         return
 
-    confirm = input(f"Are you absolutely sure you want to delete registration for {school_id}? (y/N): ").lower()
-    if confirm != 'y':
-        print("❌ Operation cancelled.")
-        return
-
     if not DATABASE_URL:
         print("❌ Error: DATABASE_URL not found in .env")
         return
@@ -66,15 +61,50 @@ def delete_registration():
         conn.autocommit = False
         cur = conn.cursor()
 
-        # 1. Lookup IERN first
-        cur.execute("SELECT iern FROM ph_schools WHERE school_id = %s", (school_id,))
-        row = cur.fetchone()
-        iern = row[0] if row else None
+        # 1. Lookup Info first
+        print(f"[LOOKUP] Looking up details for {school_id}...")
         
+        # Try ph_schools
+        cur.execute("SELECT iern, school_name, region, division FROM ph_schools WHERE school_id = %s", (school_id,))
+        row = cur.fetchone()
+        
+        iern = None
+        school_name = "Unknown School"
+        region = "Unknown Region"
+        division = "Unknown Division"
+        
+        if row:
+            iern, school_name, region, division = row
+        else:
+            # Try pending_schools
+            cur.execute("SELECT school_name, region, division FROM pending_schools WHERE school_id = %s", (school_id,))
+            p_row = cur.fetchone()
+            if p_row:
+                school_name, region, division = p_row
+
+        # Try to find email in users
+        cur.execute("SELECT email FROM users WHERE school_id = %s LIMIT 1", (school_id,))
+        u_row = cur.fetchone()
+        email = u_row[0] if u_row else "Not Found"
+
+        print("\n--- REGISTRATION DETAILS ---")
+        print(f" School Name: {school_name}")
+        print(f" School ID:   {school_id}")
+        print(f" IERN:        {iern if iern else 'N/A'}")
+        print(f" Region:      {region}")
+        print(f" Division:    {division}")
+        print(f" Email:       {email}")
+        print("----------------------------\n")
+
+        confirm = input(f"Are you absolutely sure you want to delete registration for {school_name}? (y/N): ").lower()
+        if confirm != 'y':
+            print("Operation cancelled.")
+            return
+
         if not row:
             print(f"Warning: School ID {school_id} not found in ph_schools. Proceeding with school_id only deletions.")
         else:
-            print(f"Found IERN: {iern}")
+            print(f"Proceeding with IERN: {iern}")
 
         print(f"\nStarting deletion transaction for {school_id}...")
         

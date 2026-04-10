@@ -216,6 +216,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
     const [editingBuildingId, setEditingBuildingId] = useState(null);
     const [editingRepairRoomId, setEditingRepairRoomId] = useState(null);
+    const editingRepairRoom = repairRoomFormData; // Derived for UI consistency
     const [availableGrades, setAvailableGrades] = useState([]);
 
     const years = Array.from({ length: currentYear - 1900 + 1 }, (_, i) => currentYear - i);
@@ -321,9 +322,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
                     const u2Entry = u2Parsed.find(x => x.grade_level === pg.id);
                     const isActive = u2Entry ? u2Entry.is_active !== false : isOffered;
-                    const hasEnrollment = u2Entry ? (parseInt(u2Entry.total) >= 0) : false; // Note: using >= 0 to include active grades even if zero enrollment
-
-                    if (hasEnrollment || (isOffered && isActive)) {
+                    if (isActive) {
                         detectedGrades.push({ id: pg.id, label: pg.label, isMultigrade: false });
                     }
                 });
@@ -643,31 +642,47 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
         const numStoreys = parseInt(buildingFormData.storey) || 1;
         const numClassrooms = parseInt(buildingFormData.classroom) || 1;
 
-        // Automatic Room Generation
-        const generatedRooms = [];
-        const roomsPerFloor = Math.ceil(numClassrooms / numStoreys);
-        let roomCount = 0;
+        // Smart Room Generation/Preservation
+        const existingRooms = roomsData.filter(r => r.building_local_id === bId);
+        let finalRooms = [];
 
-        const isBuildingCondemned = buildingFormData.status === "For Condemnation" || buildingFormData.status === "Condemned";
+        if (editingBuildingId && existingRooms.length === numClassrooms) {
+            // Keep existing rooms but update building name if it changed
+            finalRooms = existingRooms.map(r => ({
+                ...r,
+                building_name: buildingFormData.building_name,
+                // Update names if they followed the building-floor-letter pattern
+                room_name: r.room_name.startsWith(buildings.find(b => b.id === bId).building_name)
+                    ? r.room_name.replace(buildings.find(b => b.id === bId).building_name, buildingFormData.building_name)
+                    : r.room_name
+            }));
+        } else {
+            // Generate new rooms
+            const roomsPerFloor = Math.ceil(numClassrooms / numStoreys);
+            let roomCount = 0;
+            const isBuildingCondemned = buildingFormData.status === "For Condemnation" || buildingFormData.status === "Condemned";
 
-        for (let floor = 1; floor <= numStoreys; floor++) {
-            for (let r = 0; r < roomsPerFloor && roomCount < numClassrooms; r++) {
-                roomCount++;
-                const roomLetter = String.fromCharCode(65 + r); // A, B, C...
-                const roomName = `${buildingFormData.building_name} ${floor}-${roomLetter}`;
+            for (let floor = 1; floor <= numStoreys; floor++) {
+                for (let r = 0; r < roomsPerFloor && roomCount < numClassrooms; r++) {
+                    roomCount++;
+                    const roomLetter = String.fromCharCode(65 + r);
+                    const roomName = `${buildingFormData.building_name} ${floor}-${roomLetter}`;
 
-                generatedRooms.push({
-                    id: `${bId}-room-${roomCount}`,
-                    building_local_id: bId,
-                    building_name: buildingFormData.building_name,
-                    room_name: roomName,
-                    dimensions: "7x9",
-                    grade_level: isBuildingCondemned ? "Non-Instructional" : "",
-                    teacher_id: "",
-                    condition: isBuildingCondemned ? buildingFormData.status : "Good Condition",
-                    seats: isBuildingCondemned ? "0" : "",
-                    is_in_use: true,
-                });
+                    const isBuildingRepair = buildingFormData.status === "For Major Repairs" || buildingFormData.status === "For Minor Repairs";
+                    
+                    finalRooms.push({
+                        id: `${bId}-room-${roomCount}`,
+                        building_local_id: bId,
+                        building_name: buildingFormData.building_name,
+                        room_name: roomName,
+                        dimensions: "7x9",
+                        grade_level: isBuildingCondemned ? "Non-Instructional" : "",
+                        teacher_id: "",
+                        condition: isBuildingCondemned ? buildingFormData.status : (isBuildingRepair ? "Repair" : "Good Condition"),
+                        seats: isBuildingCondemned ? "0" : "",
+                        is_in_use: true,
+                    });
+                }
             }
         }
 
@@ -677,10 +692,9 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             setBuildings([...buildings, newEntry]);
         }
 
-        // Update roomsData: Add or replace rooms for this building
         setRoomsData(prev => [
             ...prev.filter(r => r.building_local_id !== bId),
-            ...generatedRooms
+            ...finalRooms
         ]);
 
         setShowBuildingModal(false);
@@ -1153,11 +1167,31 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
                     {/* ── PHASE 2: BUILDING INVENTORY ── */}
                     <section className="space-y-4">
-                        <div className="flex items-center gap-2 px-2">
-                            <div className="w-1.5 h-6 bg-amber-500 rounded-full" />
-                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Building Inventory</h3>
+                        <div className="flex items-center justify-between px-2">
+                            <div className="flex items-center gap-2">
+                                <div className="w-1.5 h-6 bg-amber-500 rounded-full" />
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Building Inventory</h3>
+                            </div>
+                            {!propReadOnly && (
+                                <button
+                                    onClick={() => {
+                                        setIsReadOnly(false);
+                                        setCurrentPage(2);
+                                        setShowBuildingModal(true);
+                                        setEditingBuildingId(null);
+                                        setBuildingFormData({
+                                            building_name: "", category: "Academic Building", storey: "", classroom: "",
+                                            year_completed: currentYear, remarks: "", status: "Good Condition",
+                                            condemn_age: false, condemn_hazard: false, condemn_calamity: false, condemn_upgrade: false
+                                        });
+                                    }}
+                                    className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-colors"
+                                >
+                                    <FiPlus /> Register New Building
+                                </button>
+                            )}
                         </div>
-                        <div className="space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {buildings.map(b => (
                                 <div key={b.id} className={`bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm relative overflow-hidden group ${b.status === 'Condemned' || b.status === 'For Condemnation' ? 'border-rose-100 shadow-rose-50/50' : ''}`}>
                                     <div className="flex justify-between items-start mb-4">
@@ -1165,12 +1199,42 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                             <h4 className="font-black text-slate-800 text-lg tracking-tight uppercase">{b.building_name || b.building_no || 'Building N/A'}</h4>
                                             <p className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.15em]">{b.category}</p>
                                         </div>
-                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${b.status === 'Newly Built' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
-                                            b.status === 'Good Condition' ? 'bg-blue-50 border-blue-100 text-blue-600' :
-                                                'bg-rose-50 border-rose-100 text-rose-600'
-                                            }`}>
-                                            {b.status}
-                                        </span>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setIsReadOnly(false);
+                                                    setCurrentPage(2);
+                                                    handleEditBuilding(b);
+                                                }}
+                                                className="p-3 bg-white text-indigo-500 rounded-xl shadow-sm border border-slate-100 opacity-0 group-hover:opacity-100 transition-all hover:bg-indigo-50 active:scale-95"
+                                                title="Edit Building"
+                                            >
+                                                <FiEdit2 className="w-4 h-4" />
+                                            </button>
+                                            {!propReadOnly && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        const confirm = window.confirm(`Delete building "${b.building_name}"? This will also remove its room assignments.`);
+                                                        if (confirm) {
+                                                            setBuildings(buildings.filter(x => x.id !== b.id));
+                                                            setRoomsData(roomsData.filter(r => r.building_local_id !== b.id));
+                                                        }
+                                                    }}
+                                                    className="p-3 bg-white text-rose-500 rounded-xl shadow-sm border border-slate-100 opacity-0 group-hover:opacity-100 transition-all hover:bg-rose-50 active:scale-95"
+                                                    title="Delete Building"
+                                                >
+                                                    <FiTrash2 className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${b.status === 'Newly Built' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
+                                                b.status === 'Good Condition' ? 'bg-blue-50 border-blue-100 text-blue-600' :
+                                                    'bg-rose-50 border-rose-100 text-rose-600'
+                                                }`}>
+                                                {b.status}
+                                            </span>
+                                        </div>
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="bg-slate-50 p-3 rounded-2xl">
@@ -1300,7 +1364,10 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                 <FiSave className="w-6 h-6" />
                             </button>
                             <button
-                                onClick={() => setIsReadOnly(false)}
+                                onClick={() => {
+                                    setIsReadOnly(false);
+                                    setCurrentPage(2);
+                                }}
                                 className="flex-1 py-5 rounded-[2rem] bg-indigo-600 text-white font-black text-xl shadow-xl shadow-indigo-100/50 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-3"
                             >
                                 <FiUnlock className="w-6 h-6" />
@@ -1584,218 +1651,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                             ))}
                                         </div>
                                     )}
-
-                                    {/* Registration Form / Modal */}
-                                    {showBuildingModal && (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: 20 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            className="bg-white p-6 rounded-[2rem] shadow-xl border border-gray-200"
-                                        >
-                                            <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
-                                                <h3 className="font-black text-2xl text-gray-800">Building Details</h3>
-                                                <button onClick={() => setShowBuildingModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full">
-                                                    <FiX className="w-6 h-6" />
-                                                </button>
-                                            </div>
-
-                                        <div className="space-y-5">
-                                            <div>
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Building Name</label>
-                                                <input
-                                                    type="text"
-                                                    value={buildingFormData.building_name}
-                                                    onChange={(e) => setBuildingFormData({ ...buildingFormData, building_name: e.target.value })}
-                                                    className={`w-full bg-gray-50 border-2 ${buildings.some(b => b.id !== editingBuildingId && (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase()) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-200 focus:border-indigo-500'} mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none transition-all placeholder-gray-300`}
-                                                    placeholder="e.g. Marcos Type Bldg"
-                                                />
-                                                {buildings.some(b => b.id !== editingBuildingId && (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase()) && (
-                                                    <p className="text-rose-500 text-[10px] font-black uppercase mt-1 ml-2 flex items-center gap-1">
-                                                        <FiAlertTriangle /> This building name is already in use
-                                                    </p>
-                                                )}
-                                            </div>
-
-                                            <div className={`relative ${isBuildingDropdownOpen ? 'z-50' : 'z-0'}`}>
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Building Category</label>
-                                                <div className="relative mt-1">
-                                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                        <FiSearch className="text-gray-400 w-5 h-5" />
-                                                    </div>
-                                                    <input
-                                                        type="text"
-                                                        placeholder="Search building type..."
-                                                        value={isBuildingDropdownOpen ? buildingSearch : buildingFormData.category}
-                                                        onFocus={() => {
-                                                            setIsBuildingDropdownOpen(true);
-                                                            setBuildingSearch("");
-                                                        }}
-                                                        onChange={(e) => {
-                                                            setBuildingSearch(e.target.value);
-                                                            setBuildingFormData(prev => ({ ...prev, category: e.target.value }));
-                                                        }}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl pl-11 pr-12 py-4 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 focus:bg-white transition-all placeholder-gray-300 shadow-sm"
-                                                    />
-                                                    <div
-                                                        className="absolute inset-y-0 right-0 pr-4 flex items-center cursor-pointer text-gray-400 hover:text-indigo-500"
-                                                        onClick={() => setIsBuildingDropdownOpen(!isBuildingDropdownOpen)}
-                                                    >
-                                                        <FiChevronDown className={`w-6 h-6 transition-transform duration-300 ${isBuildingDropdownOpen ? 'rotate-180' : ''}`} />
-                                                    </div>
-
-                                                    <AnimatePresence>
-                                                        {isBuildingDropdownOpen && (
-                                                            <>
-                                                                <motion.div
-                                                                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                                    exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                                                                    className="absolute z-[100] w-full mt-2 bg-white border-2 border-gray-100 rounded-3xl shadow-2xl max-h-72 overflow-y-auto overflow-x-hidden py-2"
-                                                                >
-                                                                    {(buildingSearch ? buildingTypes.filter(t => t.toLowerCase().includes(buildingSearch.toLowerCase())) : buildingTypes).map(type => (
-                                                                        <button
-                                                                            key={type}
-                                                                            type="button"
-                                                                            onClick={() => {
-                                                                                setBuildingFormData({ ...buildingFormData, category: type });
-                                                                                setBuildingSearch(type);
-                                                                                setIsBuildingDropdownOpen(false);
-                                                                            }}
-                                                                            className={`w-full text-left px-6 py-4 font-bold text-gray-700 transition-all border-b border-gray-50 last:border-0 hover:bg-indigo-50 hover:pl-8 flex items-center justify-between ${buildingFormData.category === type ? 'bg-indigo-50 text-indigo-600' : ''}`}
-                                                                        >
-                                                                            <span>{type}</span>
-                                                                            {buildingFormData.category === type && <FiCheck className="w-5 h-5" />}
-                                                                        </button>
-                                                                    ))}
-                                                                    <div className="px-6 py-8 text-center text-gray-400">
-                                                                        {buildingTypes.length === 0 ? (
-                                                                            <>
-                                                                                <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                                                                                <p className="italic font-medium">Fetching building types...</p>
-                                                                            </>
-                                                                        ) : (buildingSearch && buildingTypes.filter(t => t.toLowerCase().includes(buildingSearch.toLowerCase())).length === 0) ? (
-                                                                            <>
-                                                                                <FiSearch className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                                                                                <p className="italic font-medium">No matching building types found</p>
-                                                                            </>
-                                                                        ) : null}
-                                                                    </div>
-                                                                </motion.div>
-                                                                <div className="fixed inset-0 z-40" onClick={() => setIsBuildingDropdownOpen(false)}></div>
-                                                            </>
-                                                        )}
-                                                    </AnimatePresence>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex gap-4">
-                                                <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2">Storeys</label>
-                                                    <input
-                                                        type="text"
-                                                        inputMode="numeric"
-                                                        value={buildingFormData.storey}
-                                                        placeholder="1"
-                                                        onChange={(e) => {
-                                                            const val = e.target.value.replace(/[^0-9]/g, '');
-                                                            setBuildingFormData({ ...buildingFormData, storey: val });
-                                                        }}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center"
-                                                    />
-                                                </div>
-                                                <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2">Classrooms</label>
-                                                    <input
-                                                        type="text"
-                                                        inputMode="numeric"
-                                                        value={buildingFormData.classroom}
-                                                        placeholder="1"
-                                                        onChange={(e) => {
-                                                            const val = e.target.value.replace(/[^0-9]/g, '');
-                                                            setBuildingFormData({ ...buildingFormData, classroom: val });
-                                                        }}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center"
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            <div>
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Year Completed</label>
-                                                <select
-                                                    value={buildingFormData.year_completed}
-                                                    onChange={(e) => setBuildingFormData({ ...buildingFormData, year_completed: parseInt(e.target.value) })}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer"
-                                                >
-                                                    {years.map(y => <option key={y} value={y}>{y}</option>)}
-                                                </select>
-                                            </div>
-
-                                            <div className="flex gap-4">
-                                                <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2 mb-1 block">Building Status</label>
-                                                    <select
-                                                        value={buildingFormData.status}
-                                                        onChange={(e) => setBuildingFormData({ ...buildingFormData, status: e.target.value })}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all cursor-pointer"
-                                                    >
-                                                        <option value="Newly Built">Newly Built</option>
-                                                        <option value="Good Condition">Good Condition</option>
-                                                        <option value="For Major Repairs">For Major Repairs</option>
-                                                        <option value="For Minor Repairs">For Minor Repairs</option>
-                                                        <option value="For Condemnation">For Condemnation</option>
-                                                        <option value="Condemned">Condemned</option>
-                                                    </select>
-                                                </div>
-                                            </div>
-
-                                            {(buildingFormData.status === 'For Condemnation' || buildingFormData.status === 'Condemned') && (
-                                                <div className="p-5 bg-rose-50 rounded-2xl border-2 border-rose-100 space-y-4">
-                                                    <h4 className="text-sm font-black text-rose-600 uppercase tracking-widest flex items-center gap-2">
-                                                        <FiAlertTriangle className="w-4 h-4" /> Justification for Condemnation
-                                                    </h4>
-                                                    <div className="grid grid-cols-1 gap-3">
-                                                        {[
-                                                            { id: 'condemn_age', label: 'Age / Dilapidation', icon: <FiClock /> },
-                                                            { id: 'condemn_hazard', label: 'Safety Hazard', icon: <FiAlertOctagon /> },
-                                                            { id: 'condemn_calamity', label: 'Calamity Damage', icon: <FiCloudLightning /> },
-                                                            { id: 'condemn_upgrade', label: 'Site Upgrade / Repurposing', icon: <FiTrendingUp /> }
-                                                        ].map(item => (
-                                                            <button
-                                                                key={item.id}
-                                                                onClick={() => setBuildingFormData({ ...buildingFormData, [item.id]: !buildingFormData[item.id] })}
-                                                                className={`py-3 px-4 rounded-xl font-bold text-sm border-2 text-left flex items-center justify-between transition-all ${buildingFormData[item.id] ? 'bg-white border-rose-400 text-rose-700 shadow-sm' : 'bg-rose-50/50 border-rose-100 text-rose-300 hover:bg-white hover:border-rose-200'}`}
-                                                            >
-                                                                <span className="flex items-center gap-2">{item.icon} {item.label}</span>
-                                                                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${buildingFormData[item.id] ? 'bg-rose-500 border-rose-500 text-white' : 'border-rose-200'}`}>
-                                                                    {buildingFormData[item.id] && <FiCheck className="w-3 h-3" />}
-                                                                </div>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            <div>
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Remarks</label>
-                                                <textarea
-                                                    value={buildingFormData.remarks}
-                                                    onChange={(e) => setBuildingFormData({ ...buildingFormData, remarks: e.target.value })}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all min-h-[100px]"
-                                                    placeholder="Optional notes..."
-                                                ></textarea>
-                                            </div>
-
-                                            <button
-                                                onClick={handleSaveBuilding}
-                                                disabled={buildings.some(b => b.id !== editingBuildingId && (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase())}
-                                                className="w-full mt-4 py-4 rounded-2xl text-white font-black text-lg bg-indigo-500 border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-indigo-200/50 disabled:opacity-50 disabled:bg-gray-300 disabled:border-gray-400"
-                                            >
-                                                Save Building
-                                            </button>
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </div>
+                                </div>
                             ) : (
                                 <div className="bg-slate-100 rounded-3xl p-10 text-center border-2 border-slate-200 border-dashed">
                                     <div className="text-5xl mb-4 grayscale">🏢</div>
@@ -2160,98 +2016,9 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                         })}
                                     </div>
                                 )}
-
-                                {showRepairModal && (
-                                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-[2rem] shadow-xl border-2 border-amber-100 mt-10">
-                                        <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
-                                            <h3 className="font-black text-2xl text-gray-800">Assessment: {repairRoomFormData.room_name}</h3>
-                                            <button onClick={() => setShowRepairModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full"><FiX className="w-6 h-6" /></button>
-                                        </div>
-
-                                        {/* Item Checklist */}
-                                        <h4 className="font-bold text-gray-700 mb-4 px-1">Checklist of Damaged Items</h4>
-                                        <div className="space-y-4 mb-8">
-                                            {REPAIR_CATEGORIES.map(category => {
-                                                const isChecked = !!repairItemsState[category];
-                                                const itemData = repairItemsState[category] || {};
-
-                                                return (
-                                                    <div key={category} className={`border-2 rounded-2xl overflow-hidden transition-all ${isChecked ? 'border-amber-400 bg-amber-50/30' : 'border-gray-100 bg-white'}`}>
-                                                        <label className="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50">
-                                                            <input type="checkbox" checked={isChecked} onChange={() => handleToggleRepairItem(category)}
-                                                                className="w-6 h-6 rounded text-amber-500 focus:ring-amber-500 border-gray-300" />
-                                                            <span className={`font-bold text-lg ${isChecked ? 'text-amber-800' : 'text-gray-600'}`}>{category}</span>
-                                                        </label>
-
-                                                        {isChecked && (
-                                                            <div className="p-4 pt-0 space-y-4 border-t border-amber-100 mt-2">
-                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                                    <div>
-                                                                        <label className="text-xs font-bold text-gray-500">What it is made of</label>
-                                                                        <input type="text" value={itemData.oms} onChange={(e) => handleUpdateRepairItem(category, 'oms', e.target.value)}
-                                                                            className="w-full bg-white border-2 border-gray-200 mt-1 rounded-xl px-3 py-2 text-sm font-bold text-gray-700 outline-none focus:border-amber-500" placeholder="e.g. GI Sheet, Concrete, Wood" />
-                                                                    </div>
-                                                                    <div>
-                                                                        <label className="text-xs font-bold text-gray-500">Action</label>
-                                                                        <select value={itemData.recommend_action} onChange={(e) => handleUpdateRepairItem(category, 'recommend_action', e.target.value)}
-                                                                            className="w-full bg-white border-2 border-gray-200 mt-1 rounded-xl px-3 py-2 text-sm font-bold text-gray-700 outline-none focus:border-amber-500 appearance-none">
-                                                                            <option value="Routine Repair">Routine Repair</option>
-                                                                            <option value="Major Repair / Rehabilitation">Major Repair / Rehabilitation</option>
-                                                                            <option value="Structural Retrofit">Structural Retrofit</option>
-                                                                            <option value="Recommend for Condemnation">Recommend for Condemnation</option>
-                                                                            <option value="Recommend for Demolition">Recommend for Demolition</option>
-                                                                        </select>
-                                                                    </div>
-                                                                </div>
-
-                                                                {itemData.recommend_action === 'Recommend for Demolition' && (
-                                                                    <div className="bg-rose-50 p-3 rounded-xl border border-rose-100">
-                                                                        <label className="text-[10px] font-black uppercase tracking-wider text-rose-500 mb-1 block">Demolition Justification</label>
-                                                                        <select value={itemData.demo_justification} onChange={(e) => handleUpdateRepairItem(category, 'demo_justification', e.target.value)}
-                                                                            className="w-full bg-white border-2 border-rose-200 rounded-lg px-3 py-2 text-sm font-bold text-rose-700 outline-none focus:border-rose-500">
-                                                                            <option value="">-- Select Justification --</option>
-                                                                            <option value="Beyond repair due to age and lifecycle">Beyond repair due to age and lifecycle</option>
-                                                                            <option value="Structural or safety issues">Structural or safety issues</option>
-                                                                            <option value="Severe damage due to calamity">Severe damage due to calamity</option>
-                                                                            <option value="MGB‑declared hazard‑prone area">MGB‑declared hazard‑prone area</option>
-                                                                            <option value="Site relocation or right-of-way">Site relocation or right-of-way</option>
-                                                                        </select>
-                                                                    </div>
-                                                                )}
-
-                                                                <div className="flex gap-4">
-                                                                    <div className="flex-1">
-                                                                        <label className="text-xs font-bold text-gray-500">Estimated Damage</label>
-                                                                        <input type="range" min="0" max="100" step="10" value={itemData.damage_ratio} onChange={(e) => handleUpdateRepairItem(category, 'damage_ratio', parseInt(e.target.value))}
-                                                                            className="w-full mt-2 accent-amber-500 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-                                                                        <div className="text-right text-xs font-black text-amber-600 mt-1">{itemData.damage_ratio}%</div>
-                                                                    </div>
-                                                                </div>
-
-                                                                <div>
-                                                                    <label className="text-[10px] font-bold text-gray-400 ml-1">REMARKS</label>
-                                                                    <input type="text" value={itemData.remarks} onChange={(e) => handleUpdateRepairItem(category, 'remarks', e.target.value)}
-                                                                        className="w-full bg-white border-2 border-gray-100 mt-0.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 outline-none focus:border-amber-400" />
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-
-                                        <button onClick={handleSaveRepairRoom}
-                                            className="w-full mt-6 py-4 rounded-2xl text-white font-black text-lg bg-amber-500 border-b-[6px] border-amber-700 active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-amber-200/50">
-                                            Save Room Assessment ✓
-                                        </button>
-                                    </motion.div>
-                                )}
                             </div>
-
-
                         </motion.div>
                     )}
-
                 </main>
             )}
 
@@ -2369,6 +2136,330 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                     Return to Modules Dashboard
                                 </button>
                                 <p className="text-[10px] text-orange-500 font-bold uppercase text-center mt-6 tracking-widest leading-loose">✓ Offline Mode • Auto-Sync Enabled ✓</p>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {/* Building Details Modal */}
+                {showBuildingModal && (
+                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 40 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 40 }}
+                            className="bg-white w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-[3.5rem] p-8 md:p-12 shadow-2xl relative"
+                        >
+                            <div className="flex justify-between items-center mb-10 border-b-2 border-slate-50 pb-6">
+                                <h3 className="font-black text-3xl text-gray-800">Building Details</h3>
+                                <button onClick={() => setShowBuildingModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-3 rounded-full transition-colors">
+                                    <FiX className="w-8 h-8" />
+                                </button>
+                            </div>
+                            <div className="space-y-6">
+                                <div>
+                                    <label className="text-sm font-bold text-gray-500 ml-2 uppercase tracking-widest">Building Name</label>
+                                    <input
+                                        type="text"
+                                        value={buildingFormData.building_name}
+                                        onChange={(e) => setBuildingFormData({ ...buildingFormData, building_name: e.target.value })}
+                                        className={`w-full bg-gray-50 border-2 ${buildings.some(b => b.id !== editingBuildingId && (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase()) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-200 focus:border-indigo-500'} mt-1 rounded-2xl px-6 py-4 text-xl font-bold text-gray-700 outline-none transition-all placeholder-gray-300`}
+                                        placeholder="e.g. Marcos Type Bldg"
+                                    />
+                                    {buildings.some(b => b.id !== editingBuildingId && (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase()) && (
+                                        <p className="text-rose-500 text-[10px] font-black uppercase mt-1 ml-2 flex items-center gap-1">
+                                            <FiAlertTriangle /> This building name is already in use
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div className={`relative ${isBuildingDropdownOpen ? 'z-50' : 'z-0'}`}>
+                                    <label className="text-sm font-bold text-gray-500 ml-2 uppercase tracking-widest">Building Category</label>
+                                    <div className="relative mt-1">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                            <FiSearch className="text-gray-400 w-5 h-5" />
+                                        </div>
+                                        <input
+                                            type="text"
+                                            placeholder="Search building type..."
+                                            value={isBuildingDropdownOpen ? buildingSearch : buildingFormData.category}
+                                            onFocus={() => {
+                                                setIsBuildingDropdownOpen(true);
+                                                setBuildingSearch("");
+                                            }}
+                                            onChange={(e) => {
+                                                setBuildingSearch(e.target.value);
+                                                setBuildingFormData(prev => ({ ...prev, category: e.target.value }));
+                                            }}
+                                            className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl pl-11 pr-12 py-4 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 focus:bg-white transition-all placeholder-gray-300 shadow-sm"
+                                        />
+                                        <div
+                                            className="absolute inset-y-0 right-0 pr-4 flex items-center cursor-pointer text-gray-400 hover:text-indigo-500"
+                                            onClick={() => setIsBuildingDropdownOpen(!isBuildingDropdownOpen)}
+                                        >
+                                            <FiChevronDown className={`w-6 h-6 transition-transform duration-300 ${isBuildingDropdownOpen ? 'rotate-180' : ''}`} />
+                                        </div>
+
+                                        <AnimatePresence>
+                                            {isBuildingDropdownOpen && (
+                                                <>
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                                                        className="absolute z-[100] w-full mt-2 bg-white border-2 border-gray-100 rounded-3xl shadow-2xl max-h-72 overflow-y-auto overflow-x-hidden py-2"
+                                                    >
+                                                        {(buildingSearch ? buildingTypes.filter(t => t.toLowerCase().includes(buildingSearch.toLowerCase())) : buildingTypes).map(type => (
+                                                            <button
+                                                                key={type}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setBuildingFormData({ ...buildingFormData, category: type });
+                                                                    setBuildingSearch(type);
+                                                                    setIsBuildingDropdownOpen(false);
+                                                                }}
+                                                                className={`w-full text-left px-6 py-4 font-bold text-gray-700 transition-all border-b border-gray-50 last:border-0 hover:bg-indigo-50 hover:pl-8 flex items-center justify-between ${buildingFormData.category === type ? 'bg-indigo-50 text-indigo-600' : ''}`}
+                                                            >
+                                                                <span>{type}</span>
+                                                                {buildingFormData.category === type && <FiCheck className="w-5 h-5" />}
+                                                            </button>
+                                                        ))}
+                                                    </motion.div>
+                                                    <div className="fixed inset-0 z-40" onClick={() => setIsBuildingDropdownOpen(false)}></div>
+                                                </>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4">
+                                    <div className="flex-1">
+                                        <label className="text-sm font-bold text-gray-500 ml-2 uppercase tracking-widest text-center">Storeys</label>
+                                        <input type="text" inputMode="numeric" value={buildingFormData.storey} placeholder="1"
+                                            onChange={(e) => setBuildingFormData({ ...buildingFormData, storey: e.target.value.replace(/[^0-9]/g, '') })}
+                                            className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-4 text-xl font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <label className="text-sm font-bold text-gray-500 ml-2 uppercase tracking-widest text-center">Classrooms</label>
+                                        <input type="text" inputMode="numeric" value={buildingFormData.classroom} placeholder="1"
+                                            onChange={(e) => setBuildingFormData({ ...buildingFormData, classroom: e.target.value.replace(/[^0-9]/g, '') })}
+                                            className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-4 text-xl font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center" />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-sm font-bold text-gray-500 ml-2 uppercase tracking-widest">Year Completed</label>
+                                    <select
+                                        value={buildingFormData.year_completed}
+                                        onChange={(e) => setBuildingFormData({ ...buildingFormData, year_completed: parseInt(e.target.value) })}
+                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-6 py-4 text-xl font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+                                    >
+                                        {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="text-sm font-bold text-gray-500 ml-2 uppercase tracking-widest block mb-1">Building Status</label>
+                                    <select
+                                        value={buildingFormData.status}
+                                        onChange={(e) => setBuildingFormData({ ...buildingFormData, status: e.target.value })}
+                                        className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-6 py-4 text-xl font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all cursor-pointer"
+                                    >
+                                        <option value="Newly Built">Newly Built</option>
+                                        <option value="Good Condition">Good Condition</option>
+                                        <option value="For Major Repairs">For Major Repairs</option>
+                                        <option value="For Minor Repairs">For Minor Repairs</option>
+                                        <option value="For Condemnation">For Condemnation</option>
+                                        <option value="Condemned">Condemned</option>
+                                    </select>
+                                </div>
+
+                                {(buildingFormData.status === 'For Condemnation' || buildingFormData.status === 'Condemned') && (
+                                    <div className="p-5 bg-rose-50 rounded-2xl border-2 border-rose-100 space-y-4">
+                                        <h4 className="text-sm font-black text-rose-600 uppercase tracking-widest flex items-center gap-2">
+                                            <FiAlertTriangle className="w-4 h-4" /> Justification for Condemnation
+                                        </h4>
+                                        <div className="grid grid-cols-1 gap-3">
+                                            {[
+                                                { id: 'condemn_age', label: 'Age / Dilapidation', icon: <FiClock /> },
+                                                { id: 'condemn_hazard', label: 'Safety Hazard', icon: <FiAlertOctagon /> },
+                                                { id: 'condemn_calamity', label: 'Calamity Damage', icon: <FiCloudLightning /> },
+                                                { id: 'condemn_upgrade', label: 'Site Upgrade / Repurposing', icon: <FiTrendingUp /> }
+                                            ].map(item => (
+                                                <button
+                                                    key={item.id}
+                                                    onClick={() => setBuildingFormData({ ...buildingFormData, [item.id]: !buildingFormData[item.id] })}
+                                                    className={`py-3 px-4 rounded-xl font-bold text-sm border-2 text-left flex items-center justify-between transition-all ${buildingFormData[item.id] ? 'bg-white border-rose-400 text-rose-700 shadow-sm' : 'bg-rose-50/50 border-rose-100 text-rose-300 hover:bg-white hover:border-rose-200'}`}
+                                                >
+                                                    <span className="flex items-center gap-2">{item.icon} {item.label}</span>
+                                                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${buildingFormData[item.id] ? 'bg-rose-500 border-rose-500 text-white' : 'border-rose-200'}`}>
+                                                        {buildingFormData[item.id] && <FiCheck className="w-3 h-3" />}
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div>
+                                    <label className="text-sm font-bold text-gray-500 ml-2 uppercase tracking-widest">Remarks</label>
+                                    <textarea
+                                        value={buildingFormData.remarks}
+                                        onChange={(e) => setBuildingFormData({ ...buildingFormData, remarks: e.target.value })}
+                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-6 py-4 text-xl font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all min-h-[120px]"
+                                        placeholder="Optional notes or observations..."
+                                    ></textarea>
+                                </div>
+
+                                <button
+                                    onClick={handleSaveBuilding}
+                                    disabled={buildings.some(b => b.id !== editingBuildingId && (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase())}
+                                    className="w-full mt-6 py-5 rounded-3xl text-white font-black text-xl bg-indigo-600 border-b-[8px] border-indigo-800 active:border-b-0 active:translate-y-[8px] transition-all shadow-xl shadow-indigo-200"
+                                >
+                                    Save Building Architecture
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+
+                {/* Repair Assessment Modal */}
+                {showRepairModal && (
+                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 40 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 40 }}
+                            className="bg-white w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-[2.5rem] p-6 md:p-8 shadow-2xl relative"
+                        >
+                            <div className="flex justify-between items-center mb-8 border-b-2 border-slate-50 pb-6">
+                                <div>
+                                    <h3 className="font-black text-xl text-gray-800 tracking-tight">Assessment: {editingRepairRoom?.building_name} {editingRepairRoom?.room_name}</h3>
+                                </div>
+                                <button onClick={() => setShowRepairModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-1.5 rounded-full transition-colors">
+                                    <FiX className="w-6 h-6" />
+                                </button>
+                            </div>
+                            <div className="space-y-4">
+                                <h4 className="text-base font-black text-gray-800 tracking-tight ml-1">Checklist of Damaged Items</h4>
+                                
+                                <div className="space-y-4">
+                                    {REPAIR_CATEGORIES.map(category => {
+                                        const isSelected = !!repairItemsState[category];
+                                        const itemData = repairItemsState[category] || { damage_ratio: 0, recommend_action: "", oms: "", remarks: "" };
+
+                                        return (
+                                            <div key={category} className={`bg-white rounded-[1.5rem] border-2 transition-all duration-300 overflow-hidden ${isSelected ? 'border-amber-400 shadow-lg shadow-amber-50 scale-[1.01]' : 'border-slate-100 shadow-sm'}`}>
+                                                {/* Card Header (Toggle) */}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleToggleRepairItem(category)}
+                                                    className="w-full p-4 flex items-center gap-4 text-left"
+                                                >
+                                                    <div className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-200'}`}>
+                                                        {isSelected && <FiCheck className="w-5 h-5 text-white stroke-[4]" />}
+                                                    </div>
+                                                    <span className={`text-base font-black transition-colors ${isSelected ? 'text-amber-900' : 'text-slate-600'}`}>
+                                                        {category}
+                                                    </span>
+                                                </button>
+
+                                                {/* Card Content (Questions) - Expanded if selected */}
+                                                <AnimatePresence>
+                                                    {isSelected && (
+                                                        <motion.div
+                                                            initial={{ height: 0, opacity: 0 }}
+                                                            animate={{ height: "auto", opacity: 1 }}
+                                                            exit={{ height: 0, opacity: 0 }}
+                                                            className="px-6 pb-6 border-t font-sans border-amber-50"
+                                                        >
+                                                            <div className="pt-6 space-y-6">
+                                                                <div>
+                                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">What it is made of</label>
+                                                                    <input 
+                                                                        type="text" 
+                                                                        value={itemData.oms} 
+                                                                        onChange={(e) => handleUpdateRepairItem(category, 'oms', e.target.value)}
+                                                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3.5 text-base font-bold text-gray-700 outline-none focus:border-amber-500 transition-all font-sans" 
+                                                                        placeholder="e.g. GI Sheet, Concrete, Wood" 
+                                                                    />
+                                                                </div>
+
+                                                                <div>
+                                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">Action</label>
+                                                                    <div className="relative">
+                                                                        <select 
+                                                                            value={itemData.recommend_action} 
+                                                                            onChange={(e) => handleUpdateRepairItem(category, 'recommend_action', e.target.value)}
+                                                                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3.5 text-base font-bold text-gray-700 outline-none focus:border-amber-500 transition-all appearance-none cursor-pointer"
+                                                                        >
+                                                                            <option value="">-- Select Action --</option>
+                                                                            <option value="Repair / Restoration">Repair / Restoration</option>
+                                                                            <option value="Replacement">Replacement</option>
+                                                                            <option value="Maintenance Only">Maintenance Only</option>
+                                                                            <option value="Routine Repair">Routine Repair</option>
+                                                                        </select>
+                                                                        <FiChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none w-5 h-5" />
+                                                                    </div>
+                                                                </div>
+
+                                                                {itemData.recommend_action === 'Replacement' && (
+                                                                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="mt-6 bg-rose-50 p-4 rounded-xl border-2 border-rose-100">
+                                                                        <label className="text-[10px] font-black uppercase tracking-wider text-rose-500 mb-2 block ml-1">Demolition Justification</label>
+                                                                        <div className="relative">
+                                                                            <select value={itemData.demo_justification} onChange={(e) => handleUpdateRepairItem(category, 'demo_justification', e.target.value)}
+                                                                                className="w-full bg-white border-2 border-rose-200 rounded-xl px-4 py-3.5 text-base font-bold text-rose-700 outline-none focus:border-rose-500 appearance-none cursor-pointer">
+                                                                                <option value="">-- Select Justification --</option>
+                                                                                <option value="Heavily damaged / Structural risk">Heavily damaged / Structural risk</option>
+                                                                                <option value="Beyond economical repair">Beyond economical repair</option>
+                                                                                <option value="Site relocation or right-of-way">Site relocation or right-of-way</option>
+                                                                            </select>
+                                                                            <FiChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-rose-400 pointer-events-none w-5 h-5" />
+                                                                        </div>
+                                                                    </motion.div>
+                                                                )}
+
+                                                                <div>
+                                                                    <div className="flex justify-between items-center mb-2 ml-1">
+                                                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Estimated Damage</label>
+                                                                    </div>
+                                                                    <div className="relative pt-1 pb-6 px-1">
+                                                                        <input 
+                                                                            type="range" 
+                                                                            min="0" max="100" step="10" 
+                                                                            value={itemData.damage_ratio} 
+                                                                            onChange={(e) => handleUpdateRepairItem(category, 'damage_ratio', parseInt(e.target.value))}
+                                                                            className="w-full h-2 bg-slate-100 rounded-full appearance-none cursor-pointer accent-amber-500" 
+                                                                        />
+                                                                        <span className="absolute bottom-0 right-1 text-lg font-black text-amber-600">{itemData.damage_ratio}%</span>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="pt-4 border-t border-slate-50">
+                                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">REMARKS</label>
+                                                                    <textarea 
+                                                                        rows="2"
+                                                                        value={itemData.remarks} 
+                                                                        onChange={(e) => handleUpdateRepairItem(category, 'remarks', e.target.value)}
+                                                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-4 text-base font-medium text-gray-600 outline-none focus:border-amber-400 transition-all resize-none shadow-inner" 
+                                                                        placeholder="Specific findings..." 
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                <button onClick={handleSaveRepairRoom}
+                                    className="w-full mt-6 py-4 rounded-[1.5rem] text-white font-black text-xl bg-[#E69B34] border-b-[6px] border-[#B57A28] active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-amber-200">
+                                    Save Room Assessment ✓
+                                </button>
                             </div>
                         </motion.div>
                     </div>

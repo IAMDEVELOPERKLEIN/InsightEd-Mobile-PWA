@@ -998,7 +998,7 @@ const SchoolResources = ({ embedded }) => {
                             <SelectField
                                 label="Water Source"
                                 name="res_water_source"
-                                options={["For Verification", "Natural Resources", "Piped line from Local Service Provider", "No Water Source"]}
+                                options={["For Verification", "Piped line + Natural Water Source", "Natural Resources", "Piped line from Local Service Provider", "No Water Source"]}
                                 formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly}
                             />
                         </div>

@@ -248,7 +248,14 @@ const MyActivityDashboard = () => {
                                 <span className="text-[10px] font-black text-white uppercase tracking-wider">LVL {levelInfo.level} • {levelInfo.title}</span>
                             </motion.div>
                             <h1 className="text-3xl font-black text-slate-800 tracking-tight">My Quest</h1>
-                            <p className="text-slate-400 text-xs font-bold mt-1 uppercase tracking-[0.2em]">STRIDE School Head</p>
+                            {data ? (
+                                <p className="text-slate-500 text-[10px] font-bold mt-1.5 uppercase tracking-widest leading-relaxed">
+                                    <span className="text-[#004A99]">{data?.schoolInfo?.school_name || 'Loading School...'}</span> • {data?.schoolInfo?.school_id || targetSchoolId} <br/>
+                                    <span className="text-slate-400">Head: </span><span className="text-emerald-600">{user?.first_name || user?.firstName || 'User'} {user?.last_name || user?.lastName || ''}</span>
+                                </p>
+                            ) : (
+                                <p className="text-slate-400 text-[10px] font-bold mt-1.5 uppercase tracking-widest">Loading...</p>
+                            )}
                         </div>
                         <motion.div 
                             initial={{ scale: 0 }}

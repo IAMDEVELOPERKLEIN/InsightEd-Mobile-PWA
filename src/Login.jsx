@@ -7,6 +7,7 @@ import PageTransition from './components/PageTransition';
 import LoadingScreen from './components/LoadingScreen';
 import PinLogin from './components/PinLogin';
 import { FiArrowLeft } from 'react-icons/fi';
+import { FaCalculator } from 'react-icons/fa';
 import { saveSchoolToCache } from './db';
 
 
@@ -103,6 +104,7 @@ const Login = () => {
     const [isSchoolHead, setIsSchoolHead] = useState(true);
     const [isPortalEnforced, setIsPortalEnforced] = useState(false); // NEW: Track if a portal is active
     const [showBackPrompt, setShowBackPrompt] = useState(false);
+    const [showDialpadModal, setShowDialpadModal] = useState(false);
     
     // UI flows
     const [rememberedUser, setRememberedUser] = useState(() => {
@@ -504,6 +506,17 @@ const Login = () => {
                                             required
                                             className="w-full bg-transparent border-none px-4 py-3.5 text-slate-700 dark:text-slate-700 placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:ring-0 font-medium"
                                         />
+                                        {loginMode === 'passcode' && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowDialpadModal(true)}
+                                                className="pr-2 text-slate-400 hover:text-blue-600 transition-colors focus:outline-none"
+                                                title="Open Passcode Dialpad"
+                                                tabIndex={-1}
+                                            >
+                                                <FaCalculator className="h-5 w-5" />
+                                            </button>
+                                        )}
                                         <button
                                             type="button"
                                             onClick={() => setShowPassword(!showPassword)}
@@ -555,6 +568,17 @@ const Login = () => {
                                         {loginMode === 'passcode' ? 'Forgot Passcode?' : 'Forgot Password?'}
                                     </button>
                                 </div>
+
+                                {loginMode === 'passcode' && (
+                                    <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                                        <p className="text-[11px] text-blue-600 font-medium leading-relaxed flex items-center gap-2">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            Note: You are currently using your 6-digit passcode for authentication.
+                                        </p>
+                                    </div>
+                                )}
 
                                 <button
                                     type="submit"
@@ -713,6 +737,79 @@ const Login = () => {
                             >
                                 Close
                             </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* DIALPAD MODAL */}
+                {showDialpadModal && (
+                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl relative border border-white/20">
+                            <div className="text-center mb-6">
+                                <h2 className="text-2xl font-black text-slate-800 tracking-tight mb-2">Enter Passcode</h2>
+                                
+                                <div className="flex justify-center gap-3 mb-6 mt-4">
+                                    {[...Array(6)].map((_, i) => (
+                                    <div 
+                                        key={i} 
+                                        className={`w-4 h-4 rounded-full border-2 transition-all duration-200 ${
+                                        password.length > i 
+                                            ? 'bg-blue-600 border-blue-600 scale-110' 
+                                            : 'bg-slate-200 border-transparent'
+                                        }`}
+                                    />
+                                    ))}
+                                </div>
+                                <div className="grid grid-cols-3 gap-y-4 gap-x-6 w-full max-w-[260px] mx-auto mb-4">
+                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+                                    <button
+                                        key={num}
+                                        type="button"
+                                        onClick={() => {
+                                            if (password.length < 6) {
+                                                setPassword(password + num);
+                                            }
+                                        }}
+                                        className="w-16 h-16 rounded-full bg-slate-50 hover:bg-slate-200 active:bg-slate-300 active:scale-95 text-2xl font-semibold mx-auto flex items-center justify-center transition-all focus:outline-none text-slate-700 shadow-sm"
+                                    >
+                                        {num}
+                                    </button>
+                                    ))}
+                                    <div className="col-start-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (password.length < 6) {
+                                                setPassword(password + '0');
+                                            }
+                                        }}
+                                        className="w-16 h-16 rounded-full bg-slate-50 hover:bg-slate-200 active:bg-slate-300 active:scale-95 text-2xl font-semibold mx-auto flex items-center justify-center transition-all focus:outline-none text-slate-700 shadow-sm"
+                                    >
+                                        0
+                                    </button>
+                                    </div>
+                                    <div className="col-start-3 flex items-center justify-center">
+                                    <button
+                                        type="button"
+                                        onClick={() => setPassword(password.slice(0, -1))}
+                                        className="w-16 h-16 rounded-full hover:bg-slate-100 active:bg-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center transition-colors focus:outline-none"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 001.414.586H19a2 2 0 002-2V7a2 2 0 00-2-2h-8.172a2 2 0 00-1.414.586L3 12z" />
+                                        </svg>
+                                    </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex gap-3 mt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDialpadModal(false)}
+                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-500/30 transition-all active:scale-[0.98] uppercase tracking-widest text-[10px]"
+                                >
+                                    Done
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}

@@ -279,7 +279,11 @@ const SchoolManagement = () => {
             const res = await fetch(`/api/sdo/location-options?region=${encodeURIComponent(region)}&division=${encodeURIComponent(division)}`);
             if (res.ok) {
                 const data = await res.json();
+                console.log("🏙️ SDO Location Options Received:", data.length, "rows");
+                if (data.length > 0) console.log("🏙️ Sample Option:", data[0]);
                 setLocationOptions(data);
+            } else {
+                console.error("🏙️ SDO Location Options Fetch Failed:", res.status);
             }
         } catch (err) {
             console.error('Failed to fetch location options:', err);
@@ -454,7 +458,7 @@ const SchoolManagement = () => {
 
                 const params = new URLSearchParams({
                     region: userData.region,
-                    division: userData.division.replace(/^SDO\s+/i, '').trim(),
+                    division: userData.division.trim(),
                     province: filters.province || '',
                     municipality: filters.municipality || '',
                     district: filters.district || '',
@@ -802,7 +806,7 @@ const SchoolManagement = () => {
                         <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl p-8 space-y-6">
                             <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-6">Register Converted School</h2>
                             <p className="text-slate-600 dark:text-slate-300 mb-6">
-                                Enter the 6-digit School ID to search the Master List and autofill the registration form.
+                                Enter the current school ID of the school that you would like to convert
                             </p>
 
                             <div className="flex flex-col md:flex-row gap-4 items-end">

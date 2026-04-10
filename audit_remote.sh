@@ -85,6 +85,13 @@ run_audit() {
         # Flush PM2 logs
         pm2 flush 2>/dev/null
         log WARN "PM2 logs flushed (disk emergency)"
+        # Prune Hydra Temp
+        if [ -d /tmp/insighted-pdf-tmp ]; then
+            sudo find /tmp/insighted-pdf-tmp -type f -mmin +60 -delete 2>/dev/null
+            log WARN "Hydra temporary shards pruned (disk emergency)"
+        fi
+        # Cleanup orphaned buffers
+        sudo find /tmp -maxdepth 1 -name "bin_*" -mmin +60 -delete 2>/dev/null
     elif [ "$DISK_USED" -ge 90 ]; then
         log WARN "WARNING — $DISK_MSG"
     else

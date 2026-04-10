@@ -154,6 +154,24 @@ fi
 # Clear old deployment artifacts
 find "$STAGING_DIR" -name "*-deploy.tmp.tar.gz" -type f -delete
 ok "Cleanup of temporary deployment archives complete."
+
+# [Senior-Dev Harden] Periodic Pruning of Hydra Scratch & Buffers
+if [ -d "$TEMP_DIR" ]; then
+    info "Pruning old Hydra shards (>120m) in $TEMP_DIR..."
+    find "$TEMP_DIR" -type f -mmin +120 -delete 2>/dev/null
+    ok "Hydra scratch space pruned."
+fi
+
+info "Pruning orphaned PDF buffers in /tmp (>120m)..."
+find /tmp -maxdepth 1 -name "bin_*" -mmin +120 -delete 2>/dev/null
+ok "Orphaned buffers in /tmp pruned."
+
+# [Senior-Dev Harden] Repository Hygiene (Remove .git from staging)
+if [ -d "${STAGING_DIR}/.git" ]; then
+    warn ".git folder detected in staging — removing to reclaim space."
+    rm -rf "${STAGING_DIR}/.git"
+    ok ".git removed from $STAGING_DIR"
+fi
 # =============================================================================
 echo ""
 echo -e "${CYAN}[Phase 3] Python & PyMuPDF Dependency Check${NC}"
@@ -241,34 +259,6 @@ if [ "$NEEDS_DEPLOY" = true ]; then
     fi
 else
     ok "Nginx config is fully compliant — no changes needed."
-fi
-
-# =============================================================================
-# PHASE 5: Database Schema Patch
-# =============================================================================
-echo ""
-echo -e "${CYAN}[Phase 5] Database Schema Patch${NC}"
-
-PSQL_BIN=$(find_tool psql)
-if [ -n "$PSQL_BIN" ]; then
-    # Attempt to patch — requires DATABASE_URL or PGPASSWORD to be set in env
-    if [ -f "${STAGING_DIR}/.env" ]; then
-        DB_URL=$(grep "^DATABASE_URL=" "${STAGING_DIR}/.env" | cut -d'=' -f2- | tr -d '"')
-        if [ -n "$DB_URL" ]; then
-            info "Running schema patch against: $(echo "$DB_URL" | sed 's/:\/\/[^:]*:[^@]*@/:\/\/***:***@/')"
-            "$PSQL_BIN" "$DB_URL" -c "ALTER TABLE school_ownership_docs ADD COLUMN IF NOT EXISTS school_id VARCHAR(20);" 2>&1 \
-                && ok "school_ownership_docs.school_id column ensured." \
-                || warn "Schema patch failed or table does not exist yet (non-fatal)."
-        else
-            warn "DATABASE_URL not found in .env — skipping schema patch. Run manually:"
-            echo "  psql \$DATABASE_URL -c \"ALTER TABLE school_ownership_docs ADD COLUMN IF NOT EXISTS school_id VARCHAR(20);\""
-        fi
-    else
-        warn ".env not found at ${STAGING_DIR}/.env — skipping schema patch."
-    fi
-else
-    warn "psql not found on PATH — skipping schema patch. Run manually:"
-    echo "  psql \$DATABASE_URL -c \"ALTER TABLE school_ownership_docs ADD COLUMN IF NOT EXISTS school_id VARCHAR(20);\""
 fi
 
 # =============================================================================

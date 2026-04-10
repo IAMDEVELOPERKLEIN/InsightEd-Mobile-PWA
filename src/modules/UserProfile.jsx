@@ -202,7 +202,20 @@ const UserProfile = () => {
         };
 
         syncUserData();
-    }, [user, user?.uid, authLoading]); // Removed getDashboardPath as it's now stable outside
+    }, [user, user?.uid, authLoading]); 
+
+    // --- SCROLL LOCK FOR OPTIMIZE MODALS ---
+    useEffect(() => {
+        if (showOptimizeConfirm || showOptimizeSuccess) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'auto';
+        }
+        
+        return () => {
+            document.body.style.overflow = 'auto';
+        };
+    }, [showOptimizeConfirm, showOptimizeSuccess]);
 
 
     // --- HANDLERS ---
@@ -1041,9 +1054,8 @@ const UserProfile = () => {
 
                 {/* Optimize App — Confirm Modal */}
                 {showOptimizeConfirm && (
-                    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-t-3xl sm:rounded-3xl shadow-2xl p-6 pb-10 sm:pb-6 animate-in slide-in-from-bottom-10 duration-500">
-                            <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-6 sm:hidden" />
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-3xl shadow-2xl p-6 pb-6 animate-in zoom-in-95 duration-500">
 
                             {/* Icon */}
                             <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center mx-auto mb-5">

@@ -269,7 +269,7 @@ const Register = () => {
                 .then(res => res.json())
                 .then(data => {
                     const options = data || [];
-                    if (selectedRegion === 'Blank Region' && !options.includes('Blank Division')) options.unshift('Blank Division');
+                    if (selectedRegion === 'BLANK REGION' && !options.includes('BLANK DIVISION')) options.unshift('BLANK DIVISION');
                     setDivisions(options);
                 })
                 .catch(console.error);
@@ -284,7 +284,7 @@ const Register = () => {
                 .then(res => res.json())
                 .then(data => {
                     const options = data || [];
-                    if (selectedDivision === 'Blank Division' && !options.includes('Blank District')) options.unshift('Blank District');
+                    if (selectedDivision === 'BLANK DIVISION' && !options.includes('BLANK DISTRICT')) options.unshift('BLANK DISTRICT');
                     setDistricts(options);
                 })
                 .catch(console.error);
@@ -299,7 +299,7 @@ const Register = () => {
                 .then(res => res.json())
                 .then(data => {
                     const options = data || [];
-                    if (selectedDistrict === 'Blank District' && !options.includes('Blank Municipality')) options.unshift('Blank Municipality');
+                    if (selectedDistrict === 'BLANK DISTRICT' && !options.includes('BLANK MUNICIPALITY')) options.unshift('BLANK MUNICIPALITY');
                     setMunicipalities(options);
                 })
                 .catch(console.error);
@@ -314,16 +314,16 @@ const Register = () => {
                 .then(res => res.json())
                 .then(data => {
                     const options = data || [];
-                    if (selectedMunicipality === 'Blank Municipality' && !options.some(s => s.school_id === '000000')) {
+                    if (selectedMunicipality === 'BLANK MUNICIPALITY' && !options.some(s => s.school_id === '000000')) {
                         options.unshift({ 
                             school_id: '000000', 
-                            school_name: 'Blank School',
-                            region: 'Blank Region',
-                            division: 'Blank Division',
-                            district: 'Blank District',
-                            municipality: 'Blank Municipality',
-                            province: 'Blank Province',
-                            barangay: 'Blank Barangay',
+                            school_name: 'BLANK SCHOOL',
+                            region: 'BLANK REGION',
+                            division: 'BLANK DIVISION',
+                            district: 'BLANK DISTRICT',
+                            municipality: 'BLANK MUNICIPALITY',
+                            province: 'BLANK PROVINCE',
+                            barangay: 'BLANK BARANGAY',
                             latitude: 0,
                             longitude: 0
                         });
@@ -497,7 +497,7 @@ const Register = () => {
                 .then(r => r.json())
                 .then(data => {
                     const options = data || [];
-                    if (region === 'Blank Region' && !options.includes('Blank Province')) options.unshift('Blank Province');
+                    if (region === 'BLANK REGION' && !options.includes('BLANK PROVINCE')) options.unshift('BLANK PROVINCE');
                     setProvinceOptions(options);
                 })
                 .catch(() => setProvinceOptions([]));
@@ -521,7 +521,7 @@ const Register = () => {
                 .then(r => r.json())
                 .then(data => {
                     const options = data || [];
-                    if (province === 'Blank Province' && !options.includes('Blank Municipality')) options.unshift('Blank Municipality');
+                    if (province === 'BLANK PROVINCE' && !options.includes('BLANK MUNICIPALITY')) options.unshift('BLANK MUNICIPALITY');
                     setCityOptions(options);
                 })
                 .catch(() => setCityOptions([]));
@@ -544,7 +544,7 @@ const Register = () => {
                 .then(r => r.json())
                 .then(data => {
                     const options = data || [];
-                    if (city === 'Blank Municipality' && !options.includes('Blank Barangay')) options.unshift('Blank Barangay');
+                    if (city === 'BLANK MUNICIPALITY' && !options.includes('BLANK BARANGAY')) options.unshift('BLANK BARANGAY');
                     setBarangayOptions(options);
                 })
                 .catch(() => setBarangayOptions([]));

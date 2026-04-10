@@ -13,6 +13,20 @@ const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..', '..');
 const SCRIPT_PATH = path.resolve(process.cwd(), 'compress_pdf.py');
 
+/**
+ * Robust cleanup helper for temporary files.
+ * @param {string} filePath 
+ */
+function safeUnlink(filePath) {
+    if (filePath && fs.existsSync(filePath)) {
+        try {
+            fs.unlinkSync(filePath);
+        } catch (err) {
+            console.error(`⚠️ [BinaryPipeline] Cleanup failed for ${filePath}:`, err.message);
+        }
+    }
+}
+
 const WEBP_MAX_WIDTH = 1200;
 const WEBP_QUALITY = 65;
 
@@ -77,8 +91,8 @@ export async function compressPDF(inputBuffer) {
         console.error('[BinaryPipeline] PDF compression logic error:', err.message);
         return inputBuffer;
     } finally {
-        if (fs.existsSync(tempIn)) try { fs.unlinkSync(tempIn); } catch (e) {}
-        if (fs.existsSync(tempOut)) try { fs.unlinkSync(tempOut); } catch (e) {}
+        safeUnlink(tempIn);
+        safeUnlink(tempOut);
     }
 }
 

@@ -466,3 +466,48 @@ export async function deleteOfflineFile(id) {
     const db = await initDB();
     return db.delete(OFFLINE_FILES_STORE, id);
 }
+
+/**
+ * Migrates all local drafts and outbox entries from one school ID to another.
+ * Used during Identity Shift in Unit 1.
+ */
+export async function migrateUnitDrafts(oldSchoolId, newSchoolId) {
+    const db = await initDB();
+    const tx = db.transaction([UNIT_DRAFTS_STORE, MODULAR_OUTBOX_STORE], 'readwrite');
+    
+    // 1. Migrate Unit Drafts
+    const draftsStore = tx.objectStore(UNIT_DRAFTS_STORE);
+    const allDrafts = await draftsStore.getAll();
+    for (const entry of allDrafts) {
+        if (String(entry.schoolId) === String(oldSchoolId)) {
+            // Create new entry
+            const newId = `unit_${entry.unitId}_school_${newSchoolId}`;
+            await draftsStore.put({
+                ...entry,
+                id: newId,
+                schoolId: newSchoolId
+            });
+            // Delete old entry
+            await draftsStore.delete(entry.id);
+        }
+    }
+
+    // 2. Migrate Modular Outbox
+    const outboxStore = tx.objectStore(MODULAR_OUTBOX_STORE);
+    const allOutbox = await outboxStore.getAll();
+    for (const entry of allOutbox) {
+        if (String(entry.schoolId) === String(oldSchoolId)) {
+            await outboxStore.put({
+                ...entry,
+                schoolId: newSchoolId,
+                payload: {
+                    ...entry.payload,
+                    school_id: newSchoolId
+                }
+            });
+        }
+    }
+
+    await tx.done;
+    console.log(`✅ [DB] Successfully migrated local data from ${oldSchoolId} to ${newSchoolId}`);
+}
