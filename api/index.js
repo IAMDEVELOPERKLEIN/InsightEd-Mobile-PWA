@@ -10062,13 +10062,17 @@ app.post('/api/projects/realign', async (req, res) => {
 
     // 1. Get source project current data
     const sourceRes = await client.query('SELECT * FROM engineer_form WHERE project_id = $1', [sourceProjectId]);
-    const sourceData = sourceRes.rows[0];
+    let sourceData = sourceRes.rows[0];
 
     // 2. Get target project latest data
     const targetRes = await client.query('SELECT * FROM engineer_form WHERE ipc = $1 ORDER BY project_id DESC LIMIT 1', [targetIpc]);
-    const targetData = targetRes.rows[0];
+    let targetData = targetRes.rows[0];
 
     if (!sourceData || !targetData) throw new Error("Source or Target project not found");
+
+    // Normalize categories during realignment to prevent propagation of messy data
+    if (sourceData.project_category) sourceData.project_category = normalizeProjectCategory(sourceData.project_category);
+    if (targetData.project_category) targetData.project_category = normalizeProjectCategory(targetData.project_category);
 
     const amount = sourceData.approved_budget_for_contract;
     const sourceRemarks = `Realignment: Full allocation of ₱${Number(amount).toLocaleString()} transferred to ${targetData.school_name}.`;
@@ -16169,6 +16173,9 @@ app.put('/api/lgu/update-project/:id', async (req, res) => {
   const data = req.body;
 
   if (!id) return res.status(400).json({ error: "Project ID required" });
+
+  // Auto-normalize project category on every LGU update
+  if (data.projectCategory) data.projectCategory = normalizeProjectCategory(data.projectCategory);
 
   let client;
   let clientNew;
