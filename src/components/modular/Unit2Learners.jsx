@@ -921,12 +921,15 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         const showKinder = hasKinder && offeringHasKinder;
 
         const maleTotal = Object.entries(gradeGenderMap).reduce((s, [key, g]) => {
-            if (key === 'sned' && snedProgramType !== 'Self-Contained') return s;
+            if (key === 'sned_mainstreamed' || key === 'sned_mainstreamed_integrated') return s; // Exclude mainstreamed
+            if (key === 'sned' && snedProgramType !== 'Self-Contained') return s; // Legacy
             if (key === 'kinder' && !showKinder) return s;
             return s + (parseInt(g.male) || 0);
         }, 0);
+
         const femaleTotal = Object.entries(gradeGenderMap).reduce((s, [key, g]) => {
-            if (key === 'sned' && snedProgramType !== 'Self-Contained') return s;
+            if (key === 'sned_mainstreamed' || key === 'sned_mainstreamed_integrated') return s; // Exclude mainstreamed
+            if (key === 'sned' && snedProgramType !== 'Self-Contained') return s; // Legacy
             if (key === 'kinder' && !showKinder) return s;
             return s + (parseInt(g.female) || 0);
         }, 0);
@@ -1102,28 +1105,72 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     {/* SNED Card */}
                     {hasSNED && (
                         <div className="bg-amber-50 rounded-[2.5rem] p-1 border-2 border-amber-100 shadow-sm overflow-hidden">
-                            <div className="bg-white rounded-[2.2rem] p-6">
-                                <div className="flex items-center gap-4 mb-6">
+                            <div className="bg-white rounded-[2.2rem] p-6 space-y-6">
+                                <div className="flex items-center gap-4">
                                     <div className="w-14 h-14 rounded-[1.5rem] bg-amber-100 flex items-center justify-center text-2xl shadow-inner">🌟</div>
                                     <div>
                                         <h4 className="font-black text-slate-800">Special Education (SNED)</h4>
-                                        <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{snedProgramType || "Organized Class"}</p>
+                                        <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Learner Classification</p>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="bg-slate-50 rounded-2xl p-4 flex justify-between items-center">
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Male</span>
-                                        <span className="text-xl font-black text-blue-600">{gradeGenderMap['sned']?.male || 0}</span>
+
+                                {/* Mainstreamed Section */}
+                                {parseInt(snedMainstreamedCount) > 0 && (
+                                    <div className="space-y-3">
+                                        <div className="flex justify-between items-center px-1">
+                                            <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Mainstreamed</span>
+                                            <span className="text-[9px] font-bold text-slate-400 italic">Excluded from Grand Total</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="bg-blue-50/50 rounded-2xl p-4 flex justify-between items-center text-blue-900">
+                                                <span className="text-[9px] font-black uppercase">Male</span>
+                                                <span className="text-lg font-black">{gradeGenderMap['sned_mainstreamed']?.male || 0}</span>
+                                            </div>
+                                            <div className="bg-rose-50/50 rounded-2xl p-4 flex justify-between items-center text-rose-900">
+                                                <span className="text-[9px] font-black uppercase">Female</span>
+                                                <span className="text-lg font-black">{gradeGenderMap['sned_mainstreamed']?.female || 0}</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="bg-slate-50 rounded-2xl p-4 flex justify-between items-center">
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Female</span>
-                                        <span className="text-xl font-black text-rose-600">{gradeGenderMap['sned']?.female || 0}</span>
+                                )}
+
+                                {/* Self-Contained Section */}
+                                {parseInt(snedSelfContainedCount) > 0 && (
+                                    <div className="space-y-3 border-t border-slate-50 pt-4">
+                                        <div className="flex justify-between items-center px-1">
+                                            <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Self-Contained</span>
+                                            <span className="text-[9px] font-bold text-slate-400 italic">Included in Grand Total</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="bg-blue-50/50 rounded-2xl p-4 flex justify-between items-center text-blue-900">
+                                                <span className="text-[9px] font-black uppercase">Male</span>
+                                                <span className="text-lg font-black">{gradeGenderMap['sned_self_contained']?.male || 0}</span>
+                                            </div>
+                                            <div className="bg-rose-50/50 rounded-2xl p-4 flex justify-between items-center text-rose-900">
+                                                <span className="text-[9px] font-black uppercase">Female</span>
+                                                <span className="text-lg font-black">{gradeGenderMap['sned_self_contained']?.female || 0}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-between items-center px-2 pt-2">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Organized Classes</span>
+                                            <span className="font-black text-slate-800">{snedOrganizedClassCount || 0}</span>
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center px-2">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Organized Classes</span>
-                                    <span className="font-black text-slate-800">{snedOrganizedClassCount || 0}</span>
-                                </div>
+                                )}
+
+                                {/* Legacy Support (In case data was saved with 'sned' key) */}
+                                {!parseInt(snedMainstreamedCount) && !parseInt(snedSelfContainedCount) && gradeGenderMap['sned'] && (
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="bg-slate-50 rounded-2xl p-4 flex justify-between items-center">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Male</span>
+                                            <span className="text-xl font-black text-blue-600">{gradeGenderMap['sned']?.male || 0}</span>
+                                        </div>
+                                        <div className="bg-slate-50 rounded-2xl p-4 flex justify-between items-center">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Female</span>
+                                            <span className="text-xl font-black text-rose-600">{gradeGenderMap['sned']?.female || 0}</span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
@@ -2134,7 +2181,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                         </thead>
                                         <tbody className="divide-y divide-slate-50">
                                             {/* Kindergarten */}
-                                            {gradeAvailability.kinder !== false && (
+                                            {hasKinder && gradeAvailability.kinder !== false && (
                                                 <tr className="hover:bg-slate-50/50 transition-colors">
                                                     <td className="px-6 py-5">
                                                         <span className="text-sm font-black text-slate-700">Kindergarten</span>
@@ -2177,7 +2224,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             ))}
 
                                             {/* SNED Mainstreamed */}
-                                            {hasSNED === true && parseInt(snedMainstreamedCount) > 0 && (
+                                            {hasSNED && parseInt(snedMainstreamedCount) > 0 && (
                                                 <tr className="hover:bg-slate-50/50 transition-colors border-l-4 border-l-blue-400">
                                                     <td className="px-6 py-5">
                                                         <div className="flex flex-col">
@@ -2192,7 +2239,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             )}
 
                                             {/* SNED Self-Contained */}
-                                            {hasSNED === true && parseInt(snedSelfContainedCount) > 0 && (
+                                            {hasSNED && parseInt(snedSelfContainedCount) > 0 && (
                                                 <tr className="hover:bg-slate-50/50 transition-colors border-l-4 border-l-indigo-500">
                                                     <td className="px-6 py-5">
                                                         <div className="flex flex-col">
@@ -2211,18 +2258,18 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 <td className="px-6 py-6 text-sm font-black uppercase tracking-widest">Grand Total Learners</td>
                                                 <td className="px-6 py-6 text-center text-xl font-black text-blue-300">
                                                     {[
-                                                        parseInt(gradeGenderMap['kinder']?.male) || 0,
+                                                        (hasKinder ? (parseInt(gradeGenderMap['kinder']?.male) || 0) : 0),
                                                         ...mgCombinations.flatMap(c => c.grades.map(lvl => parseInt(gradeGenderMap[lvl]?.male) || 0)),
                                                         ...activeMonogrades.map(g => parseInt(gradeGenderMap[g.id]?.male) || 0),
-                                                        (hasSNED === true) ? (parseInt(gradeGenderMap['sned_self_contained']?.male) || 0) : 0
+                                                        (hasSNED) ? (parseInt(gradeGenderMap['sned_self_contained']?.male) || 0) : 0
                                                     ].reduce((a, b) => a + b, 0)}
                                                 </td>
                                                 <td className="px-6 py-6 text-center text-xl font-black text-rose-300">
                                                     {[
-                                                        parseInt(gradeGenderMap['kinder']?.female) || 0,
+                                                        (hasKinder ? (parseInt(gradeGenderMap['kinder']?.female) || 0) : 0),
                                                         ...mgCombinations.flatMap(c => c.grades.map(lvl => parseInt(gradeGenderMap[lvl]?.female) || 0)),
                                                         ...activeMonogrades.map(g => parseInt(gradeGenderMap[g.id]?.female) || 0),
-                                                        (hasSNED === true) ? (parseInt(gradeGenderMap['sned_self_contained']?.female) || 0) : 0
+                                                        (hasSNED) ? (parseInt(gradeGenderMap['sned_self_contained']?.female) || 0) : 0
                                                     ].reduce((a, b) => a + b, 0)}
                                                 </td>
                                                 <td className="px-6 py-6 text-center text-3xl font-black text-indigo-400">

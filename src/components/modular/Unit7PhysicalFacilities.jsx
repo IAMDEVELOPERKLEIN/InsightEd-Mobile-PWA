@@ -150,6 +150,8 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
     });
     const [isBuildingDropdownOpen, setIsBuildingDropdownOpen] = useState(false);
     const [buildingSearch, setBuildingSearch] = useState("");
+    const [expandedBuildings, setExpandedBuildings] = useState({});
+    const [expandedRepairBuildings, setExpandedRepairBuildings] = useState({});
 
     // Teacher selection for advisory
     const [teachers, setTeachers] = useState([]);
@@ -211,8 +213,6 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
     // Integrated Rooms State
     const [roomsData, setRoomsData] = useState([]);
-    const [roomsPage, setRoomsPage] = useState(1);
-    const roomsPerPage = 10;
 
     const [editingBuildingId, setEditingBuildingId] = useState(null);
     const [editingRepairRoomId, setEditingRepairRoomId] = useState(null);
@@ -1716,6 +1716,37 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                     </div>
                                 )}
 
+                                {roomsData.length > 0 && (
+                                    <div className="flex justify-between items-center px-2 mb-4">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-1.5 h-4 bg-indigo-500 rounded-full" />
+                                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{buildings.length} Buildings Registered</span>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button 
+                                                onClick={() => {
+                                                    const newState = {};
+                                                    buildings.forEach(b => newState[b.id] = true);
+                                                    setExpandedBuildings(newState);
+                                                }}
+                                                className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg uppercase tracking-widest hover:bg-indigo-100 transition-colors"
+                                            >
+                                                Expand All
+                                            </button>
+                                            <button 
+                                                onClick={() => {
+                                                    const newState = {};
+                                                    buildings.forEach(b => newState[b.id] = false);
+                                                    setExpandedBuildings(newState);
+                                                }}
+                                                className="text-[10px] font-black text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg uppercase tracking-widest hover:bg-slate-200 transition-colors"
+                                            >
+                                                Collapse All
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {(() => {
                                     const nameCounts = {};
                                     roomsData.forEach(r => {
@@ -1726,219 +1757,251 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                         Object.keys(nameCounts).filter(k => nameCounts[k] > 1)
                                     );
 
-                                    return roomsData.slice((roomsPage - 1) * roomsPerPage, roomsPage * roomsPerPage).map((room) => {
-                                        const building = allBuildings.find(b => b.id === room.building_local_id);
-                                        const isDuplicate = duplicateNames.has((room.room_name || "").trim().toLowerCase());
-                                        const isBuildingCondemned = building?.status === "For Condemnation" || building?.status === "Condemned";
-
+                                    return buildings.map((building) => {
+                                        const buildingRooms = roomsData.filter(r => r.building_local_id === building.id);
+                                        if (buildingRooms.length === 0) return null;
+                                        
+                                        const isExpanded = expandedBuildings[building.id] !== false; // Default to expanded
+                                        
                                         return (
-                                            <div key={room.id} className={`bg-white p-6 rounded-3xl shadow-sm border-2 ${isDuplicate ? 'border-rose-200 shadow-rose-50' : isBuildingCondemned ? 'border-amber-200 bg-amber-50/20 shadow-amber-50' : room.is_in_use === false ? 'border-slate-100 opacity-60 bg-slate-50/10' : 'border-gray-100'}`}>
-                                                <div className="flex justify-between items-start mb-4">
-                                                    <div className="flex-1 mr-4">
-                                                        <input
-                                                            type="text"
-                                                            value={room.room_name}
-                                                            onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, room_name: e.target.value } : r))}
-                                                            className={`font-black text-xl ${isDuplicate ? 'text-rose-600' : 'text-gray-800'} bg-transparent border-b-2 border-dashed ${isDuplicate ? 'border-rose-300' : 'border-gray-200'} focus:border-indigo-500 outline-none w-full`}
-                                                        />
-                                                        {isDuplicate && (
-                                                            <p className="text-rose-500 text-[10px] font-black uppercase mt-1 flex items-center gap-1">
-                                                                <FiAlertTriangle /> Duplicate Room Name
-                                                            </p>
-                                                        )}
-                                                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{building?.building_name || building?.building_no || 'N/A'}</p>
-                                                        {isBuildingCondemned && (
-                                                            <p className="text-[10px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md uppercase tracking-widest inline-flex items-center gap-1 mt-2 border border-rose-100">
-                                                                <FiAlertTriangle className="w-3 h-3" /> Building Condemned
-                                                            </p>
-                                                        )}
+                                            <div key={building.id} className="space-y-4 mb-6">
+                                                {/* Building Header Toggle */}
+                                                <button 
+                                                    onClick={() => setExpandedBuildings(prev => ({ ...prev, [building.id]: !isExpanded }))}
+                                                    className={`w-full flex items-center justify-between p-5 bg-white rounded-[2rem] border-2 transition-all group ${isExpanded ? 'border-indigo-100 shadow-sm' : 'border-gray-100 hover:border-indigo-200'}`}
+                                                >
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${isExpanded ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-50 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-500'}`}>
+                                                            <FiChevronDown className={`w-6 h-6 transition-transform duration-500 ${isExpanded ? '' : '-rotate-90'}`} />
+                                                        </div>
+                                                        <div className="text-left">
+                                                            <h3 className="font-black text-lg text-gray-800 uppercase tracking-tight leading-none mb-1">{building.building_name}</h3>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] font-black text-indigo-500 bg-indigo-50/50 px-2 py-0.5 rounded-md uppercase tracking-widest">{buildingRooms.length} {buildingRooms.length === 1 ? 'Room' : 'Rooms'}</span>
+                                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">• {building.category}</span>
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${room.condition === 'Repair' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                                                            {room.condition}
-                                                        </span>
-                                                        <button onClick={() => handleDeleteRoom(room.id)} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="Delete Room">
-                                                            <FiTrash2 className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
-                                                </div>
+                                                    <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border hidden sm:block ${
+                                                        building.status === 'Newly Built' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 
+                                                        building.status === 'Good Condition' ? 'bg-blue-50 border-blue-100 text-blue-600' : 
+                                                        'bg-rose-50 border-rose-100 text-rose-600'
+                                                    }`}>
+                                                        {building.status}
+                                                    </span>
+                                                </button>
 
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                    <div>
-                                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Dimensions</label>
-                                                        <select
-                                                            value={room.dimensions}
-                                                            onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, dimensions: e.target.value } : r))}
-                                                            className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
+                                                {/* Rooms Container */}
+                                                <AnimatePresence initial={false}>
+                                                    {isExpanded && (
+                                                        <motion.div 
+                                                            initial={{ height: 0, opacity: 0 }}
+                                                            animate={{ height: "auto", opacity: 1 }}
+                                                            exit={{ height: 0, opacity: 0 }}
+                                                            transition={{ duration: 0.4, ease: [0.04, 0.62, 0.23, 0.98] }}
+                                                            className="overflow-hidden"
                                                         >
-                                                            <option value="Less than 7x9">Less than 7x9</option>
-                                                            <option value="7x9">7x9</option>
-                                                            <option value="Above 7x9">Above 7x9</option>
-                                                        </select>
-                                                    </div>
+                                                            <div className="space-y-4 pl-4 border-l-2 border-indigo-100/50 ml-5 py-2">
+                                                                {buildingRooms.map((room) => {
+                                                                    const isDuplicate = duplicateNames.has((room.room_name || "").trim().toLowerCase());
+                                                                    const isBuildingCondemned = building?.status === "For Condemnation" || building?.status === "Condemned";
 
-                                                    {!isBuildingCondemned && (
-                                                        <div>
-                                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Condition</label>
-                                                            <select
-                                                                value={room.condition}
-                                                                onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, condition: e.target.value } : r))}
-                                                                className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
-                                                            >
-                                                                <option value="Newly Built">Newly Built</option>
-                                                                <option value="Good Condition">Good Condition</option>
-                                                                <option value="Repair">Repair</option>
-                                                            </select>
-                                                        </div>
+                                                                    return (
+                                                                        <motion.div 
+                                                                            key={room.id}
+                                                                            initial={{ x: -20, opacity: 0 }}
+                                                                            animate={{ x: 0, opacity: 1 }}
+                                                                            className={`bg-white p-6 rounded-[2.5rem] shadow-sm border-2 ${isDuplicate ? 'border-rose-200 shadow-rose-50' : isBuildingCondemned ? 'border-amber-200 bg-amber-50/20 shadow-amber-50' : room.is_in_use === false ? 'border-slate-100 opacity-60 bg-slate-50/10' : 'border-gray-100'}`}
+                                                                        >
+                                                                            <div className="flex justify-between items-start mb-4">
+                                                                                <div className="flex-1 mr-4">
+                                                                                    <input
+                                                                                        type="text"
+                                                                                        value={room.room_name}
+                                                                                        onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, room_name: e.target.value } : r))}
+                                                                                        className={`font-black text-xl ${isDuplicate ? 'text-rose-600' : 'text-gray-800'} bg-transparent border-b-2 border-dashed ${isDuplicate ? 'border-rose-300' : 'border-gray-200'} focus:border-indigo-500 outline-none w-full`}
+                                                                                    />
+                                                                                    {isDuplicate && (
+                                                                                        <p className="text-rose-500 text-[10px] font-black uppercase mt-1 flex items-center gap-1">
+                                                                                            <FiAlertTriangle /> Duplicate Room Name
+                                                                                        </p>
+                                                                                    )}
+                                                                                    {isBuildingCondemned && (
+                                                                                        <p className="text-[10px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md uppercase tracking-widest inline-flex items-center gap-1 mt-2 border border-rose-100">
+                                                                                            <FiAlertTriangle className="w-3 h-3" /> Building Condemned
+                                                                                        </p>
+                                                                                    )}
+                                                                                </div>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${room.condition === 'Repair' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                                                        {room.condition}
+                                                                                    </span>
+                                                                                    <button onClick={() => handleDeleteRoom(room.id)} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="Delete Room">
+                                                                                        <FiTrash2 className="w-4 h-4" />
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+
+                                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                                <div>
+                                                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Dimensions</label>
+                                                                                    <select
+                                                                                        value={room.dimensions}
+                                                                                        onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, dimensions: e.target.value } : r))}
+                                                                                        className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
+                                                                                    >
+                                                                                        <option value="Less than 7x9">Less than 7x9</option>
+                                                                                        <option value="7x9">7x9</option>
+                                                                                        <option value="Above 7x9">Above 7x9</option>
+                                                                                    </select>
+                                                                                </div>
+
+                                                                                {!isBuildingCondemned && (
+                                                                                    <div>
+                                                                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Condition</label>
+                                                                                        <select
+                                                                                            value={room.condition}
+                                                                                            onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, condition: e.target.value } : r))}
+                                                                                            className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
+                                                                                        >
+                                                                                            <option value="Newly Built">Newly Built</option>
+                                                                                            <option value="Good Condition">Good Condition</option>
+                                                                                            <option value="Repair">Repair</option>
+                                                                                        </select>
+                                                                                    </div>
+                                                                                )}
+
+                                                                                <div className="md:col-span-2">
+                                                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Grade Level(s)</label>
+                                                                                    <div className="space-y-3">
+                                                                                        <div className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-3 py-2 min-h-[44px] flex flex-wrap gap-1.5 focus-within:border-indigo-500 transition-all cursor-pointer">
+                                                                                            {parseGradeLevel(room.grade_level).map(g => (
+                                                                                                <span key={g} className="bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 group-hover:bg-indigo-700 transition-colors">
+                                                                                                    {g}
+                                                                                                    <FiX
+                                                                                                        className="cursor-pointer hover:text-rose-300"
+                                                                                                        onClick={(e) => {
+                                                                                                            e.stopPropagation();
+                                                                                                            const currentGrades = parseGradeLevel(room.grade_level);
+                                                                                                            const newGrades = currentGrades.filter(x => x !== g);
+                                                                                                            setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: newGrades.join(';') } : r));
+                                                                                                        }}
+                                                                                                    />
+                                                                                                </span>
+                                                                                            ))}
+                                                                                            {!(room.grade_level || "") && <span className="text-gray-400 text-sm font-medium py-0.5">Select Grade Levels</span>}
+                                                                                        </div>
+
+                                                                                        <div className="mt-2 flex flex-wrap gap-2">
+                                                                                            {availableGrades.length > 0 ? (
+                                                                                                availableGrades.map(g => {
+                                                                                                    const isSelected = parseGradeLevel(room.grade_level).includes(g.label);
+                                                                                                    return (
+                                                                                                        <button
+                                                                                                            key={g.id}
+                                                                                                            type="button"
+                                                                                                            onClick={() => {
+                                                                                                                const currentGrades = parseGradeLevel(room.grade_level);
+                                                                                                                let newGrades;
+                                                                                                                if (isSelected) {
+                                                                                                                    newGrades = currentGrades.filter(x => x !== g.label);
+                                                                                                                } else {
+                                                                                                                    newGrades = [...new Set([...currentGrades, g.label])];
+                                                                                                                }
+                                                                                                                const joined = newGrades.join(';');
+                                                                                                                logGradeState(room.id, joined);
+                                                                                                                setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: joined } : r));
+                                                                                                            }}
+                                                                                                            className={`text-[10px] font-black px-3 py-1.5 rounded-lg border-2 transition-all ${isSelected
+                                                                                                                    ? "bg-indigo-50 border-indigo-500 text-indigo-700 shadow-sm"
+                                                                                                                    : "bg-white border-gray-100 text-gray-500 hover:border-indigo-200"
+                                                                                                                }`}
+                                                                                                        >
+                                                                                                            {g.label}
+                                                                                                        </button>
+                                                                                                    );
+                                                                                                })
+                                                                                            ) : (
+                                                                                                <p className="text-[10px] font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-100 italic">
+                                                                                                    ⚠️ No audited grades found in Unit 7
+                                                                                                </p>
+                                                                                            )}
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                onClick={() => {
+                                                                                                    const isSelected = parseGradeLevel(room.grade_level).includes("Non-Instructional");
+                                                                                                    const currentGrades = parseGradeLevel(room.grade_level);
+                                                                                                    let newGrades;
+                                                                                                    if (isSelected) {
+                                                                                                        newGrades = currentGrades.filter(x => x !== "Non-Instructional");
+                                                                                                    } else {
+                                                                                                        newGrades = [...new Set([...currentGrades, "Non-Instructional"])];
+                                                                                                    }
+                                                                                                    const joined = newGrades.join(';');
+                                                                                                    logGradeState(room.id, joined);
+                                                                                                    setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: joined } : r));
+                                                                                                }}
+                                                                                                className={`text-[10px] font-black px-3 py-1.5 rounded-lg border-2 transition-all ${parseGradeLevel(room.grade_level).includes("Non-Instructional")
+                                                                                                        ? "bg-slate-100 border-slate-500 text-slate-700 shadow-sm"
+                                                                                                        : "bg-white border-gray-100 text-gray-400 hover:border-slate-200"
+                                                                                                    }`}
+                                                                                            >
+                                                                                                Non-Instructional
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+
+                                                                                {!isBuildingCondemned && (
+                                                                                    <div>
+                                                                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Total Seats</label>
+                                                                                        <input
+                                                                                            type="text"
+                                                                                            inputMode="numeric"
+                                                                                            value={room.seats || ""}
+                                                                                            onChange={(e) => {
+                                                                                                const val = e.target.value.replace(/[^0-9]/g, '');
+                                                                                                setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, seats: val } : r));
+                                                                                            }}
+                                                                                            placeholder="0"
+                                                                                            className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
+                                                                                        />
+                                                                                    </div>
+                                                                                )}
+
+                                                                                {/* In Use / Not Used Toggle */}
+                                                                                <div className="md:col-span-2 pt-4 border-t-2 border-dashed border-gray-100 flex items-center justify-between mt-2">
+                                                                                    <div className="flex items-center gap-3">
+                                                                                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg shadow-sm ${room.is_in_use !== false ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'}`}>
+                                                                                            {room.is_in_use !== false ? '✅' : '🚫'}
+                                                                                        </div>
+                                                                                        <div>
+                                                                                            <p className={`font-black text-[11px] uppercase tracking-wider ${room.is_in_use !== false ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                                                                                {room.is_in_use !== false ? 'Currently In Use' : 'Not Currently In Use'}
+                                                                                            </p>
+                                                                                            <p className="text-[9px] font-bold text-gray-400 mt-0.5">Instructional Space Status</p>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, is_in_use: !(r.is_in_use !== false) } : r))}
+                                                                                        className={`relative w-12 h-6 rounded-full transition-all duration-500 ease-out outline-none ${room.is_in_use !== false ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                                                                                    >
+                                                                                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-500 ease-out shadow-sm ${room.is_in_use !== false ? 'left-7' : 'left-1'}`} />
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                        </motion.div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </motion.div>
                                                     )}
-
-                                                    <div className="md:col-span-2">
-                                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Grade Level(s)</label>
-                                                        <div className="space-y-3">
-                                                            <div className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-3 py-2 min-h-[44px] flex flex-wrap gap-1.5 focus-within:border-indigo-500 transition-all cursor-pointer">
-                                                                {parseGradeLevel(room.grade_level).map(g => (
-                                                                    <span key={g} className="bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 group-hover:bg-indigo-700 transition-colors">
-                                                                        {g}
-                                                                        <FiX
-                                                                            className="cursor-pointer hover:text-rose-300"
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                const currentGrades = parseGradeLevel(room.grade_level);
-                                                                                const newGrades = currentGrades.filter(x => x !== g);
-                                                                                setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: newGrades.join(';') } : r));
-                                                                            }}
-                                                                        />
-                                                                    </span>
-                                                                ))}
-                                                                {!(room.grade_level || "") && <span className="text-gray-400 text-sm font-medium py-0.5">Select Grade Levels</span>}
-                                                            </div>
-
-                                                            <div className="mt-2 flex flex-wrap gap-2">
-                                                                {availableGrades.length > 0 ? (
-                                                                    availableGrades.map(g => {
-                                                                        const isSelected = parseGradeLevel(room.grade_level).includes(g.label);
-                                                                        return (
-                                                                            <button
-                                                                                key={g.id}
-                                                                                type="button"
-                                                                                onClick={() => {
-                                                                                    const currentGrades = parseGradeLevel(room.grade_level);
-                                                                                    let newGrades;
-                                                                                    if (isSelected) {
-                                                                                        newGrades = currentGrades.filter(x => x !== g.label);
-                                                                                    } else {
-                                                                                        newGrades = [...new Set([...currentGrades, g.label])];
-                                                                                    }
-                                                                                    const joined = newGrades.join(';');
-                                                                                    logGradeState(room.id, joined);
-                                                                                    setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: joined } : r));
-                                                                                }}
-                                                                                className={`text-[10px] font-black px-3 py-1.5 rounded-lg border-2 transition-all ${isSelected
-                                                                                        ? "bg-indigo-50 border-indigo-500 text-indigo-700 shadow-sm"
-                                                                                        : "bg-white border-gray-100 text-gray-500 hover:border-indigo-200"
-                                                                                    }`}
-                                                                            >
-                                                                                {g.label}
-                                                                            </button>
-                                                                        );
-                                                                    })
-                                                                ) : (
-                                                                    <p className="text-[10px] font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-100 italic">
-                                                                        ⚠️ No audited grades found in Unit 7
-                                                                    </p>
-                                                                )}
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        const isSelected = parseGradeLevel(room.grade_level).includes("Non-Instructional");
-                                                                        const currentGrades = parseGradeLevel(room.grade_level);
-                                                                        let newGrades;
-                                                                        if (isSelected) {
-                                                                            newGrades = currentGrades.filter(x => x !== "Non-Instructional");
-                                                                        } else {
-                                                                            newGrades = [...new Set([...currentGrades, "Non-Instructional"])];
-                                                                        }
-                                                                        const joined = newGrades.join(';');
-                                                                        logGradeState(room.id, joined);
-                                                                        setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: joined } : r));
-                                                                    }}
-                                                                    className={`text-[10px] font-black px-3 py-1.5 rounded-lg border-2 transition-all ${parseGradeLevel(room.grade_level).includes("Non-Instructional")
-                                                                            ? "bg-slate-100 border-slate-500 text-slate-700 shadow-sm"
-                                                                            : "bg-white border-gray-100 text-gray-400 hover:border-slate-200"
-                                                                        }`}
-                                                                >
-                                                                    Non-Instructional
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    {!isBuildingCondemned && (
-                                                        <div>
-                                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Total Seats</label>
-                                                            <input
-                                                                type="text"
-                                                                inputMode="numeric"
-                                                                value={room.seats || ""}
-                                                                onChange={(e) => {
-                                                                    const val = e.target.value.replace(/[^0-9]/g, '');
-                                                                    setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, seats: val } : r));
-                                                                }}
-                                                                placeholder="0"
-                                                                className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
-                                                            />
-                                                        </div>
-                                                    )}
-
-                                                    {/* In Use / Not Used Toggle */}
-                                                    <div className="md:col-span-2 pt-4 border-t-2 border-dashed border-gray-100 flex items-center justify-between mt-2">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg shadow-sm ${room.is_in_use !== false ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'}`}>
-                                                                {room.is_in_use !== false ? '✅' : '🚫'}
-                                                            </div>
-                                                            <div>
-                                                                <p className={`font-black text-[11px] uppercase tracking-wider ${room.is_in_use !== false ? 'text-emerald-600' : 'text-slate-400'}`}>
-                                                                    {room.is_in_use !== false ? 'Currently In Use' : 'Not Currently In Use'}
-                                                                </p>
-                                                                <p className="text-[9px] font-bold text-gray-400 mt-0.5">Instructional Space Status</p>
-                                                            </div>
-                                                        </div>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, is_in_use: !(r.is_in_use !== false) } : r))}
-                                                            className={`relative w-12 h-6 rounded-full transition-all duration-500 ease-out outline-none ${room.is_in_use !== false ? 'bg-emerald-500' : 'bg-slate-200'}`}
-                                                        >
-                                                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-500 ease-out shadow-sm ${room.is_in_use !== false ? 'left-7' : 'left-1'}`} />
-                                                        </button>
-                                                    </div>
-                                                </div>
+                                                </AnimatePresence>
                                             </div>
                                         );
                                     });
                                 })()}
-
-                                {/* Pagination Controls */}
-                                {roomsData.length > roomsPerPage && (
-                                    <div className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl">
-                                        <button
-                                            onClick={() => setRoomsPage(prev => Math.max(prev - 1, 1))}
-                                            disabled={roomsPage === 1}
-                                            className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-gray-600 disabled:opacity-50"
-                                        >
-                                            <FiArrowLeft /> Previous
-                                        </button>
-                                        <span className="font-black text-gray-400 uppercase text-xs tracking-widest">
-                                            Page {roomsPage} of {Math.ceil(roomsData.length / roomsPerPage)}
-                                        </span>
-                                        <button
-                                            onClick={() => setRoomsPage(prev => Math.min(prev + 1, Math.ceil(roomsData.length / roomsPerPage)))}
-                                            disabled={roomsPage === Math.ceil(roomsData.length / roomsPerPage)}
-                                            className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-indigo-600 disabled:opacity-50"
-                                        >
-                                            Next <FiArrowRight />
-                                        </button>
-                                    </div>
-                                )}
                             </div>
                         </motion.div>
                     )}
@@ -1961,56 +2024,131 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
-                                        {roomsData.filter(r => r.condition === 'Repair').map(room => {
-                                            const building = allBuildings.find(b => b.id === room.building_local_id);
-                                            const bName = building?.building_name || building?.building_no || "";
-                                            const isAssessed = repairAssessments.some(a => a.building_name === bName && a.room_name === room.room_name);
+                                        <div className="flex justify-between items-center px-2 mb-4">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-1.5 h-4 bg-amber-500 rounded-full" />
+                                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Identify Damaged Items per Room</span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button 
+                                                    onClick={() => {
+                                                        const newState = {};
+                                                        buildings.forEach(b => newState[b.id] = true);
+                                                        setExpandedRepairBuildings(newState);
+                                                    }}
+                                                    className="text-[10px] font-black text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg uppercase tracking-widest hover:bg-amber-100 transition-colors"
+                                                >
+                                                    Expand All
+                                                </button>
+                                                <button 
+                                                    onClick={() => {
+                                                        const newState = {};
+                                                        buildings.forEach(b => newState[b.id] = false);
+                                                        setExpandedRepairBuildings(newState);
+                                                    }}
+                                                    className="text-[10px] font-black text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg uppercase tracking-widest hover:bg-slate-200 transition-colors"
+                                                >
+                                                    Collapse All
+                                                </button>
+                                            </div>
+                                        </div>
 
+                                        {buildings.map((building) => {
+                                            const repairRoomsInBuilding = roomsData.filter(r => r.building_local_id === building.id && r.condition === 'Repair');
+                                            if (repairRoomsInBuilding.length === 0) return null;
+                                            
+                                            const isExpanded = expandedRepairBuildings[building.id] !== false; // Default to expanded
+                                            
                                             return (
-                                                <div key={room.id} className="bg-white p-6 rounded-3xl shadow-sm border-2 border-gray-100">
-                                                    <div className="flex justify-between items-center">
-                                                        <div>
-                                                            <h4 className="font-black text-xl text-gray-800">{room.room_name}</h4>
-                                                            <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-widest">{bName || 'N/A'}</p>
-                                                            {isAssessed && <p className="text-xs font-black text-emerald-500 mt-2 uppercase flex items-center gap-1"><FiCheckCircle /> Assessment Recorded</p>}
+                                                <div key={building.id} className="space-y-4 mb-6">
+                                                    {/* Building Header Toggle */}
+                                                    <button 
+                                                        onClick={() => setExpandedRepairBuildings(prev => ({ ...prev, [building.id]: !isExpanded }))}
+                                                        className={`w-full flex items-center justify-between p-5 bg-white rounded-[2rem] border-2 transition-all group ${isExpanded ? 'border-amber-100 shadow-sm' : 'border-gray-100 hover:border-amber-200'}`}
+                                                    >
+                                                        <div className="flex items-center gap-4">
+                                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${isExpanded ? 'bg-amber-500 text-white shadow-lg shadow-amber-100' : 'bg-slate-50 text-slate-400 group-hover:bg-amber-50 group-hover:text-amber-500'}`}>
+                                                                <FiChevronDown className={`w-6 h-6 transition-transform duration-500 ${isExpanded ? '' : '-rotate-90'}`} />
+                                                            </div>
+                                                            <div className="text-left">
+                                                                <h3 className="font-black text-lg text-gray-800 uppercase tracking-tight leading-none mb-1">{building.building_name}</h3>
+                                                                <p className="text-[10px] font-black text-amber-600 bg-amber-50/50 px-2 py-0.5 rounded-md uppercase tracking-widest inline-block">{repairRoomsInBuilding.length} Repair {repairRoomsInBuilding.length === 1 ? 'Requirement' : 'Requirements'}</p>
+                                                            </div>
                                                         </div>
-                                                        <button
-                                                            onClick={() => {
-                                                                const bName = building?.building_name || building?.building_no || "";
-                                                                setRepairRoomFormData({
-                                                                    building_name: bName,
-                                                                    room_name: room.room_name,
-                                                                    room_length: room.room_length || 9,
-                                                                    room_width: room.room_width || 7
-                                                                });
+                                                    </button>
 
-                                                                // Populate previous assessments
-                                                                const existingItems = repairAssessments.filter(a =>
-                                                                    a.building_name === bName &&
-                                                                    a.room_name === room.room_name
-                                                                );
+                                                    {/* Rooms Container */}
+                                                    <AnimatePresence initial={false}>
+                                                        {isExpanded && (
+                                                            <motion.div 
+                                                                initial={{ height: 0, opacity: 0 }}
+                                                                animate={{ height: "auto", opacity: 1 }}
+                                                                exit={{ height: 0, opacity: 0 }}
+                                                                transition={{ duration: 0.4, ease: [0.04, 0.62, 0.23, 0.98] }}
+                                                                className="overflow-hidden"
+                                                            >
+                                                                <div className="space-y-4 pl-4 border-l-2 border-amber-100/50 ml-5 py-2">
+                                                                    {repairRoomsInBuilding.map((room) => {
+                                                                        const bName = building?.building_name || building?.building_no || "";
+                                                                        const isAssessed = repairAssessments.some(a => a.building_name === bName && a.room_name === room.room_name);
 
-                                                                const initialState = {};
-                                                                existingItems.forEach(item => {
-                                                                    initialState[item.item] = {
-                                                                        oms: item.oms || "",
-                                                                        condition: item.condition || "Repair",
-                                                                        damage_ratio: item.damage_ratio || 0,
-                                                                        recommend_action: item.recommend_action || "Routine Repair",
-                                                                        demo_justification: item.demo_justification || "",
-                                                                        remarks: item.remarks || ""
-                                                                    };
-                                                                });
-                                                                setRepairItemsState(initialState);
+                                                                        return (
+                                                                            <motion.div 
+                                                                                key={room.id}
+                                                                                initial={{ x: -20, opacity: 0 }}
+                                                                                animate={{ x: 0, opacity: 1 }}
+                                                                                className="bg-white p-6 rounded-3xl shadow-sm border-2 border-gray-100"
+                                                                            >
+                                                                                <div className="flex justify-between items-center">
+                                                                                    <div>
+                                                                                        <h4 className="font-black text-xl text-gray-800">{room.room_name}</h4>
+                                                                                        <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-widest">{bName || 'N/A'}</p>
+                                                                                        {isAssessed && <p className="text-xs font-black text-emerald-500 mt-2 uppercase flex items-center gap-1"><FiCheckCircle /> Assessment Recorded</p>}
+                                                                                    </div>
+                                                                                    <button
+                                                                                        onClick={() => {
+                                                                                            const bName = building?.building_name || building?.building_no || "";
+                                                                                            setRepairRoomFormData({
+                                                                                                building_name: bName,
+                                                                                                room_name: room.room_name,
+                                                                                                room_length: room.room_length || 9,
+                                                                                                room_width: room.room_width || 7
+                                                                                            });
 
-                                                                setEditingRepairRoomId(bName + "-" + room.room_name);
-                                                                setShowRepairModal(true);
-                                                            }}
-                                                            className={`p-4 rounded-2xl shadow-lg transition-all active:scale-95 ${isAssessed ? 'bg-indigo-50 text-indigo-500 shadow-indigo-100' : 'bg-amber-500 text-white shadow-amber-100'}`}
-                                                        >
-                                                            {isAssessed ? <FiEdit2 className="w-6 h-6" /> : <FiPlus className="w-6 h-6" />}
-                                                        </button>
-                                                    </div>
+                                                                                            // Populate previous assessments
+                                                                                            const existingItems = repairAssessments.filter(a =>
+                                                                                                a.building_name === bName &&
+                                                                                                a.room_name === room.room_name
+                                                                                            );
+
+                                                                                            const initialState = {};
+                                                                                            existingItems.forEach(item => {
+                                                                                                initialState[item.item] = {
+                                                                                                    oms: item.oms || "",
+                                                                                                    condition: item.condition || "Repair",
+                                                                                                    damage_ratio: item.damage_ratio || 0,
+                                                                                                    recommend_action: item.recommend_action || "Routine Repair",
+                                                                                                    demo_justification: item.demo_justification || "",
+                                                                                                    remarks: item.remarks || ""
+                                                                                                };
+                                                                                            });
+                                                                                            setRepairItemsState(initialState);
+
+                                                                                            setEditingRepairRoomId(bName + "-" + room.room_name);
+                                                                                            setShowRepairModal(true);
+                                                                                        }}
+                                                                                        className={`p-4 rounded-2xl shadow-lg transition-all active:scale-95 ${isAssessed ? 'bg-indigo-50 text-indigo-500 shadow-indigo-100' : 'bg-amber-500 text-white shadow-amber-100'}`}
+                                                                                    >
+                                                                                        {isAssessed ? <FiEdit2 className="w-6 h-6" /> : <FiPlus className="w-6 h-6" />}
+                                                                                    </button>
+                                                                                </div>
+                                                                            </motion.div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
                                                 </div>
                                             );
                                         })}
