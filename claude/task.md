@@ -2,3 +2,4 @@
 - [x] Plan: Create implementation plan for strict `is_active` check
 - [x] Execution: Modify `Unit7PhysicalFacilities.jsx`
 - [ ] Verification: Manually verify (as described in plan)
+- [ ] Verification: Confirm staging site is up <!-- id: 4 -->

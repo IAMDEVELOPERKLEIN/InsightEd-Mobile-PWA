@@ -50,6 +50,11 @@ async function deploy() {
         console.log("🧹 3.1 Cleaning remote destination to free up space...");
         conn.exec(`rm -rf ${SERVER_DIR}/dist ${SERVER_DIR}/api`, (err, stream) => {
             if (err) throw err;
+            stream.on('data', (data) => {
+                process.stdout.write(data);
+            }).stderr.on('data', (data) => {
+                process.stderr.write(data);
+            });
             stream.on('close', () => {
                 
                 // 3.2 Upload via SFTP
@@ -95,12 +100,8 @@ async function deploy() {
                     readStream.pipe(writeStream);
                 });
             });
-        }).on('data', (data) => {
-            process.stdout.write(data);
-        }).stderr.on('data', (data) => {
-            process.stderr.write(data);
-        });
 
+        });
     }).connect({
         host: SERVER_IP,
         port: 22,

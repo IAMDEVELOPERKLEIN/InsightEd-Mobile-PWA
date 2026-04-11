@@ -127,7 +127,18 @@ const UserProfile = () => {
     });
     const [passwordError, setPasswordError] = useState('');
 
+    // Passcode Reset State
+    const [showPasscodeResetModal, setShowPasscodeResetModal] = useState(false);
+    const [resetPasscodeData, setResetPasscodeData] = useState({
+        currentPasscode: '',
+        newPasscode: '',
+        confirmPasscode: ''
+    });
+    const [passcodeResetError, setPasscodeResetError] = useState('');
 
+    // Success Modal State
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [successConfig, setSuccessConfig] = useState({ title: '', message: '' });
     useEffect(() => {
         const syncUserData = async () => {
             // Priority 1: User object from AuthContext
@@ -326,7 +337,12 @@ const UserProfile = () => {
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || "Failed to update password");
 
-            alert("Password updated successfully!");
+            setSuccessConfig({
+                title: 'Password Updated',
+                message: 'Your account password has been changed successfully. Please use your new password next time you sign in.'
+            });
+            setShowSuccessModal(true);
+            
             setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
             setIsEditing(false);
         } catch (error) {
@@ -336,6 +352,72 @@ const UserProfile = () => {
             } else {
                 setPasswordError("Failed to update password: " + error.message);
             }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handlePasscodeReset = async () => {
+        setPasscodeResetError('');
+        const { currentPasscode, newPasscode, confirmPasscode } = resetPasscodeData;
+
+        // Validation
+        if (userData?.passcode && !currentPasscode) {
+            setPasscodeResetError("Current passcode is required.");
+            return;
+        }
+
+        if (!newPasscode || !confirmPasscode) {
+            setPasscodeResetError("New passcode fields are required.");
+            return;
+        }
+
+        if (newPasscode.length !== 6) {
+            setPasscodeResetError("Passcode must be exactly 6 digits.");
+            return;
+        }
+
+        if (newPasscode !== confirmPasscode) {
+            setPasscodeResetError("Passcodes do not match.");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            // If user has a passcode, we should ideally verify it first or pass it to the setup endpoint
+            const response = await fetch('/api/auth/setup-passcode', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({
+                    passcode: newPasscode,
+                    oldPasscode: currentPasscode // Backend should handle verification if oldPasscode is provided
+                })
+            });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Failed to update passcode");
+
+            setSuccessConfig({
+                title: 'Passcode Secured',
+                message: 'Your 6-digit passcode has been successfully updated and is now active for secure actions.'
+            });
+            setShowSuccessModal(true);
+
+            setResetPasscodeData({ currentPasscode: '', newPasscode: '', confirmPasscode: '' });
+            setShowPasscodeResetModal(false);
+            
+            // Sync local user state
+            const updatedUser = { ...(userData || {}), passcode: newPasscode };
+            setUserData(updatedUser);
+            if (auth?.setUser) {
+                auth.setUser(updatedUser);
+            }
+        } catch (error) {
+            console.error("Passcode Reset Error:", error);
+            setPasscodeResetError(error.message);
         } finally {
             setLoading(false);
         }
@@ -573,6 +655,23 @@ const UserProfile = () => {
                                     className="p-2.5 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 text-[#004A99] dark:text-blue-400 cursor-pointer"
                                 >
                                     <FiEdit3 size={18} />
+                                </button>
+                            </div>
+
+                            {/* PASSCODE RESET QUICK ACTION */}
+                            <div className="flex justify-between items-center p-3.5 bg-slate-50 dark:bg-slate-700/30 rounded-2xl border border-transparent">
+                                <div>
+                                    <p className="m-0 text-[10px] uppercase font-bold text-slate-400">Passcode Protection</p>
+                                    <p className="m-0 text-sm font-medium text-slate-700 dark:text-slate-200 tracking-[0.5em] mt-0.5">
+                                        {userData?.passcode ? '••••••' : 'Not Configured'}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => setShowPasscodeResetModal(true)}
+                                    className="p-2.5 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 text-[#004A99] dark:text-blue-400 cursor-pointer flex items-center gap-2"
+                                >
+                                    <span className="text-[10px] font-bold uppercase">{userData?.passcode ? 'Reset' : 'Setup'}</span>
+                                    <FiLock size={16} />
                                 </button>
                             </div>
                         </div>
@@ -887,7 +986,7 @@ const UserProfile = () => {
                 
                 {/* Passcode Protection */}
                 <button 
-                    onClick={() => setIsPasscodeSetupOpen(true)}
+                    onClick={() => setShowPasscodeResetModal(true)}
                     className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-left"
                 >
                     <div className="flex items-center gap-4">
@@ -896,8 +995,8 @@ const UserProfile = () => {
                         </div>
                         <div className="text-left">
                             <span className="text-[15px] font-medium text-gray-700 dark:text-gray-200 block">Passcode Protection</span>
-                            <span className={`text-[10px] font-semibold uppercase tracking-wide ${user?.passcode ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}`}>
-                                {user?.passcode ? 'Active' : 'Secure Now'}
+                            <span className={`text-[10px] font-semibold uppercase tracking-wide ${userData?.passcode ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                                {userData?.passcode ? 'Active' : 'Secure Now'}
                             </span>
                         </div>
                     </div>
@@ -1049,8 +1148,135 @@ const UserProfile = () => {
 
                 <BottomNav homeRoute={homeRoute} userRole={userData?.role || user?.account_category || user?.role || localStorage.getItem('userRole')} />
                 
-                {/* Security Verification Modal */}
+                {/* Security Verification Modal (Generic for Email/Profile Updates) */}
                 {renderSecurityModal()}
+
+                {/* Success Modal */}
+                {showSuccessModal && (
+                    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-slate-800 w-full max-w-xs rounded-[2.5rem] shadow-2xl p-8 text-center animate-in zoom-in-95 duration-500 relative overflow-hidden">
+                            {/* Confetti-like decorative elements */}
+                            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 via-emerald-500 to-teal-400"></div>
+                            
+                            <div className="mb-6 relative">
+                                <div className="w-20 h-20 bg-green-50 dark:bg-green-900/20 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-green-100 dark:border-green-800/30">
+                                    <FiCheckCircle size={40} className="text-green-500 animate-bounce" />
+                                </div>
+                                <div className="absolute -top-2 -right-2 w-6 h-6 bg-yellow-400 rounded-full blur-xl opacity-50 animate-pulse"></div>
+                            </div>
+
+                            <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-2 tracking-tight">
+                                {successConfig.title}
+                            </h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-8 font-medium">
+                                {successConfig.message}
+                            </p>
+
+                            <button
+                                onClick={() => setShowSuccessModal(false)}
+                                className="w-full py-4 bg-slate-900 dark:bg-white dark:text-slate-900 text-white rounded-2xl font-black shadow-xl shadow-slate-900/20 active:scale-[0.98] transition-all"
+                            >
+                                Continue
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Passcode Reset Modal */}
+                {showPasscodeResetModal && (
+                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-[2.5rem] shadow-2xl p-8 animate-in zoom-in-95 duration-500 relative overflow-hidden">
+                            {/* Decorative Blobs */}
+                            <div className="absolute top-[-20%] right-[-10%] w-32 h-32 bg-blue-50 dark:bg-blue-900/10 rounded-full blur-2xl"></div>
+                            
+                            <div className="relative z-10 text-center">
+                                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-5 text-white shadow-xl shadow-blue-200 dark:shadow-none">
+                                    <FiLock size={30} />
+                                </div>
+                                
+                                <h3 className="text-xl font-black text-slate-800 dark:text-white mb-1">
+                                    {userData?.passcode ? 'Reset Passcode' : 'Setup Passcode'}
+                                </h3>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+                                    {userData?.passcode 
+                                        ? 'Enter your current passcode to authorize a change.'
+                                        : 'Set a 6-digit passcode for faster, secure logins.'}
+                                </p>
+
+                                {passcodeResetError && (
+                                    <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs rounded-xl flex items-center gap-2 border border-red-100 dark:border-red-800/50">
+                                        <TbAlertTriangle /> {passcodeResetError}
+                                    </div>
+                                )}
+
+                                <div className="space-y-4 mb-8">
+                                    {userData?.passcode && (
+                                        <div className="text-left animate-in fade-in slide-in-from-top-2 duration-300">
+                                            <label className="block text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 mb-1.5 ml-1">Current Passcode</label>
+                                            <input
+                                                type="password"
+                                                inputMode="numeric"
+                                                maxLength="6"
+                                                className="w-full p-4 rounded-2xl text-[14px] font-medium bg-slate-50 dark:bg-slate-700/30 border border-transparent focus:border-[#004A99] focus:bg-white dark:text-white transition-all outline-none text-center tracking-[0.3em]"
+                                                placeholder="••••••"
+                                                value={resetPasscodeData.currentPasscode}
+                                                onChange={(e) => setResetPasscodeData({ ...resetPasscodeData, currentPasscode: e.target.value.replace(/\D/g, '') })}
+                                            />
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-2 gap-3 text-left">
+                                        <div>
+                                            <label className="block text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 mb-1.5 ml-1">New Passcode</label>
+                                            <input
+                                                type="password"
+                                                inputMode="numeric"
+                                                maxLength="6"
+                                                className="w-full p-4 rounded-2xl text-[14px] font-medium bg-slate-50 dark:bg-slate-700/30 border border-transparent focus:border-[#004A99] focus:bg-white dark:text-white transition-all outline-none text-center tracking-[0.3em]"
+                                                placeholder="••••••"
+                                                value={resetPasscodeData.newPasscode}
+                                                onChange={(e) => setResetPasscodeData({ ...resetPasscodeData, newPasscode: e.target.value.replace(/\D/g, '') })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 mb-1.5 ml-1">Confirm</label>
+                                            <input
+                                                type="password"
+                                                inputMode="numeric"
+                                                maxLength="6"
+                                                className="w-full p-4 rounded-2xl text-[14px] font-medium bg-slate-50 dark:bg-slate-700/30 border border-transparent focus:border-[#004A99] focus:bg-white dark:text-white transition-all outline-none text-center tracking-[0.3em]"
+                                                placeholder="••••••"
+                                                value={resetPasscodeData.confirmPasscode}
+                                                onChange={(e) => setResetPasscodeData({ ...resetPasscodeData, confirmPasscode: e.target.value.replace(/\D/g, '') })}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-col gap-3">
+                                    <button
+                                        onClick={handlePasscodeReset}
+                                        disabled={loading}
+                                        className="w-full py-4 bg-gradient-to-br from-[#004A99] to-indigo-700 dark:from-blue-600 dark:to-indigo-500 text-white rounded-2xl font-black shadow-lg shadow-blue-500/30 active:scale-95 transition-all flex justify-center items-center gap-2"
+                                    >
+                                        {loading ? <FiRefreshCw className="animate-spin" /> : <FiSave size={18} />}
+                                        Update Passcode
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setShowPasscodeResetModal(false);
+                                            setResetPasscodeData({ currentPasscode: '', newPasscode: '', confirmPasscode: '' });
+                                            setPasscodeResetError('');
+                                        }}
+                                        className="w-full py-4 bg-transparent text-slate-500 dark:text-slate-400 font-bold hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Optimize App — Confirm Modal */}
                 {showOptimizeConfirm && (

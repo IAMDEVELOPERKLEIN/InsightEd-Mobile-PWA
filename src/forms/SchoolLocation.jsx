@@ -648,10 +648,12 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
                                                             <div className="relative">
                                                                 <input 
                                                                     type="number" 
+                                                                    min="0"
                                                                     step="0.1"
                                                                     placeholder="Distance (km)"
                                                                     value={item.distance_km}
                                                                     onChange={(e) => {
+                                                                        e.target.value = e.target.value.replace(/[^0-9.]/g, '');
                                                                         e.target.value = e.target.value.replace(/^0+(?=\d)/, '');
                                                                         const val = e.target.value;
                                                                         const newList = [...watchWaterProximity];
@@ -719,7 +721,10 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
                                                 type="number" 
                                                 min="0"
                                                 {...register('river_crossing_count', { 
-                                                    onChange: (e) => { e.target.value = e.target.value.replace(/^0+(?=\d)/, ''); },
+                                                    onChange: (e) => { 
+                                                        e.target.value = e.target.value.replace(/[^0-9.]/g, '');
+                                                        e.target.value = e.target.value.replace(/^0+(?=\d)/, ''); 
+                                                    },
                                                     valueAsNumber: true 
                                                 })} 
                                                 placeholder="Enter number of crossings"
@@ -773,8 +778,13 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
                                                     </div>
                                                     <input 
                                                         type="number" 
+                                                        min="0"
+                                                        step="0.1"
                                                         {...register(point.mins, { 
-                                                            onChange: (e) => { e.target.value = e.target.value.replace(/^0+(?=\d)/, ''); },
+                                                            onChange: (e) => { 
+                                                                e.target.value = e.target.value.replace(/[^0-9.]/g, '');
+                                                                e.target.value = e.target.value.replace(/^0+(?=\d)/, ''); 
+                                                            },
                                                             valueAsNumber: true 
                                                         })} 
                                                         className="w-full bg-amber-50/50 dark:bg-amber-900/10 border-2 border-amber-100 dark:border-amber-900/30 rounded-xl p-3 text-sm font-bold text-amber-900 dark:text-amber-200 focus:ring-2 focus:ring-amber-500 transition-all pr-12"
@@ -790,9 +800,13 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
                                                     </div>
                                                     <input 
                                                         type="number" 
+                                                        min="0"
                                                         step="0.1"
                                                         {...register(point.km, { 
-                                                            onChange: (e) => { e.target.value = e.target.value.replace(/^0+(?=\d)/, ''); },
+                                                            onChange: (e) => { 
+                                                                e.target.value = e.target.value.replace(/[^0-9.]/g, '');
+                                                                e.target.value = e.target.value.replace(/^0+(?=\d)/, ''); 
+                                                            },
                                                             valueAsNumber: true 
                                                         })} 
                                                         className="w-full bg-indigo-50/50 dark:bg-indigo-900/10 border-2 border-indigo-100 dark:border-indigo-900/30 rounded-xl p-3 text-sm font-bold text-indigo-900 dark:text-indigo-200 focus:ring-2 focus:ring-indigo-500 transition-all pr-10"
