@@ -18,6 +18,7 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
     const [showDraftModal, setShowDraftModal] = useState(false);
     const [isCertified, setIsCertified] = useState(false);
     const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+    const [submitError, setSubmitError] = useState(null); // { type, title, lines[] }
 
     const tryParse = (val) => {
         if (!val) return [];
@@ -104,7 +105,11 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
     ]);
 
     useEffect(() => {
-        setValue('road_unpaved_pct', 100 - watchPaved);
+        // Guard: on older Android WebViews, range inputs can yield NaN/undefined.
+        const paved = Number(watchPaved);
+        if (!isNaN(paved)) {
+            setValue('road_unpaved_pct', 100 - paved);
+        }
     }, [watchPaved, setValue]);
 
     useEffect(() => {
@@ -192,76 +197,46 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
             const result = await res.json();
             console.log("Save Result:", result);
             if (result.success) {
+                setSubmitError(null);
                 setRiskIndex(result.data.risk_index);
                 if (onSaveSuccess) onSaveSuccess(result.data);
                 setIsSuccessModalOpen(true);
             } else {
-                const details = result.details ? result.details.map(d => `${d.path.join('.')}: ${d.message}`).join('\n') : (result.error || result.message || "Server returned an unexpected failure. The database might have rejected the data (e.g. NaN formatting).");
-                
-                // Detailed debugging log per .agent/mad-debugger.md
-                console.groupCollapsed(`%c❌ EXCEPTION: Unit 8 Sync Failure [Status ${res.status}]`, "background: #8b0000; color: #fff; padding: 4px; font-weight: bold;");
-                console.error(`🛑 Error Message: ${result.error || result.message || 'Unknown server error'}`);
+                // --- Build structured error for the inline panel ---
+                const lines = [];
+                if (result.details && result.details.length > 0) {
+                    // Zod field-level or schema-level validation errors
+                    result.details.forEach(d => {
+                        const field = d.path?.length ? d.path.join('.') : '(schema rule)';
+                        const code  = d.code ? ` [${d.code}]` : '';
+                        lines.push(`• ${field}${code}: ${d.message}`);
+                    });
+                } else {
+                    lines.push(result.error || result.message || 'Unknown server error');
+                    // PostgreSQL error fields — surfaced when the DB rejects the row
+                    if (result.code)       lines.push(`PG Code: ${result.code}`);
+                    if (result.detail)     lines.push(`PG Detail: ${result.detail}`);
+                    if (result.constraint) lines.push(`Constraint: ${result.constraint}`);
+                    if (result.table)      lines.push(`Table: ${result.table}`);
+                }
+
+                const isValidationError = res.status === 400;
+                setSubmitError({
+                    type: isValidationError ? 'validation' : 'server',
+                    title: isValidationError
+                        ? `Validation Error (HTTP ${res.status})`
+                        : `Server Error (HTTP ${res.status})`,
+                    lines,
+                });
+
+                // Keep the full console trace for developer inspection
+                console.error(`❌ Unit 8 Sync Failure [HTTP ${res.status}]`, result);
                 if (result.details) console.table(result.details);
-                if (result.flattened) console.log("📦 Flattened Validation Errors:", result.flattened);
-                
-                console.groupCollapsed('%c🛠️ Launch Interactive Auto-Healer Script (Click to Expand)', 'background: #800080; color: #fff; padding: 6px; border-radius: 4px; font-weight: bold; font-size: 1.1em;');
-                console.log('%cCopy and execute the async script below to begin the step-by-step self-healing process for Unit 8 forms:', 'color: #e066ff; font-style: italic;');
-                
-                const diagnosticScript = `
-// --- Unit 8 Precision Auto-Healer (v2.0) ---
-(async function runSelfHealingDiagnostics() {
-    console.group("%c🚑 Starting Unit 8 Structural Audit...", "color: #ff9900; font-size: 1.2em; font-weight: bold;");
-    
-    // STEP 1: Identify State Constraints
-    console.log("%c[Step 1] Diagnosing Local State...", "color: #00ccff; font-weight: bold;");
-    const token = localStorage.getItem('token');
-    if (!token) console.error("No authorization token found. You may be logged out.");
-    
-    // STEP 2: Triggering Database Auto-Alignment (Read-Only Audit)
-    console.log("%c[Step 2] Executing Safe Database Audit...", "color: #00ccff; font-weight: bold;");
-    try {
-        const alignRes = await fetch('/api/system/align-unit8', {
-            method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
-        });
-        const alignData = await alignRes.json();
-        if (alignData.converted && alignData.converted.length > 0) {
-            console.warn("🔧 Columns requiring alignment detected:", alignData.converted);
-            console.info("Re-aligning these columns requires a server restart to trigger [db_init.js] migrations.");
-        } else {
-            console.log("✅ Schema alignment verified. No TEXT-to-JSONB issues found.");
-        }
-    } catch(e) {
-        console.error("Audit script failed to run:", e);
-    }
-
-    // STEP 3: Diagnostic Recommendations
-    console.log("%c[Step 3] Recommendations...", "color: #00ccff; font-weight: bold;");
-    console.table([
-        { 
-            Issue: "Backend Refusal (500)", 
-            Action_Required: "Check VM logs with 'pm2 logs'. Likely a NaN value or malformed JSONB payload.",
-        },
-        { 
-            Issue: "Validation Error (400)", 
-            Action_Required: "Fix the UI field highlighted in the validation details above.",
-        }
-    ]);
-    
-    console.log("🏁 Self-Healing Check Complete.");
-    console.groupEnd();
-})();
-// --------------------------------------
-                `;
-                console.log(`%c${diagnosticScript}`, 'color: #5ce6cd; font-family: monospace; font-size: 1.1em;');
-                console.groupEnd(); // Close Diagnostic Script
-                console.groupEnd(); // Close Main Exception
-
-                alert(`Error saving Unit 8 Profile\n\n${details}\n\nPlease check the browser console for the interactive diagnostic script.`);
+                if (result.flattened) console.error('Flattened Zod errors:', result.flattened);
             }
         } catch (err) {
             console.error("UNIT 8 SUBMIT ERROR:", err);
-            if (!navigator.onLine || err.message.includes('fetch')) {
+            if (!navigator.onLine || err.message?.includes('fetch')) {
                 await addModularToOutbox({
                     unitId: 8,
                     label: "Unit 8: School Terrain & Location Profile",
@@ -272,7 +247,15 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
                 });
                 if (onSaveSuccess) onSaveSuccess({ ...data, risk_index: 'Pending Sync' });
             } else {
-                alert("Network error saving profile.");
+                setSubmitError({
+                    type: 'network',
+                    title: 'Network Error',
+                    lines: [
+                        err.message || 'Request failed — server may be unreachable.',
+                        'If offline, save as draft and sync later.',
+                        'If online, check pm2 logs on the VM.',
+                    ],
+                });
             }
         } finally {
             setLoading(false);
@@ -321,24 +304,11 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
 
     const nextStep = () => {
         if (currentStep === 3) {
-            const data = getValues();
-            const refPointsFields = [
-                'emergency_response_mins', 'proximity_hospital_km',
-                'proximity_brgy_hall_mins', 'proximity_brgy_hall_km',
-                'proximity_muni_hall_mins', 'proximity_muni_hall_km',
-                'proximity_sdo_mins', 'proximity_sdo_km',
-                'proximity_clinic_mins', 'proximity_clinic_km',
-                'proximity_terminal_mins', 'proximity_terminal_km',
-                'proximity_highway_mins', 'proximity_highway_km'
-            ];
-            
-            const hasInvalid = refPointsFields.some(field => {
-                const val = data[field];
-                return val === "" || val === null || parseFloat(val) === 0 || isNaN(parseFloat(val));
-            });
-            
-            if (hasInvalid) {
-                alert("Please provide valid (non-zero) values for ALL points of reference before proceeding.");
+            // Require at least one non-zero reference-point value (mirrors server-side check).
+            // The old ALL-fields guard was too strict — schools adjacent to a service
+            // legitimately have 0 km/0 min for that entry.
+            if (!isStep3Valid()) {
+                alert("Please provide at least one non-zero point of reference (time or distance) before proceeding.");
                 return;
             }
         }
@@ -383,9 +353,12 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
     };
 
     const isStep3Valid = () => {
-        return !watchedRefPoints.some(val => {
-            return val === "" || val === null || parseFloat(val) === 0 || isNaN(parseFloat(val));
-        });
+        // Valid if at least ONE reference-point field has a non-zero numeric value.
+        // Mirrors the server-side sumRefPoints > 0 check in onSubmit.
+        // The old ALL-fields-must-be-non-zero check incorrectly blocked users whose
+        // school is adjacent to a service (0 km/0 min) or who leave unused rows at 0.
+        const sum = watchedRefPoints.reduce((acc, val) => acc + (parseFloat(val) || 0), 0);
+        return sum > 0;
     };
 
     const renderStepContent = () => {
@@ -1084,7 +1057,51 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
                 <form onSubmit={handleSubmit(onSubmit)}>
                     {renderStepContent()}
 
-                    {!isReadOnly && (
+                    {/* ── Submission error panel ──────────────────────────────────── */}
+                <AnimatePresence>
+                    {submitError && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 20 }}
+                            className="fixed bottom-[88px] left-0 right-0 px-4 z-[51] max-w-2xl mx-auto"
+                        >
+                            <div className={`rounded-[1.5rem] border shadow-2xl p-4 ${
+                                submitError.type === 'validation'
+                                    ? 'bg-amber-950/95 border-amber-700'
+                                    : submitError.type === 'network'
+                                    ? 'bg-slate-900/95 border-slate-700'
+                                    : 'bg-rose-950/95 border-rose-700'
+                            }`}>
+                                <div className="flex items-start justify-between gap-3 mb-2">
+                                    <span className={`text-[10px] font-black uppercase tracking-[0.18em] ${
+                                        submitError.type === 'validation' ? 'text-amber-400'
+                                        : submitError.type === 'network'  ? 'text-slate-400'
+                                        : 'text-rose-400'
+                                    }`}>
+                                        {submitError.title}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSubmitError(null)}
+                                        className="text-white/40 hover:text-white/80 text-xs font-black leading-none shrink-0 transition-colors"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                                <pre className={`text-[11px] font-mono leading-relaxed whitespace-pre-wrap break-all ${
+                                    submitError.type === 'validation' ? 'text-amber-200'
+                                    : submitError.type === 'network'  ? 'text-slate-300'
+                                    : 'text-rose-200'
+                                }`}>
+                                    {submitError.lines.join('\n')}
+                                </pre>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {!isReadOnly && (
                         <div className="fixed bottom-0 left-0 right-0 p-6 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-gray-100 dark:border-slate-800 z-50">
                             <div className="max-w-2xl mx-auto flex gap-4">
                                 <button type="button" onClick={() => setShowDraftModal(true)} className="flex-none h-16 px-6 rounded-3xl bg-gray-100 dark:bg-slate-800 flex items-center justify-center gap-2 text-gray-400 dark:text-slate-500 hover:text-gray-900 dark:hover:text-slate-200 active:scale-95 transition-all outline-none">

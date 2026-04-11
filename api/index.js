@@ -114,6 +114,16 @@ const PasscodeSchema = z.string().length(6).regex(/^\d+$/, "Passcode must be exa
 // Prevents Postgres 22P02 "NaN" errors by converting malformed JS numbers to null.
 const safeNumeric = z.preprocess(val => (val === "" || val === null || Number.isNaN(Number(val)) ? null : Number(val)), z.number().nullable().optional());
 
+// [Systematic Resilience] Safe Boolean Preprocessor (v1.0)
+// Coerces string "true"/"false" and numeric 0/1 to proper booleans.
+// Fixes Zod rejection on certain browsers/devices where checkboxes arrive as strings,
+// and on data restored from IndexedDB offline sync payloads.
+const safeBoolean = z.preprocess(val => {
+  if (val === 'true'  || val === '1' || val === 1) return true;
+  if (val === 'false' || val === '0' || val === 0) return false;
+  return val;
+}, z.boolean().optional());
+
 const RegisterUserSchema = z.object({
   email: z.string().email().transform(e => e.trim().toLowerCase()),
   password: z.string().min(6, "Password must be at least 6 characters."),
@@ -1469,9 +1479,16 @@ const runAutoMigrations = async () => {
       );
     }
 
-    // --- school_location_profiles: Coerce TEXT[] → JSONB (idempotent) ---
-    // transportation_modes and hazards_experienced may have been created as TEXT[].
-    // The POST route now sends JSON strings; TEXT[] columns reject them with error 22P02.
+    // --- school_location_profiles: Coerce TEXT/TEXT[] → JSONB (idempotent) ---
+    // These columns may exist as TEXT (containing a JSON string literal) or TEXT[]
+    // depending on which migration path ran first.
+    //
+    // Bug fixed: the original `USING to_jsonb(col)` was wrong for TEXT columns whose
+    // content is already a JSON string (e.g. '["Bus","Jeep"]'). to_jsonb() on TEXT
+    // produces a JSON *string scalar* ("\"[\\\"Bus\\\",\\\"Jeep\\\"]\""), not an array.
+    // The correct cast for TEXT-with-JSON-content is `col::jsonb`.
+    // For TEXT[] columns, `to_jsonb(col)` is correct and produces a proper JSON array.
+    //
     // This block is safe to run repeatedly — it is a no-op if the column is already JSONB.
     for (const col of ['transportation_modes', 'hazards_experienced', 'water_proximity', 'natural_calamities', 'anthropogenic_threats']) {
       await pool.query(`
@@ -1483,9 +1500,21 @@ const runAutoMigrations = async () => {
           WHERE table_name = 'school_location_profiles' AND column_name = '${col}';
 
           IF col_type IS NOT NULL AND col_type != 'jsonb' THEN
-            ALTER TABLE school_location_profiles
-              ALTER COLUMN ${col} TYPE JSONB USING to_jsonb(${col});
-            RAISE NOTICE '[Auto-Migrate] Converted school_location_profiles.${col} to JSONB';
+            IF col_type = 'ARRAY' THEN
+              -- TEXT[] → JSONB: to_jsonb correctly serialises a PG array to a JSON array
+              ALTER TABLE school_location_profiles
+                ALTER COLUMN ${col} TYPE JSONB USING to_jsonb(${col});
+            ELSE
+              -- TEXT → JSONB: column already stores a JSON string literal; cast it directly.
+              -- NULL and empty-string rows are coerced to a JSON null / empty array safely.
+              ALTER TABLE school_location_profiles
+                ALTER COLUMN ${col} TYPE JSONB USING
+                  CASE
+                    WHEN ${col} IS NULL OR ${col} = '' THEN '[]'::jsonb
+                    ELSE ${col}::jsonb
+                  END;
+            END IF;
+            RAISE NOTICE '[Auto-Migrate] Converted school_location_profiles.${col} (%) to JSONB', col_type;
           END IF;
         END $$;
       `).catch(e => console.warn(`[Auto-Migrate] JSONB coerce ${col}:`, e.message));
@@ -2446,8 +2475,9 @@ app.post('/api/auth/migrate-login', async (req, res) => {
   }
 
   try {
-    const isSchoolId = !!school_id || /^\d{6,}$/.test(identifier);
-    console.log(`[AUTH DEBUG] Migrate-Login: ${identifier} (isSchoolId: ${isSchoolId})`);
+    const isEmail = identifier.includes('@');
+    const isSchoolId = !isEmail && (!!school_id || /^\d{6,}$/.test(identifier));
+    console.log(`[AUTH DEBUG] Migrate-Login: ${identifier} (isSchoolId: ${isSchoolId}, isEmail: ${isEmail})`);
 
     // 1. Fetch user from PostgreSQL
     console.log(`[MIGRATE LOGIN] Running SQL query...`);
@@ -2455,8 +2485,8 @@ app.post('/api/auth/migrate-login', async (req, res) => {
 
     console.log(`[DEBUG LOGIN] Reached handler for: ${identifier}`);
     const query = isSchoolId
-      ? `SELECT ${SELECT_COLS} FROM users WHERE school_id = $1`
-      : `SELECT ${SELECT_COLS} FROM users WHERE LOWER(email) = $1`;
+      ? `SELECT ${SELECT_COLS} FROM users WHERE school_id = $1 AND disabled = false`
+      : `SELECT ${SELECT_COLS} FROM users WHERE LOWER(email) = $1 AND disabled = false ORDER BY CASE WHEN role = 'School Head' THEN 2 ELSE 1 END, created_at DESC`;
 
     console.log(`[DEBUG LOGIN] Query prepared. Waiting for pool...`);
     const userRes = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
@@ -2628,9 +2658,13 @@ app.post('/api/auth/setup-pin', async (req, res) => {
       param = email.trim().toLowerCase();
     }
 
+    // Hash PIN before storing
+    const saltRounds = 10;
+    const hashedPin = await bcrypt.hash(pin, saltRounds);
+
     const result = await pool.query(
       `UPDATE users SET passcode = $1 WHERE ${whereClause} RETURNING uid`,
-      [pin, param]
+      [hashedPin, param]
     );
 
 
@@ -2654,14 +2688,15 @@ app.post('/api/auth/pin-login', async (req, res) => {
   }
 
   try {
-    const isSchoolId = !!school_id || /^\d{6,}$/.test(identifier);
-    console.log(`[AUTH DEBUG] Pin-Login: ${identifier} (isSchoolId: ${isSchoolId})`);
+    const isEmail = identifier.includes('@');
+    const isSchoolId = !isEmail && (!!school_id || /^\d{6,}$/.test(identifier));
+    console.log(`[AUTH DEBUG] Pin-Login: ${identifier} (isSchoolId: ${isSchoolId}, isEmail: ${isEmail})`);
 
     // Unified Identifier Lookup (Strict Users Table)
     const selectCols = 'uid, email, role, region, division, office, account_category, passcode, first_name, last_name, school_id';
     const query = isSchoolId
-      ? `SELECT ${selectCols} FROM users WHERE school_id = $1`
-      : `SELECT ${selectCols} FROM users WHERE LOWER(email) = $1`;
+      ? `SELECT ${selectCols} FROM users WHERE school_id = $1 AND disabled = false`
+      : `SELECT ${selectCols} FROM users WHERE LOWER(email) = $1 AND disabled = false ORDER BY CASE WHEN role = 'School Head' THEN 2 ELSE 1 END, created_at DESC`;
 
     const userRes = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
 
@@ -2675,9 +2710,14 @@ app.post('/api/auth/pin-login', async (req, res) => {
       return res.status(401).json({ success: false, error: "No PIN setup for this account." });
     }
 
-    // Plain-text comparison for passcode
-    const isValidPin = (pin === user.passcode);
-    console.log(`[AUTH DEBUG] Pin match for ${identifier}: ${isValidPin} (Input: ${pin}, DB: ${user.passcode})`);
+    // Robust passcode comparison (handles both plain-text and hashed)
+    const storedPasscode = user.passcode;
+    const isBcryptHash = storedPasscode.startsWith('$2b$');
+    const isValidPin = isBcryptHash 
+      ? await bcrypt.compare(pin, storedPasscode)
+      : (pin === storedPasscode);
+
+    console.log(`[AUTH DEBUG] Pin match for ${identifier}: ${isValidPin} (Hashed: ${isBcryptHash})`);
     if (!isValidPin) {
       return res.status(401).json({ success: false, error: "The username exists but does not match the PIN you provided." });
     }
@@ -18483,16 +18523,16 @@ const schoolLocationSchema = z.object({
   road_unpaved_pct: safeNumeric,
   road_lighting_pct: safeNumeric,
   public_transpo_availability: safeNumeric,
-  near_cliff_ravine: z.boolean().optional(),
+  near_cliff_ravine: safeBoolean,
   road_cliff_pct: safeNumeric,
-  near_water: z.boolean().optional(),
+  near_water: safeBoolean,
   water_proximity: parseJsonArrayPreprocess(z.array(z.any())).optional(),
   natural_calamities: parseJsonArrayPreprocess(z.array(z.any())).optional(),
   hazards_experienced: parseJsonArrayPreprocess(z.array(z.string())).optional(),
-  has_insurgency_threats: z.boolean().optional(),
+  has_insurgency_threats: safeBoolean,
   insurgency_threats_6mo: safeNumeric,
   road_passable_public_transpo_pct: safeNumeric,
-  river_crossing_on_foot: z.boolean().optional(),
+  river_crossing_on_foot: safeBoolean,
   river_crossing_count: safeNumeric,
   emergency_response_mins: safeNumeric,
   proximity_hospital_km: safeNumeric,
@@ -18509,12 +18549,21 @@ const schoolLocationSchema = z.object({
   proximity_highway_mins: safeNumeric,
   proximity_highway_km: safeNumeric,
   cellular_coverage: z.string().optional(),
-  weather_isolation: z.boolean().optional(),
+  weather_isolation: safeBoolean,
   anthropogenic_threats: parseJsonArrayPreprocess(z.array(z.object({
     type: z.string(),
     incidences: z.preprocess(val => (val === "" || val === null || Number.isNaN(Number(val))) ? 0 : Number(val), z.number())
   }))).optional(),
-}).refine(data => ((Number(data.road_paved_pct) || 0) + (Number(data.road_unpaved_pct) || 0)) === 100, {
+}).transform(data => {
+  // Auto-correct road_unpaved_pct so it always sums to 100 with road_paved_pct.
+  // Devices with broken range inputs can send NaN (→ null via safeNumeric).
+  // Falling back to the paved value prevents the refine below from failing.
+  const paved = Number(data.road_paved_pct) || 0;
+  return { ...data, road_unpaved_pct: 100 - paved };
+}).refine(data => {
+  const sum = (Number(data.road_paved_pct) || 0) + (Number(data.road_unpaved_pct) || 0);
+  return Math.abs(sum - 100) <= 1; // ±1 tolerance for floating-point edge cases
+}, {
   message: "Paved and unpaved percentages must sum to 100",
   path: ["road_paved_pct"]
 });
