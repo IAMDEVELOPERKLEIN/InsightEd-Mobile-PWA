@@ -19,6 +19,21 @@ This repository contains the persistent history of architectural decisions, perf
   - Refactored `forensic_heal.sh` for multi-site autonomy.
   - Implemented `heal:production` unified deployment workflow.
 
+- **2026-04-11**: [Unit 8 Submission Fix & Error Diagnostics Overhaul](./sessions/2026-04-11_Unit8-Submission-Fix-and-Error-Panel.md)
+  - Identified 5 root causes blocking Unit 8 form submission on certain devices.
+  - Fixed `isStep3Valid()` ALL-fields gate → SUM > 0 (matched server-side logic).
+  - Added `safeBoolean` Zod preprocessor for all 5 boolean fields.
+  - Fixed JSONB boot migration USING clause (TEXT vs TEXT[] branch).
+  - Replaced `alert()` error handling with structured inline diagnostic panel.
+  - See [ADR-0014](./adr/ADR-0014-Unit8-Form-Submission-Hardening.md) for rules going forward.
+
+- **2026-04-09**: [Dual-Database Discovery & School Completion Fix](./sessions/2026-04-09_Dual-Database-Discovery-and-Completion-Fix.md)
+  - Discovered production and localhost were using **two different PostgreSQL databases** (local `insight_pooled` vs Azure `insightEd`).
+  - All prior repair scripts had been targeting Azure while production read local — a complete split-brain.
+  - Rewrote `updateSchoolTotalCompletion` to be pgBouncer-safe (removed `BEGIN/COMMIT`, reads authoritative `unit*` int flags).
+  - Added `POST /api/admin/resync-completion` bulk repair endpoint; resynced 12,554 schools.
+  - Resolved by unifying production to Azure PostgreSQL (ADR-0012). School 151006: 13% → 100%.
+
 - **2026-04-08**: [Filter Normalization, Server Recovery & Nginx Hardening](./sessions/2026-04-08_Filter_Normalization_and_Infrastructure_Hardening.md)
   - Fixed division filter regex to handle `SDO-`, `SDO `, and `Division of ` prefixes (`[-\\s]+`).
   - Implemented prop-driven derivation pattern in `FilterDrawer.jsx` (ADR-0010).
@@ -42,6 +57,9 @@ This repository contains the persistent history of architectural decisions, perf
 | [ADR-0009](./adr/ADR-0009-Permanent-Self-Healing-Infrastructure.md) | Permanent Self-Healing Infrastructure | 2026-04-04 |
 | [ADR-0010](./adr/ADR-0010-Filter-Prop-Driven-Derivation-Pattern.md) | Filter Prop-Driven Derivation Pattern | 2026-04-08 |
 | [ADR-0011](./adr/ADR-0011-Nginx-Concurrency-and-Asset-Micro-Cache.md) | Nginx Concurrency Optimization & Binary Asset Micro-Cache | 2026-04-08 |
+| [ADR-0012](./adr/ADR-0012-Production-Database-Unification.md) | Production Database Unification — Azure as Single Source of Truth | 2026-04-09 |
+| [ADR-0013](./adr/ADR-0013-DB-Lock-Cascade-Resolution.md) | DB Lock Cascade Resolution | 2026-04-09 |
+| [ADR-0014](./adr/ADR-0014-Unit8-Form-Submission-Hardening.md) | Unit 8 Form Submission Hardening | 2026-04-11 |
 
 ---
 *Maintained by Antigravity — InsightEd PWA Engineering Log*

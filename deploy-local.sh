@@ -20,7 +20,7 @@ echo "Target Dir: $SERVER_DIR"
 echo "------------------------------------------------"
 
 echo "🏗️  1. Building locally..."
-MSYS_NO_PATHCONV=1 npm run build
+MSYS_NO_PATHCONV=1 npm run build || { echo "❌ Build failed. Aborting deployment."; exit 1; }
 
 echo "🧹 1.5 Cleaning remote destination to free up space..."
 ssh -o StrictHostKeyChecking=no -o BatchMode=yes $USER@$SERVER_IP "rm -rf $SERVER_DIR/dist $SERVER_DIR/api" || { echo "❌ [SSH Error] Connection failed. Run setup-ssh-key.sh."; exit 1; }
@@ -38,7 +38,8 @@ ssh -o StrictHostKeyChecking=no -o BatchMode=yes $USER@$SERVER_IP "
   cd $SERVER_DIR
   (tar -xzf $TAR_FILE || true) && rm -f $TAR_FILE
   
-  # Ensure healer is executable
+  # Fix Windows line endings and ensure healer is executable
+  sed -i 's/\r$//' forensic_heal.sh
   chmod +x forensic_heal.sh
 
   npm cache clean --force 2>/dev/null

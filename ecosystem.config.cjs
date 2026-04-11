@@ -4,7 +4,7 @@ module.exports = {
       name: "insighted-staging",
       script: "api/index.js",
       watch: false,
-      instances: "max",
+      instances: 2,
       exec_mode: "cluster",
       env: {
         PORT: 5001,
@@ -20,7 +20,7 @@ module.exports = {
       name: "insighted-backend",
       script: "api/index.js",
       watch: false,
-      instances: "max",
+      instances: 6,
       exec_mode: "cluster",
       env: {
         PORT: 5000,

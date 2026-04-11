@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft, FiUnlock, FiInfo, FiMaximize2, FiSave, FiWifiOff, FiList } from "react-icons/fi";
-import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, deleteModularFromOutbox, saveSchoolToCache, getCachedSchool, getModularOutbox } from "../../db";
+import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft, FiUnlock, FiInfo, FiMaximize2, FiSave, FiWifiOff, FiList, FiAlertTriangle, FiRefreshCw } from "react-icons/fi";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, deleteModularFromOutbox, saveSchoolToCache, getCachedSchool, getModularOutbox, migrateUnitDrafts } from "../../db";
 import { useAuth } from "../../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
@@ -85,6 +85,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         school_head: "",
         contact_number: "",
         ownership: "",
+        ownership_multiple: [],
         google_drive_link: "",
         google_drive_file_id: "",
         google_drive_file_name: "",
@@ -109,6 +110,8 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         head_hired_year: "",
         ownership_doc_id: null,
         local_file_size: null,
+        ownership_na_reason: "",
+        ownership_document_multiple: [],
     });
 
     const [originalSchoolLocation, setOriginalSchoolLocation] = useState(null);
@@ -134,6 +137,18 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [showFullscreenPdf, setShowFullscreenPdf] = useState(false);
     const [schoolNameWarning, setSchoolNameWarning] = useState("");
     const [isCertified, setIsCertified] = useState(false);
+
+    // ── IDENTITY SHIFT STATE ────────────────────────────────────────────────
+    const [initialSchoolId] = useState(targetSchoolId || user?.school_id || localStorage.getItem("schoolId"));
+    const [idValidation, setIdValidation] = useState({ 
+        isValidating: false, 
+        valid: false, 
+        reason: "", 
+        occupied: false,
+        schoolName: ""
+    });
+    const [showShiftModal, setShowShiftModal] = useState(false);
+    const [isShifting, setIsShifting] = useState(false);
 
     // ── PARALLEL data-fetch on mount ────────────────────────────────────────
     useEffect(() => {
@@ -216,8 +231,9 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 merged.division = takeValue(iernRow.Division, iernRow.division, iernRow.Schools_Division_Office || iernRow.SDO || merged.division);
                 merged.district = takeValue(iernRow.District, iernRow.district, iernRow.Schools_District || merged.district);
                 merged.leg_district = takeValue(iernRow.Legislative_District, iernRow.Leg_District, iernRow.leg_district || merged.leg_district);
-                merged.latitude = iernRow.Latitude || iernRow.latitude || merged.latitude;
-                merged.longitude = iernRow.Longitude || iernRow.longitude || merged.longitude;
+                // iernRow provides a registry fallback; ph_schools will override below if it has user-updated coords
+                merged.latitude = merged.latitude || iernRow.Latitude || iernRow.latitude;
+                merged.longitude = merged.longitude || iernRow.Longitude || iernRow.longitude;
                 merged.iern = iernRow.iern || iernRow.IERN || merged.iern;
             }
 
@@ -232,12 +248,16 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 merged.district = takeValue(merged.district, d.district, "");
                 merged.leg_district = takeValue(merged.leg_district, d.leg_district, "");
                 merged.curricular_offering = takeValue(merged.curricular_offering, normalizeOffering(d.curricular_offering), "");
-                merged.latitude = merged.latitude || d.latitude;
-                merged.longitude = merged.longitude || d.longitude;
+                // ph_schools coordinates take priority — they reflect user-updated values saved from registration or Unit 1 submit
+                if (d.latitude) merged.latitude = d.latitude;
+                if (d.longitude) merged.longitude = d.longitude;
                 merged.iern = merged.iern || d.iern;
                 merged.school_head = takeValue(merged.school_head, d.school_head, "");
                 merged.contact_number = takeValue(merged.contact_number, d.contact_number, "");
                 merged.ownership = takeValue(merged.ownership, d.ownership === "deped owned" ? "deped" : d.ownership, "");
+                merged.ownership_multiple = d.ownership_multiple
+                    ? (Array.isArray(d.ownership_multiple) ? d.ownership_multiple : (() => { try { return JSON.parse(d.ownership_multiple); } catch { return []; } })())
+                    : [];
                 merged.google_drive_link = takeValue(merged.google_drive_link, d.google_drive_link, "");
                 merged.google_drive_file_id = takeValue(merged.google_drive_file_id, d.google_drive_file_id, "");
                 merged.google_drive_file_name = takeValue(merged.google_drive_file_name, d.google_drive_file_name, "");
@@ -255,7 +275,11 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 merged.head_sex = takeValue(merged.head_sex, d.head_sex, "");
                 merged.established_month = takeValue(merged.established_month, d.established_month, "");
                 merged.established_year = takeValue(merged.established_year, d.established_year, "");
+                merged.ownership_na_reason = takeValue(merged.ownership_na_reason, d.ownership_na_reason, "");
                 merged.ownership_doc_id = merged.ownership_doc_id || d.ownership_doc_id;
+                merged.ownership_document_multiple = d.ownership_document_multiple
+                    ? (Array.isArray(d.ownership_document_multiple) ? d.ownership_document_multiple : (() => { try { return JSON.parse(d.ownership_document_multiple); } catch { return []; } })())
+                    : [];
 
                 if (d.head_date_hired) {
                     const hiredVal = d.head_date_hired.split('T')[0];
@@ -347,11 +371,13 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             .then(r => r.json())
             .then(data => {
                 let options = Array.isArray(data) ? data : [];
-                if (formData.region === 'Blank Region' && !options.includes('Blank Province')) options.unshift('Blank Province');
+                // Filter out any existing variations of BLANK PROVINCE
+                options = options.filter(opt => opt.toUpperCase() !== 'BLANK PROVINCE');
+                if (formData.region === 'BLANK REGION') options.unshift('BLANK PROVINCE');
                 
-                // Ensure current value is in list (Offline fix)
-                if (formData.province && !options.includes(formData.province)) {
-                    options.push(formData.province);
+                // Ensure current value is in list and standardized
+                if (formData.province && !options.some(opt => opt.toUpperCase() === formData.province.toUpperCase())) {
+                    options.push(formData.province.toUpperCase());
                 }
                 setProvinceOptions(options.filter(Boolean));
             })
@@ -367,10 +393,11 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             .then(r => r.json())
             .then(data => {
                 let options = Array.isArray(data) ? data : [];
-                if (formData.province === 'Blank Province' && !options.includes('Blank Municipality')) options.unshift('Blank Municipality');
+                options = options.filter(opt => opt.toUpperCase() !== 'BLANK MUNICIPALITY');
+                if (formData.province === 'BLANK PROVINCE') options.unshift('BLANK MUNICIPALITY');
                 
-                if (formData.municipality && !options.includes(formData.municipality)) {
-                    options.push(formData.municipality);
+                if (formData.municipality && !options.some(opt => opt.toUpperCase() === formData.municipality.toUpperCase())) {
+                    options.push(formData.municipality.toUpperCase());
                 }
                 setCityOptions(options.filter(Boolean));
             })
@@ -385,10 +412,11 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             .then(r => r.json())
             .then(data => {
                 let options = Array.isArray(data) ? data : [];
-                if (formData.municipality === 'Blank Municipality' && !options.includes('Blank Barangay')) options.unshift('Blank Barangay');
+                options = options.filter(opt => opt.toUpperCase() !== 'BLANK BARANGAY');
+                if (formData.municipality === 'BLANK MUNICIPALITY') options.unshift('BLANK BARANGAY');
                 
-                if (formData.barangay && !options.includes(formData.barangay)) {
-                    options.push(formData.barangay);
+                if (formData.barangay && !options.some(opt => opt.toUpperCase() === formData.barangay.toUpperCase())) {
+                    options.push(formData.barangay.toUpperCase());
                 }
                 setBarangayOptions(options.filter(Boolean));
             })
@@ -406,13 +434,15 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             let dOptions = Array.isArray(divs) ? divs : [];
             let lOptions = Array.isArray(legs) ? legs : [];
             
-            if (formData.region === 'Blank Region') {
-                if (!dOptions.includes('Blank Division')) dOptions.unshift('Blank Division');
-                if (!lOptions.includes('Blank District')) lOptions.unshift('Blank District');
+            if (formData.region === 'BLANK REGION') {
+                dOptions = dOptions.filter(opt => opt.toUpperCase() !== 'BLANK DIVISION');
+                lOptions = lOptions.filter(opt => opt.toUpperCase() !== 'BLANK LEGISLATIVE DISTRICT');
+                dOptions.unshift('BLANK DIVISION');
+                lOptions.unshift('BLANK LEGISLATIVE DISTRICT');
             }
             
-            if (formData.division && !dOptions.includes(formData.division)) dOptions.push(formData.division);
-            if (formData.leg_district && !lOptions.includes(formData.leg_district)) lOptions.push(formData.leg_district);
+            if (formData.division && !dOptions.some(opt => opt.toUpperCase() === formData.division.toUpperCase())) dOptions.push(formData.division.toUpperCase());
+            if (formData.leg_district && !lOptions.some(opt => opt.toUpperCase() === formData.leg_district.toUpperCase())) lOptions.push(formData.leg_district.toUpperCase());
 
             setDivisionOptions(dOptions.filter(Boolean)); 
             setLegDistrictOptions(lOptions.filter(Boolean)); 
@@ -425,10 +455,11 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             .then(r => r.json())
             .then(data => {
                 let options = Array.isArray(data) ? data : [];
-                if (formData.division === 'Blank Division' && !options.includes('Blank District')) options.unshift('Blank District');
+                options = options.filter(opt => opt.toUpperCase() !== 'BLANK DISTRICT');
+                if (formData.division === 'BLANK DIVISION') options.unshift('BLANK DISTRICT');
                 
-                if (formData.district && !options.includes(formData.district)) {
-                    options.push(formData.district);
+                if (formData.district && !options.some(opt => opt.toUpperCase() === formData.district.toUpperCase())) {
+                    options.push(formData.district.toUpperCase());
                 }
                 setDistrictOptions(options.filter(Boolean));
             })
@@ -442,10 +473,11 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             .then(r => r.json())
             .then(data => {
                 let options = Array.isArray(data) ? data : [];
-                if (!options.includes('Blank Region')) options.unshift('Blank Region');
+                options = options.filter(opt => opt.toUpperCase() !== 'BLANK REGION');
+                options.unshift('BLANK REGION');
                 
-                if (formData.region && !options.includes(formData.region)) {
-                    options.push(formData.region);
+                if (formData.region && !options.some(opt => opt.toUpperCase() === formData.region.toUpperCase())) {
+                    options.push(formData.region.toUpperCase());
                 }
                 setRegionOptions(options.filter(Boolean));
             })
@@ -490,42 +522,84 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         if (formData.school_id && String(formData.school_id).length === 6 && /^\d+$/.test(String(formData.school_id))) {
             const pullIern = async () => {
                 const sid = String(formData.school_id);
-                try {
-                    let iernRow = null;
-                    
-                    const res = await fetch(`/api/schools_iern/${sid}`).catch(() => null);
-                    if (res?.ok) {
-                        const j = await res.json();
-                        if (j.exists && j.data) {
-                            iernRow = j.data;
-                            saveSchoolToCache({ ...iernRow, school_id: sid });
+                
+                // If it's the SAME as initial, just do the standard IERN pull
+                if (sid === initialSchoolId) {
+                    setIdValidation({ isValidating: false, valid: true, reason: "", occupied: false, schoolName: "" });
+                    try {
+                        let iernRow = null;
+                        const res = await fetch(`/api/schools_iern/${sid}`).catch(() => null);
+                        if (res?.ok) {
+                            const j = await res.json();
+                            if (j.exists && j.data) {
+                                iernRow = j.data;
+                                saveSchoolToCache({ ...iernRow, school_id: sid });
+                            }
+                        } else if (!navigator.onLine || !res) {
+                            iernRow = await getCachedSchool(sid);
                         }
-                    } else if (!navigator.onLine || !res) {
-                        // Offline fallback
-                        iernRow = await getCachedSchool(sid);
-                        if (iernRow) console.log("💾 [Unit1] Offline Watcher: Loading from Cache.");
-                    }
 
-                    if (iernRow) {
-                        setFormData(prev => ({
-                            ...prev,
-                            school_name: iernRow.School_Name || iernRow.school_name || prev.school_name,
-                            region: iernRow.Region || iernRow.region || prev.region,
-                            province: iernRow.Province || iernRow.province || prev.province,
-                            municipality: iernRow.Municipality || iernRow.municipality || iernRow.City || prev.municipality,
-                            division: iernRow.Division || iernRow.division || prev.division,
-                            district: iernRow.District || iernRow.district || prev.district,
-                            leg_district: iernRow.Legislative_District || iernRow.leg_district || prev.leg_district,
-                            iern: iernRow.iern || iernRow.IERN || prev.iern
-                        }));
+                        if (iernRow) {
+                            setFormData(prev => ({
+                                ...prev,
+                                school_name: iernRow.School_Name || iernRow.school_name || prev.school_name,
+                                region: iernRow.Region || iernRow.region || prev.region,
+                                province: iernRow.Province || iernRow.province || prev.province,
+                                municipality: iernRow.Municipality || iernRow.municipality || iernRow.City || prev.municipality,
+                                division: iernRow.Division || iernRow.division || prev.division,
+                                district: iernRow.District || iernRow.district || prev.district,
+                                leg_district: iernRow.Legislative_District || iernRow.leg_district || prev.leg_district,
+                                iern: iernRow.iern || iernRow.IERN || prev.iern
+                            }));
+                        }
+                    } catch (e) {
+                        console.error("IERN pull failed:", e);
                     }
-                } catch (e) {
-                    console.error("IERN pull failed:", e);
+                    return;
+                }
+
+                // If it's DIFFERENT, trigger the strict conversion validation
+                setIdValidation(prev => ({ ...prev, isValidating: true, valid: false, reason: "" }));
+                try {
+                    const res = await fetch(`/api/sdo/validate-conversion/${sid}?requester_uid=${user?.uid}`).catch(() => null);
+                    if (res?.ok) {
+                        const data = await res.json();
+                        if (data.valid) {
+                            setIdValidation({
+                                isValidating: false,
+                                valid: true,
+                                reason: "",
+                                occupied: false,
+                                schoolName: data.school_name
+                            });
+                            // Autofill registry mapping
+                            setFormData(prev => ({
+                                ...prev,
+                                school_name: data.school_name,
+                                iern: data.iern || prev.iern
+                            }));
+                        } else {
+                            setIdValidation({
+                                isValidating: false,
+                                valid: false,
+                                reason: data.reason || "This ID is not eligible for conversion.",
+                                occupied: data.occupied || false,
+                                schoolName: ""
+                            });
+                        }
+                    } else {
+                        throw new Error("Validation service unavailable");
+                    }
+                } catch (err) {
+                    console.error("Conversion validation failed:", err);
+                    setIdValidation({ isValidating: false, valid: false, reason: "Unable to verify School ID across the registry.", occupied: false, schoolName: "" });
                 }
             };
             pullIern();
+        } else {
+            setIdValidation({ isValidating: false, valid: false, reason: "", occupied: false, schoolName: "" });
         }
-    }, [formData.school_id]);
+    }, [formData.school_id, initialSchoolId, user?.uid]);
 
     useEffect(() => {
         if (!isModeLoading && !isReviewMode) {
@@ -544,6 +618,10 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             }
         } else {
             setFormData(prev => ({ ...prev, [name]: value }));
+            // Broadcast offering change immediately so other units (Unit 2, 3, etc.) react without waiting for a save
+            if (name === 'curricular_offering' && value) {
+                localStorage.setItem("schoolOffering", value);
+            }
         }
     };
     const handleRegionChange = (e) => setFormData(prev => ({ ...prev, region: e.target.value, province: "", municipality: "", barangay: "", division: "", district: "" }));
@@ -552,15 +630,38 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const handleDivisionChange = (e) => setFormData(prev => ({ ...prev, division: e.target.value, district: "" }));
     const handleOwnershipChange = (e) => {
         setDriveLinkError("");
-        setFormData(prev => ({ 
-            ...prev, 
-            ownership: e.target.value, 
+        setFormData(prev => ({
+            ...prev,
+            ownership: e.target.value,
+            ownership_multiple: [],
             ownership_document_type: "",
-            google_drive_link: "", 
-            google_drive_file_id: "", 
-            google_drive_file_name: "", 
-            google_drive_thumbnail_url: "" 
+            ownership_document_multiple: [],
+            google_drive_link: "",
+            google_drive_file_id: "",
+            google_drive_file_name: "",
+            google_drive_thumbnail_url: "",
+            ownership_na_reason: ""
         }));
+    };
+
+    const handleMultipleDocumentTypeToggle = (val) => {
+        setFormData(prev => {
+            const current = prev.ownership_document_multiple || [];
+            const updated = current.includes(val)
+                ? current.filter(v => v !== val)
+                : [...current, val];
+            return { ...prev, ownership_document_multiple: updated };
+        });
+    };
+
+    const handleMultipleOwnershipToggle = (val) => {
+        setFormData(prev => {
+            const current = prev.ownership_multiple || [];
+            const updated = current.includes(val)
+                ? current.filter(v => v !== val)
+                : [...current, val];
+            return { ...prev, ownership_multiple: updated };
+        });
     };
     const handleSchoolTypeChange = (e) => setFormData(prev => ({ ...prev, school_type: e.target.value, mother_school_id: "", extension_mother_school_name: "" }));
     
@@ -665,6 +766,52 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         navigate("/modular-dashboard");
     };
 
+    const handleIdentityShift = async () => {
+        if (!idValidation.valid || isShifting) return;
+        
+        setIsShifting(true);
+        try {
+            // 1. Perform Backend Identity Shift
+            const res = await fetch("/api/ph_schools/identity-shift", {
+                method: "POST",
+                headers: { 
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${localStorage.getItem("token")}`
+                },
+                body: JSON.stringify({
+                    old_school_id: initialSchoolId,
+                    new_school_id: formData.school_id
+                })
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || "Shift failed");
+            }
+
+            const data = await res.json();
+
+            // 2. Perform Local IndexedDB Re-keying
+            console.log(`🔄 [Shift] Re-keying local data: ${initialSchoolId} -> ${formData.school_id}`);
+            await migrateUnitDrafts(initialSchoolId, formData.school_id);
+
+            // 3. Update Local Storage & Force Session Refresh
+            localStorage.setItem("schoolId", formData.school_id);
+            if (data.iern) localStorage.setItem("iern", data.iern);
+            
+            // Show success briefly then refresh
+            setShowShiftModal(false);
+            alert("Identity Shift Successful! Your account and data have been moved to the new School ID. The app will now reload.");
+            window.location.reload();
+
+        } catch (err) {
+            console.error("Shift Error:", err);
+            alert(`Identity Shift Failed: ${err.message}`);
+        } finally {
+            setIsShifting(false);
+        }
+    };
+
     const handleSubmit = async () => {
         try {
             setLoading(true);
@@ -718,14 +865,17 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 school_head: formData.school_head,
                 contact_number: formData.contact_number,
                 ownership: formData.ownership,
+                ownership_multiple: formData.ownership_multiple || [],
                 google_drive_thumbnail_url: formData.google_drive_thumbnail_url,
                 established_month: formData.established_month,
                 established_year: formData.established_year,
                 school_type: formData.school_type,
                 mother_school_id: formData.mother_school_id,
+                ownership_na_reason: formData.ownership_na_reason,
                 annex_details: formData.annex_details,
                 extension_mother_school_name: formData.extension_mother_school_name,
                 ownership_document_type: formData.ownership_document_type,
+                ownership_document_multiple: formData.ownership_document_multiple || [],
                 head_first_name: formData.head_first_name,
                 head_middle_name: formData.head_middle_name,
                 head_last_name: formData.head_last_name,
@@ -979,31 +1129,35 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     <div className="grid grid-cols-1 gap-4">
                                         <div>
                                             <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Region</span>
-                                            <p className="font-bold text-slate-700">{formData.region || "—"}</p>
+                                            <p className="font-bold text-slate-700">{formData.region?.toUpperCase() || "—"}</p>
                                         </div>
                                         <div>
                                             <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Province</span>
-                                            <p className="font-bold text-slate-700">{formData.province || "—"}</p>
+                                            <p className="font-bold text-slate-700">{formData.province?.toUpperCase() || "—"}</p>
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-1 gap-4">
                                         <div>
                                             <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Municipality</span>
-                                            <p className="font-bold text-slate-700">{formData.municipality || "—"}</p>
+                                            <p className="font-bold text-slate-700">{formData.municipality?.toUpperCase() || "—"}</p>
                                         </div>
                                         <div>
                                             <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Barangay</span>
-                                            <p className="font-bold text-slate-700">{formData.barangay || "—"}</p>
+                                            <p className="font-bold text-slate-700">{formData.barangay?.toUpperCase() || "—"}</p>
                                         </div>
                                     </div>
                                     <div className="pt-4 border-t border-slate-50 grid grid-cols-1 gap-4">
                                         <div>
                                             <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Division</span>
-                                            <p className="font-bold text-slate-700">{formData.division || "—"}</p>
+                                            <p className="font-bold text-slate-700">{formData.division?.toUpperCase() || "—"}</p>
                                         </div>
                                         <div>
                                             <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">District</span>
-                                            <p className="font-bold text-slate-700">{formData.district || "—"}</p>
+                                            <p className="font-bold text-slate-700">{formData.district?.toUpperCase() || "—"}</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Legislative District</span>
+                                            <p className="font-bold text-slate-700">{formData.leg_district?.toUpperCase() || "—"}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -1115,14 +1269,39 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Ownership</span>
-                                            <p className="font-black text-slate-800 text-lg capitalize">{formData.ownership?.replace('_', ' ') || "—"}</p>
+                                            {formData.ownership === 'multiple' && formData.ownership_multiple?.length ? (
+                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                    {formData.ownership_multiple.map(o => (
+                                                        <span key={o} className="text-xs font-black bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full capitalize">{o.replace(/_/g, ' ')}</span>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="font-black text-slate-800 text-lg capitalize">{formData.ownership?.replace(/_/g, ' ') || "—"}</p>
+                                            )}
                                         </div>
                                         <div className="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center text-2xl">⚖️</div>
                                     </div>
+                                    {formData.ownership === 'na' && formData.ownership_na_reason && (
+                                        <div className="p-4 bg-rose-50 border-2 border-rose-100 rounded-2xl relative overflow-hidden group">
+                                            <div className="absolute top-0 right-0 p-2 text-2xl opacity-10 grayscale group-hover:grayscale-0 transition-all duration-700">📝</div>
+                                            <span className="text-[10px] font-black uppercase text-rose-500 tracking-widest block mb-2">Reason for N/A</span>
+                                            <p className="font-bold text-slate-700 text-sm leading-relaxed">{formData.ownership_na_reason}</p>
+                                        </div>
+                                    )}
+                                    {formData.ownership !== 'na' && (
                                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                                         <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">Document Type</span>
-                                        <p className="font-bold text-slate-700 text-sm">{formData.ownership_document_type || "No document provided"}</p>
+                                        {formData.ownership === 'multiple' && formData.ownership_document_multiple?.length ? (
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                {formData.ownership_document_multiple.map(d => (
+                                                    <span key={d} className="text-xs font-black bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">{d}</span>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="font-bold text-slate-700 text-sm">{formData.ownership_document_type || "No document provided"}</p>
+                                        )}
                                     </div>
+                                    )}
                                     {formData.local_file_path && (
                                         <div className="space-y-3">
                                             <div className="flex items-center justify-between">
@@ -1286,6 +1465,43 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 </div>
                                             </motion.div>
                                         )}
+
+                                        {/* Conversion Validation Feedback */}
+                                        <AnimatePresence>
+                                            {idValidation.isValidating && (
+                                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-3xl">
+                                                    <FiRefreshCw className="animate-spin text-indigo-600 w-5 h-5" />
+                                                    <p className="text-xs font-black text-slate-500 uppercase tracking-widest">Validating Registry...</p>
+                                                </motion.div>
+                                            )}
+                                            {!idValidation.isValidating && formData.school_id !== initialSchoolId && idValidation.reason && (
+                                                <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className={`p-5 rounded-3xl border-2 flex gap-4 ${idValidation.occupied ? 'bg-orange-50 border-orange-100 text-orange-800' : 'bg-rose-50 border-rose-100 text-rose-800'}`}>
+                                                    <FiAlertTriangle className="w-6 h-6 flex-shrink-0" />
+                                                    <div>
+                                                        <p className="text-[10px] font-black uppercase tracking-widest mb-1">{idValidation.occupied ? 'Occupancy Warning' : 'Validation Error'}</p>
+                                                        <p className="text-xs font-bold leading-relaxed">{idValidation.reason}</p>
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                            {!idValidation.isValidating && formData.school_id !== initialSchoolId && idValidation.valid && (
+                                                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="p-6 bg-indigo-900 text-white rounded-[2rem] shadow-xl shadow-indigo-200/50">
+                                                    <div className="flex items-start gap-4 mb-5">
+                                                        <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center text-2xl">🏢</div>
+                                                        <div>
+                                                            <p className="text-[10px] font-black text-indigo-300 uppercase tracking-[0.2em] mb-1">New Target School</p>
+                                                            <h4 className="text-lg font-black leading-tight">{idValidation.schoolName || formData.school_name}</h4>
+                                                        </div>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => setShowShiftModal(true)}
+                                                        className="w-full py-4 bg-white text-indigo-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+                                                    >
+                                                        <FiRefreshCw className="w-4 h-4" />
+                                                        Confirm Identity Shift
+                                                    </button>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
                                     </div>
                                 )}
 
@@ -1604,58 +1820,162 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block mb-2">Ownership</label>
                                             <select name="ownership" value={formData.ownership} onChange={handleOwnershipChange} className={chunkySelect}>
                                                 <option value="" disabled hidden style={{color: '#999'}}>Select Ownership...</option>
-                                                <option value="deped">DepEd Owned</option>
-                                                <option value="privately_owned">Privately Owned</option>
-                                                <option value="lgu_owned">LGU Owned</option>
+                                                <option value="deped">DepEd-owned</option>
+                                                <option value="lgu_owned">LGU-owned</option>
+                                                <option value="privately_owned">Privately-owned</option>
+                                                <option value="nga_owned">NGA-owned</option>
+                                                <option value="multiple">Multiple ownership</option>
+                                                <option value="na">N/A</option>
                                             </select>
                                         </div>
 
+                                        {/* N/A Reason Field */}
+                                        {formData.ownership === 'na' && (
+                                            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                                                className="space-y-2">
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Please provide reason for N/A selection</label>
+                                                <div className="relative group">
+                                                    <textarea
+                                                        name="ownership_na_reason"
+                                                        value={formData.ownership_na_reason}
+                                                        onChange={handleChange}
+                                                        maxLength={100}
+                                                        placeholder="Maximum 100 characters..."
+                                                        className="w-full min-h-[100px] bg-slate-50 border-2 border-slate-100 rounded-3xl p-5 text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300 resize-none"
+                                                    />
+                                                    <div className="absolute bottom-4 right-5 flex items-center gap-1.5 px-3 py-1.5 bg-white shadow-sm border border-slate-100 rounded-full">
+                                                        <div className={`w-1.5 h-1.5 rounded-full ${formData.ownership_na_reason?.length >= 90 ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+                                                        <span className={`text-[10px] font-black tracking-tighter ${formData.ownership_na_reason?.length >= 90 ? 'text-rose-600' : 'text-slate-400'}`}>
+                                                            {formData.ownership_na_reason?.length || 0}/100
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+
+                                        {/* Multiple Ownership — checkbox picker */}
+                                        {formData.ownership === 'multiple' && (
+                                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                                                className="space-y-2">
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Select categories below</label>
+                                                <div className="p-4 bg-white border-2 border-gray-100 rounded-3xl shadow-sm space-y-2">
+                                                    {[
+                                                        { value: 'deped', label: 'DepEd-owned' },
+                                                        { value: 'lgu_owned', label: 'LGU-owned' },
+                                                        { value: 'privately_owned', label: 'Privately-owned' },
+                                                        { value: 'nga_owned', label: 'NGA-owned' },
+                                                    ].map(({ value, label }) => {
+                                                        const selected = (formData.ownership_multiple || []).includes(value);
+                                                        return (
+                                                            <button
+                                                                key={value}
+                                                                type="button"
+                                                                onClick={() => handleMultipleOwnershipToggle(value)}
+                                                                className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all active:scale-[0.98] ${selected ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-500'}`}
+                                                            >
+                                                                <span className="text-sm font-bold">{label}</span>
+                                                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${selected ? 'border-blue-500 bg-blue-500' : 'border-gray-300'}`}>
+                                                                    {selected && <FiCheck className="w-4 h-4 text-white" strokeWidth={4} />}
+                                                                </div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </motion.div>
+                                        )}
+
                                         {/* Ownership Document Upload */}
-                                        {formData.ownership && (
+                                        {formData.ownership && formData.ownership !== 'na' && (
                                             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
                                                 className="space-y-3">
-                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Document Type</label>
-                                                <select 
-                                                    name="ownership_document_type" 
-                                                    value={formData.ownership_document_type} 
-                                                    onChange={handleChange} 
-                                                    className={chunkySelect}
-                                                >
-                                                    <option value="" disabled hidden style={{color: '#999'}}>Select Document Type...</option>
-                                                    <option value="Transfer Certificate of Title">Transfer Certificate of Title</option>
-                                                    <option value="Native Title">Native Title</option>
-                                                    <option value="Special Patents">Special Patents</option>
-                                                    <option value="Presidential Proclamations">Presidential Proclamations</option>
-                                                    <option value="Deed of Sale">Deed of Sale</option>
-                                                    <option value="Deed of Donation">Deed of Donation</option>
-                                                    <option value="Deed of Donation (DepEd Registered)">Deed of Donation (DepEd Registered)</option>
-                                                    <option value="Deed of Donation (Unregistered)">Deed of Donation (Unregistered)</option>
-                                                    <option value="Usufruct Agreement">Usufruct Agreement</option>
-                                                    <option value="Memorandum of Agreement">Memorandum of Agreement</option>
-                                                    <option value="Lease Agreement">Lease Agreement</option>
-                                                    <option value="Expropriation">Expropriation</option>
-                                                    <option value="Tax Declaration Only">Tax Declaration Only</option>
-                                                    <option value="Extrajudicial Settlement">Extrajudicial Settlement</option>
-                                                </select>
-                                                
-                                                {/* Local Document Upload (Replaces GDrive) */}
+                                                {formData.ownership === 'multiple' ? (
+                                                    <div className="space-y-4">
+                                                        <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Select ownership documents</label>
+                                                        <div className="p-4 bg-white border-2 border-gray-100 rounded-3xl shadow-sm space-y-2">
+                                                            {[
+                                                                "Transfer Certificate of Title",
+                                                                "Native Title",
+                                                                "Special Patents",
+                                                                "Presidential Proclamations",
+                                                                "Deed of Sale",
+                                                                "Deed of Donation",
+                                                                "Deed of Donation (DepEd Registered)",
+                                                                "Deed of Donation (Unregistered)",
+                                                                "Usufruct Agreement",
+                                                                "Memorandum of Agreement",
+                                                                "Lease Agreement",
+                                                                "Expropriation",
+                                                                "Tax Declaration Only",
+                                                                "Extrajudicial Settlement"
+                                                            ].map((doc) => {
+                                                                const selected = (formData.ownership_document_multiple || []).includes(doc);
+                                                                return (
+                                                                    <button
+                                                                        key={doc}
+                                                                        type="button"
+                                                                        onClick={() => handleMultipleDocumentTypeToggle(doc)}
+                                                                        className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all active:scale-[0.98] ${selected ? 'bg-purple-50 text-purple-700' : 'bg-gray-50 text-gray-500'}`}
+                                                                    >
+                                                                        <span className="text-sm font-bold text-left">{doc}</span>
+                                                                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${selected ? 'border-purple-500 bg-purple-500' : 'border-gray-300'}`}>
+                                                                            {selected && <FiCheck className="w-4 h-4 text-white" strokeWidth={4} />}
+                                                                        </div>
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Document Type</label>
+                                                        <select
+                                                            name="ownership_document_type"
+                                                            value={formData.ownership_document_type}
+                                                            onChange={handleChange}
+                                                            className={chunkySelect}
+                                                        >
+                                                            <option value="" disabled hidden style={{color: '#999'}}>Select Document Type...</option>
+                                                            <option value="Transfer Certificate of Title">Transfer Certificate of Title</option>
+                                                            <option value="Native Title">Native Title</option>
+                                                            <option value="Special Patents">Special Patents</option>
+                                                            <option value="Presidential Proclamations">Presidential Proclamations</option>
+                                                            <option value="Deed of Sale">Deed of Sale</option>
+                                                            <option value="Deed of Donation">Deed of Donation</option>
+                                                            <option value="Deed of Donation (DepEd Registered)">Deed of Donation (DepEd Registered)</option>
+                                                            <option value="Deed of Donation (Unregistered)">Deed of Donation (Unregistered)</option>
+                                                            <option value="Usufruct Agreement">Usufruct Agreement</option>
+                                                            <option value="Memorandum of Agreement">Memorandum of Agreement</option>
+                                                            <option value="Lease Agreement">Lease Agreement</option>
+                                                            <option value="Expropriation">Expropriation</option>
+                                                            <option value="Tax Declaration Only">Tax Declaration Only</option>
+                                                            <option value="Extrajudicial Settlement">Extrajudicial Settlement</option>
+                                                        </select>
+                                                    </>
+                                                )}
+
+                                                {/* Local Document Upload */}
                                                 <div className="pt-2">
-                                                    <DocumentUpload 
-                                                        iern={formData.iern || formData.school_id} 
-                                                        docType={formData.ownership_document_type}
+                                                    <DocumentUpload
+                                                        iern={formData.iern || formData.school_id}
+                                                        docType={formData.ownership === 'multiple' ? 'Multiple Ownership Documents' : formData.ownership_document_type}
                                                         initialFile={formData.local_file_path}
                                                         initialDocId={formData.ownership_doc_id}
                                                         initialFileSize={formData.local_file_size}
-                                                        onUploadSuccess={(path, id, name, size) => setFormData(prev => ({ 
-                                                            ...prev, 
-                                                            local_file_path: path, 
-                                                            ownership_doc_id: id, 
+                                                        onUploadSuccess={(path, id, name, size) => setFormData(prev => ({
+                                                            ...prev,
+                                                            local_file_path: path,
+                                                            ownership_doc_id: id,
                                                             local_file_name: name,
-                                                            local_file_size: size 
+                                                            local_file_size: size
                                                         }))}
                                                     />
-                                                    
-
+                                                    {/* PDF tip */}
+                                                    <div className="mt-3 flex items-start gap-2 px-4 py-3 bg-amber-50 border border-amber-100 rounded-2xl">
+                                                        <span className="text-amber-500 text-base leading-none mt-0.5">💡</span>
+                                                        <p className="text-[11px] font-semibold text-amber-700 leading-snug">
+                                                            <span className="font-black">Tip:</span> For faster and more successful upload, ensure your PDF is clear and ideally under 5MB. If you have multiple pages, scan them into a single PDF document before uploading.
+                                                        </p>
+                                                    </div>
                                                 </div>
                                             </motion.div>
                                         )}
@@ -2159,6 +2479,80 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 >
                                     Close
                                 </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+            {/* Identity Shift Confirmation Modal */}
+            <AnimatePresence>
+                {showShiftModal && (
+                    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 sm:p-0">
+                        <motion.div 
+                            initial={{ opacity: 0 }} 
+                            animate={{ opacity: 1 }} 
+                            exit={{ opacity: 0 }}
+                            onClick={() => !isShifting && setShowShiftModal(false)}
+                            className="absolute inset-0 bg-slate-900/90 backdrop-blur-md"
+                        />
+                        <motion.div 
+                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                            className="bg-white rounded-[3rem] w-full max-w-lg overflow-hidden shadow-2xl relative"
+                        >
+                            <div className="p-10 text-center">
+                                <div className="w-24 h-24 bg-rose-50 text-rose-600 rounded-[2.5rem] flex items-center justify-center text-5xl mx-auto mb-8 animate-bounce">⚠️</div>
+                                <h3 className="text-3xl font-black text-slate-950 mb-4 leading-tight">Proceed with identity shift?</h3>
+                                <p className="text-slate-500 font-bold leading-relaxed mb-8 px-6">
+                                    This action will move your account and all existing data to School ID <span className="text-indigo-600">{formData.school_id}</span>. 
+                                    The previous ID <span className="text-slate-400 line-through">{initialSchoolId}</span> will be permanently archived. 
+                                </p>
+
+                                <div className="bg-slate-50 border border-slate-100 rounded-[2rem] p-6 mb-10 text-left">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="w-2 h-2 bg-indigo-500 rounded-full" />
+                                        <p className="text-[10px] font-black uppercase text-indigo-600 tracking-widest">Permanent Changes</p>
+                                    </div>
+                                    <ul className="space-y-3 text-sm font-bold text-slate-700">
+                                        <li className="flex items-center gap-3">
+                                            <FiCheck className="text-emerald-500 flex-shrink-0" />
+                                            Update user registration to {formData.school_id}
+                                        </li>
+                                        <li className="flex items-center gap-3">
+                                            <FiCheck className="text-emerald-500 flex-shrink-0" />
+                                            Re-key all local drafts and outbox entries
+                                        </li>
+                                        <li className="flex items-center gap-3">
+                                            <FiCheck className="text-emerald-500 flex-shrink-0" />
+                                            Archive legacy school ID in master registry
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div className="flex flex-col gap-3">
+                                    <button 
+                                        disabled={isShifting}
+                                        onClick={handleIdentityShift}
+                                        className="w-full py-6 bg-slate-950 text-white rounded-[2rem] font-black text-lg shadow-xl shadow-slate-900/20 flex items-center justify-center gap-3 hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50"
+                                    >
+                                        {isShifting ? (
+                                            <>
+                                                <FiRefreshCw className="animate-spin w-6 h-6" />
+                                                Processing Shift...
+                                            </>
+                                        ) : (
+                                            <>Shift School Identity Now</>
+                                        )}
+                                    </button>
+                                    <button 
+                                        disabled={isShifting}
+                                        onClick={() => setShowShiftModal(false)}
+                                        className="w-full py-4 text-slate-400 font-black text-sm uppercase tracking-widest hover:text-slate-600 transition-colors"
+                                    >
+                                        Cancel and Go Back
+                                    </button>
+                                </div>
                             </div>
                         </motion.div>
                     </div>

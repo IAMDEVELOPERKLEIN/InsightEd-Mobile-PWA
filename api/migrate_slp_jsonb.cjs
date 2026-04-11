@@ -19,7 +19,30 @@ const pool = new Pool({
   ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
 });
 
-const COLUMNS_TO_MIGRATE = ['transportation_modes', 'hazards_experienced'];
+// Fallback for local connection if Azure/Remote fails
+async function getConnectedClient() {
+  try {
+    const client = await pool.connect();
+    return client;
+  } catch (err) {
+    if (err.message.includes('pg_hba.conf') || err.message.includes('timeout')) {
+      console.warn('⚠️  Remote connection failed, attempting local fallback...');
+      const localPool = new Pool({
+        connectionString: 'postgresql://localhost:5432/insightEd',
+      });
+      return await localPool.connect();
+    }
+    throw err;
+  }
+}
+
+const COLUMNS_TO_MIGRATE = [
+  'transportation_modes', 
+  'hazards_experienced', 
+  'water_proximity', 
+  'natural_calamities', 
+  'anthropogenic_threats'
+];
 
 async function getColumnType(client, columnName) {
   const res = await client.query(
@@ -31,7 +54,7 @@ async function getColumnType(client, columnName) {
 }
 
 async function migrate() {
-  const client = await pool.connect();
+  const client = await getConnectedClient();
   try {
     console.log('\n=== migrate_slp_jsonb: school_location_profiles TEXT[] → JSONB ===\n');
 

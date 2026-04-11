@@ -126,13 +126,13 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 
                 // Overlay Unit 2 Sync Center Data
                 if (pendingUnit2) {
-                    baseline.unit2_simplified_enrollment = pendingUnit2.payload?.unit2_simplified_enrollment;
+                    baseline.unit2_simplified_enrollment = pendingUnit2.payload?.unit2_simplified_enrollment || baseline.unit2_simplified_enrollment;
                     baseline.total_enrollment = pendingUnit2.payload?.total_enrollment || baseline.total_enrollment;
                     
-                    // Also multigrade groupings for Unit 5 reconstruction
-                    baseline.multigrade_groupings_1 = pendingUnit2.payload?.multigrade_groupings_1;
-                    baseline.multigrade_groupings_2 = pendingUnit2.payload?.multigrade_groupings_2;
-                    baseline.multigrade_groupings_3 = pendingUnit2.payload?.multigrade_groupings_3;
+                    // Only overlay multigrade groupings if they exist in the payload
+                    if (pendingUnit2.payload?.multigrade_groupings_1) baseline.multigrade_groupings_1 = pendingUnit2.payload.multigrade_groupings_1;
+                    if (pendingUnit2.payload?.multigrade_groupings_2) baseline.multigrade_groupings_2 = pendingUnit2.payload.multigrade_groupings_2;
+                    if (pendingUnit2.payload?.multigrade_groupings_3) baseline.multigrade_groupings_3 = pendingUnit2.payload.multigrade_groupings_3;
                 }
 
                 // Overlay Unit 3 Sync Center Data
@@ -179,6 +179,13 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                     if (found) return parseInt(found.total || 0);
                     return 0;
                 };
+
+                const getActiveStatusForGrade = (gradeId) => {
+                    const found = u2Parsed.find(x => x.grade_level === gradeId);
+                    // In Unit 2, is_active is true/false. If not found, assume offered by default unless we have data suggesting otherwise.
+                    if (found) return found.is_active !== false;
+                    return true;
+                };
                 const getCountForGrade = (gradeId) => {
                     const found = Array.isArray(parsedSections) ? parsedSections.find(sec => sec.grade_level === gradeId) : null;
                     if (found) return parseInt(found.total_sections || 0);
@@ -200,6 +207,11 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                     
                     const enrollment = getEnrollmentForGrade(pg.id);
                     const sections = getCountForGrade(pg.id);
+                    const isActive = getActiveStatusForGrade(pg.id);
+
+                    // Skip the grade if it was explicitly disabled in Unit 2
+                    if (isActive === false) return;
+
                     if (enrollment > 0 || sections > 0 || isOffered) {
                         expectedGrades.push({ id: pg.id, label: pg.label });
                     }

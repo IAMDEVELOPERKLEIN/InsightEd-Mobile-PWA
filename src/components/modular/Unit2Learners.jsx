@@ -105,8 +105,17 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         return availableGrades.filter(g => g.id !== 'kinder' && !lockedGrades.has(g.id));
     }, [availableGrades, schoolOffering, lockedGrades]);
 
+    // Derived directly from the offering string — guards kinder display and grand total
+    // independently of hasKinder state to handle stale localStorage scenarios.
+    const offeringHasKinder = useMemo(() => {
+        const t = schoolOffering.toLowerCase();
+        return t.includes("elementary") || t.includes("primary") ||
+               t.includes("all offering") || t.includes("k to 12") ||
+               t.includes("k-12") || t.includes("k to 10") || t.includes("k-10");
+    }, [schoolOffering]);
+
     const grandTotal = useMemo(() => {
-        let sum = hasKinder ? (parseInt(kinderEnrollment) || 0) : 0;
+        let sum = (hasKinder && offeringHasKinder) ? (parseInt(kinderEnrollment) || 0) : 0;
         // Monograde totals
         activeMonogrades.forEach(g => sum += (parseInt(gradeTotals[g.id]) || 0));
         // Multigrade combinations - count individual grades since we moved to per-grade gender inputs
@@ -907,12 +916,18 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
     // --- Internal Summary Component ---
     const Unit2Summary = () => {
+        // showKinder: uses both hasKinder (derived from offering via useEffect) AND
+        // offeringHasKinder (derived directly from offering string) as a double-guard.
+        const showKinder = hasKinder && offeringHasKinder;
+
         const maleTotal = Object.entries(gradeGenderMap).reduce((s, [key, g]) => {
             if (key === 'sned' && snedProgramType !== 'Self-Contained') return s;
+            if (key === 'kinder' && !showKinder) return s;
             return s + (parseInt(g.male) || 0);
         }, 0);
         const femaleTotal = Object.entries(gradeGenderMap).reduce((s, [key, g]) => {
             if (key === 'sned' && snedProgramType !== 'Self-Contained') return s;
+            if (key === 'kinder' && !showKinder) return s;
             return s + (parseInt(g.female) || 0);
         }, 0);
 
@@ -993,7 +1008,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     </div>
 
                     {/* Kinder Card */}
-                    {hasKinder && (
+                    {showKinder && (
                         <div className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm flex items-center justify-between group hover:border-indigo-200 transition-colors">
                             <div className="flex items-center gap-4">
                                 <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-xl shadow-inner group-hover:bg-indigo-100 transition-colors">🎈</div>

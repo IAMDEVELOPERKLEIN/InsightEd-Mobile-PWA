@@ -27,8 +27,167 @@ const initOtpTable = async (pool) => {
     }
 };
 
+const initUnit7Schema = async (client, dbLabel) => {
+    try {
+        // 1. Ph Schools Extensions (Unit 7 Flags)
+        // Note: ph_schools might be a view or a table; we ensure the underlying completion tracking works.
+        await client.query(`
+            ALTER TABLE ph_schools 
+            ADD COLUMN IF NOT EXISTS unit7 BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS unit7_updated_at TIMESTAMP;
+        `).catch(() => {});
+
+        // 2. Repairs Table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS ph_buildings_repairs (
+                id SERIAL PRIMARY KEY,
+                school_id VARCHAR(255),
+                iern VARCHAR(255),
+                building_name TEXT,
+                room_name TEXT,
+                item_name TEXT,
+                oms TEXT,
+                condition TEXT,
+                damage_ratio INTEGER DEFAULT 0,
+                recommended_action TEXT,
+                demo_justification TEXT,
+                remarks TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // 3. Demolition Table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS ph_buildings_demolition (
+                id SERIAL PRIMARY KEY,
+                school_id VARCHAR(255),
+                iern VARCHAR(255),
+                building_name TEXT,
+                room_name TEXT,
+                age BOOLEAN DEFAULT FALSE,
+                safety BOOLEAN DEFAULT FALSE,
+                calamity BOOLEAN DEFAULT FALSE,
+                upgrade BOOLEAN DEFAULT FALSE,
+                less_than_7x9 INTEGER DEFAULT 0,
+                "7x9" INTEGER DEFAULT 0,
+                above_7x9 INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // 4. Building Inventory Table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS ph_buildings_inventory (
+                id SERIAL PRIMARY KEY,
+                school_id VARCHAR(255),
+                iern VARCHAR(255),
+                building_name TEXT,
+                room_name TEXT,
+                category TEXT,
+                storey INTEGER DEFAULT 1,
+                classroom INTEGER DEFAULT 1,
+                year_completed TEXT,
+                remarks TEXT,
+                less_than_7x9 INTEGER DEFAULT 0,
+                "7x9" INTEGER DEFAULT 0,
+                above_7x9 INTEGER DEFAULT 0,
+                grade_level TEXT,
+                advisory_teacher TEXT,
+                status TEXT,
+                is_in_use BOOLEAN DEFAULT TRUE,
+                seats TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // console.log(`✅ [${dbLabel}] Unit 7 Physical Facilities Schema Hardened`);
+    } catch (err) {
+        console.error(`❌ [${dbLabel}] Unit 7 Schema Migration Failed:`, err.message);
+    }
+};
+
+const initUnit8Schema = async (client, dbLabel) => {
+    try {
+        console.log(`🏗️ [${dbLabel}] Hardening Unit 8 (School Terrain) Schema...`);
+        
+        // 1. Unified Advisory Lock (Unit 8 ID: 8888)
+        const lockRes = await client.query('SELECT pg_try_advisory_lock(8888)');
+        if (!lockRes.rows[0].pg_try_advisory_lock) {
+            console.log(`⚠️ [${dbLabel}] Unit 8 migration already being handled by another worker.`);
+            return;
+        }
+
+        try {
+            // 2. Primary Table Initialization
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS school_location_profiles (
+                    school_id TEXT PRIMARY KEY,
+                    iern TEXT,
+                    transportation_modes JSONB DEFAULT '[]',
+                    road_paved_pct NUMERIC,
+                    road_unpaved_pct NUMERIC,
+                    road_lighting_pct NUMERIC,
+                    public_transpo_availability INTEGER,
+                    water_proximity JSONB DEFAULT '[]',
+                    near_cliff_ravine BOOLEAN DEFAULT FALSE,
+                    road_cliff_pct NUMERIC,
+                    near_water BOOLEAN DEFAULT FALSE,
+                    natural_calamities JSONB DEFAULT '[]',
+                    hazards_experienced JSONB DEFAULT '[]',
+                    has_insurgency_threats BOOLEAN DEFAULT FALSE,
+                    insurgency_threats_6mo INTEGER DEFAULT 0,
+                    road_passable_public_transpo_pct NUMERIC,
+                    river_crossing_on_foot BOOLEAN DEFAULT FALSE,
+                    river_crossing_count INTEGER DEFAULT 0,
+                    emergency_response_mins NUMERIC DEFAULT 0,
+                    proximity_hospital_km NUMERIC DEFAULT 0,
+                    proximity_brgy_hall_mins NUMERIC DEFAULT 0,
+                    proximity_brgy_hall_km NUMERIC DEFAULT 0,
+                    proximity_muni_hall_mins NUMERIC DEFAULT 0,
+                    proximity_muni_hall_km NUMERIC DEFAULT 0,
+                    proximity_sdo_mins NUMERIC DEFAULT 0,
+                    proximity_sdo_km NUMERIC DEFAULT 0,
+                    proximity_clinic_mins NUMERIC DEFAULT 0,
+                    proximity_clinic_km NUMERIC DEFAULT 0,
+                    proximity_terminal_mins NUMERIC DEFAULT 0,
+                    proximity_terminal_km NUMERIC DEFAULT 0,
+                    proximity_highway_mins NUMERIC DEFAULT 0,
+                    proximity_highway_km NUMERIC DEFAULT 0,
+                    cellular_coverage TEXT,
+                    weather_isolation BOOLEAN DEFAULT FALSE,
+                    anthropogenic_threats JSONB DEFAULT '[]',
+                    risk_index TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            `);
+
+            // 3. JSONB Alignment (Zero-Downtime Conversion)
+            const jsonbCols = ['transportation_modes', 'hazards_experienced', 'water_proximity', 'natural_calamities', 'anthropogenic_threats'];
+            for (const col of jsonbCols) {
+                await client.query(`
+                    DO $$ 
+                    BEGIN 
+                        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'school_location_profiles' AND column_name = '${col}' AND data_type != 'jsonb') THEN
+                            ALTER TABLE school_location_profiles ALTER COLUMN ${col} TYPE JSONB USING ${col}::JSONB;
+                        END IF;
+                    END $$;
+                `);
+            }
+
+            console.log(`✅ [${dbLabel}] Unit 8 Schema is aligned and locked.`);
+        } finally {
+            await client.query('SELECT pg_advisory_unlock(8888)');
+        }
+    } catch (err) {
+        console.error(`❌ [${dbLabel}] Unit 8 Schema Migration Failed:`, err.message);
+    }
+};
+
 const runMigrations = async (client, dbLabel) => {
-    console.log(`🚀 Starting Migrations for ${dbLabel}...`);
+    // --- 0. UNIT SCHEMAS ---
+    await initUnit7Schema(client, dbLabel);
+    await initUnit8Schema(client, dbLabel);
 
     // --- 2. NOTIFICATIONS TABLE ---
     try {
@@ -56,6 +215,8 @@ const runMigrations = async (client, dbLabel) => {
             CREATE TABLE IF NOT EXISTS ph_school_completion (
                 iern VARCHAR(255) PRIMARY KEY,
                 school_id VARCHAR(255),
+                region TEXT,
+                division TEXT,
                 unit1_completion BOOLEAN DEFAULT false,
                 unit2_completion BOOLEAN DEFAULT false,
                 unit3_completion BOOLEAN DEFAULT false,
@@ -72,8 +233,24 @@ const runMigrations = async (client, dbLabel) => {
         await client.query(`
             ALTER TABLE ph_school_completion 
             ADD COLUMN IF NOT EXISTS school_id VARCHAR(255),
-            ADD COLUMN IF NOT EXISTS registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+            ADD COLUMN IF NOT EXISTS registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS region TEXT,
+            ADD COLUMN IF NOT EXISTS division TEXT;
         `).catch(() => {});
+
+        // Data Backfill: Populate region/division from schools_IERN (HAWKEYE Protocol)
+        await client.query(`
+            UPDATE ph_school_completion psc
+            SET 
+                region = si."Region",
+                division = si."Division"
+            FROM "schools_IERN" si
+            WHERE psc.school_id = si."SchoolID"
+              AND (psc.region IS NULL OR psc.division IS NULL);
+        `).catch(err => {
+            console.warn(`⚠️ [${dbLabel}] ph_school_completion backfill skipped:`, err.message);
+        });
+
         // console.log(`✅ [${dbLabel}] School Completion Table Initialized`);
     } catch (tableErr) {
         console.error(`❌ [${dbLabel}] Failed to init ph_school_completion table:`, tableErr.message);
@@ -934,6 +1111,7 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS head_position_title        TEXT,
             ADD COLUMN IF NOT EXISTS head_date_of_birth         TEXT,
             ADD COLUMN IF NOT EXISTS head_date_hired            TEXT,
+            ADD COLUMN IF NOT EXISTS ownership_na_reason        TEXT,
             ADD COLUMN IF NOT EXISTS unit1                      INTEGER DEFAULT 0,
             ADD COLUMN IF NOT EXISTS unit1_completed            BOOLEAN DEFAULT FALSE,
             ADD COLUMN IF NOT EXISTS submitted_by               TEXT,
@@ -1462,6 +1640,9 @@ const runMigrations = async (client, dbLabel) => {
     } catch (binErr) {
         console.error(`❌ [${dbLabel}] Unified Binaries Migration Failed:`, binErr.message);
     }
+
+    // --- 26. UNIT 7: PHYSICAL FACILITIES ---
+    await initUnit7Schema(client, dbLabel);
 
 };
 

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
-import { FiMapPin, FiCheck, FiX, FiClock, FiSave, FiList, FiAlertTriangle, FiShield } from 'react-icons/fi';
+import { FiMapPin, FiCheck, FiX, FiClock, FiSave, FiList, FiAlertTriangle, FiShield, FiUsers, FiCopy, FiSearch } from 'react-icons/fi';
 import { TbSchool } from 'react-icons/tb';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -98,6 +98,8 @@ const SchoolManagement = () => {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [lastSubmissionDetails, setLastSubmissionDetails] = useState(null);
 
+
+
     useEffect(() => {
         let interval;
         if (showConfirmModal && confirmTimer > 0) {
@@ -152,7 +154,7 @@ const SchoolManagement = () => {
     useEffect(() => {
         if (user) {
             // ROLE PROTECTION: Only School Division Office can access this module
-            if (user.role !== 'School Division Office') {
+            if (user.role !== 'School Division Office' && user.role !== 'Regional Office') {
                 console.warn(`🚫 Access Denied: User role ${user.role} is not authorized for School Management.`);
                 navigate('/monitoring-dashboard');
                 return;
@@ -279,7 +281,11 @@ const SchoolManagement = () => {
             const res = await fetch(`/api/sdo/location-options?region=${encodeURIComponent(region)}&division=${encodeURIComponent(division)}`);
             if (res.ok) {
                 const data = await res.json();
+                console.log("🏙️ SDO Location Options Received:", data.length, "rows");
+                if (data.length > 0) console.log("🏙️ Sample Option:", data[0]);
                 setLocationOptions(data);
+            } else {
+                console.error("🏙️ SDO Location Options Fetch Failed:", res.status);
             }
         } catch (err) {
             console.error('Failed to fetch location options:', err);
@@ -454,7 +460,7 @@ const SchoolManagement = () => {
 
                 const params = new URLSearchParams({
                     region: userData.region,
-                    division: userData.division.replace(/^SDO\s+/i, '').trim(),
+                    division: userData.division.trim(),
                     province: filters.province || '',
                     municipality: filters.municipality || '',
                     district: filters.district || '',
@@ -712,6 +718,8 @@ const SchoolManagement = () => {
         }
     };
 
+
+
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
@@ -797,12 +805,14 @@ const SchoolManagement = () => {
                         </button>
                     </div>
 
+
+
                     {/* Converted School Selection View */}
                     {activeView === 'converted' && !isConverting && (
                         <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl p-8 space-y-6">
                             <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-6">Register Converted School</h2>
                             <p className="text-slate-600 dark:text-slate-300 mb-6">
-                                Enter the 6-digit School ID to search the Master List and autofill the registration form.
+                                Enter the current school ID of the school that you would like to convert
                             </p>
 
                             <div className="flex flex-col md:flex-row gap-4 items-end">
@@ -1434,8 +1444,10 @@ const SchoolManagement = () => {
                     </div>
                 )}
                 <BottomNav userRole={userData?.role} />
-            </div>
-        </PageTransition >
+
+
+        </div>
+    </PageTransition>
     );
 };
 

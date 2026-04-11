@@ -13,7 +13,7 @@ echo "📥 1. Pulling latest code from GitHub..."
 git pull origin main
 
 echo "📦 2. Installing dependencies (Backend & Frontend)..."
-npm install
+npm install --legacy-peer-deps
 
 echo "🏗️  3. Building frontend PWA..."
 npm run build

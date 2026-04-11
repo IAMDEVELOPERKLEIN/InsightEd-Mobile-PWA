@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 // Icons 
 import { TbHomeEdit, TbCloudUpload, TbClipboardList, TbSchool, TbArrowsLeftRight, TbChartBar, TbFileCheck } from "react-icons/tb";
 import { LuCompass } from "react-icons/lu";
-import { FiSettings, FiCheckSquare, FiLogOut, FiMessageSquare, FiHome, FiUser, FiList, FiPlus, FiDollarSign, FiGrid, FiBookOpen } from "react-icons/fi";
+import { FiSettings, FiCheckSquare, FiLogOut, FiMessageSquare, FiHome, FiUser, FiList, FiPlus, FiDollarSign, FiGrid, FiBookOpen, FiUsers } from "react-icons/fi";
 import { motion } from 'framer-motion';
 import { getRoleGroup, ROLE_GROUPS } from '../config/roleGroups';
 
@@ -87,6 +87,7 @@ const BottomNav = ({ userRole: propRole }) => {
         'Regional Office': [
             { label: 'Home', path: '/monitoring-dashboard', icon: TbHomeEdit },
             { label: 'Schools', path: '/school-management', icon: TbSchool },
+            { label: 'Users', path: '/user-management', icon: FiUsers },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Regional Engineer': [
@@ -96,6 +97,7 @@ const BottomNav = ({ userRole: propRole }) => {
         'School Division Office': [
             { label: 'Home', path: '/monitoring-dashboard', icon: TbHomeEdit },
             { label: 'Schools', path: '/school-management', icon: TbSchool },
+            { label: 'Users', path: '/user-management', icon: FiUsers },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Central Office': [

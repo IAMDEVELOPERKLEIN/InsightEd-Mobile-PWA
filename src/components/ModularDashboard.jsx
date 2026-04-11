@@ -114,7 +114,7 @@ const ModularDashboard = () => {
                                 setCurricularOffering(data.progress.curricular_offering);
                             }
                             // Sync if server has more/different data
-                            setQuestProgress({ ...data.progress, isFromCache: false });
+                            setQuestProgress({ ...data.progress, schoolId: schoolId, isFromCache: false });
                             if (data.progress.timestamps) {
                                 setUnitTimestamps(data.progress.timestamps);
                             }
@@ -147,7 +147,8 @@ const ModularDashboard = () => {
             await Promise.all(unitIds.map(async (i) => {
                 try {
                     const draft = await getUnitDraft(i, schoolId);
-                    if (draft) {
+                    // Auto-seeded drafts are baseline data, not real pending edits
+                    if (draft && !draft.isAutoSeeded) {
                         drafts[i] = true;
                     }
                 } catch (e) {
@@ -241,11 +242,13 @@ const ModularDashboard = () => {
                         <FiArrowLeft className="w-5 h-5" />
                     </button>
 
-                    <div className="flex flex-col items-center absolute left-1/2 -translate-x-1/2 pointer-events-none">
-                        <h1 className="text-lg font-black text-[#004A99] tracking-tight">
-                            InsightEd <span className="text-[#FDB913]">Quest</span>
+                    <div className="flex flex-col items-center absolute left-1/2 -translate-x-1/2 pointer-events-none w-full max-w-[200px]">
+                        <h1 className="text-sm font-black text-[#004A99] tracking-tight truncate w-full text-center">
+                            {questProgress.school_name || "InsightEd Quest"}
                         </h1>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Modular Data Flow</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                            ID: {questProgress.schoolId || "------"}
+                        </p>
                     </div>
 
                     <div className="w-10 h-10" />

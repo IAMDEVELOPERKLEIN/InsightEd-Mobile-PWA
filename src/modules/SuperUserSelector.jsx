@@ -37,7 +37,7 @@ const SuperUserSelector = () => {
             .then(res => res.json())
             .then(data => {
                 const options = data || [];
-                if (!options.includes('Blank Region')) options.unshift('Blank Region');
+                if (!options.includes('BLANK REGION')) options.unshift('BLANK REGION');
                 setRegions(options);
             })
             .catch(err => console.error("Failed to load regions:", err));
@@ -52,7 +52,7 @@ const SuperUserSelector = () => {
                 .then(res => res.json())
                 .then(data => {
                     const options = data || [];
-                    if (selectedRegion === 'Blank Region' && !options.includes('Blank Division')) options.unshift('Blank Division');
+                    if (selectedRegion === 'BLANK REGION' && !options.includes('BLANK DIVISION')) options.unshift('BLANK DIVISION');
                     setSdoDivisions(options);
                 })
                 .catch(console.error);
@@ -68,7 +68,7 @@ const SuperUserSelector = () => {
                 .then(res => res.json())
                 .then(data => {
                     const options = data || [];
-                    if (engRegion === 'Blank Region' && !options.includes('Blank Division')) options.unshift('Blank Division');
+                    if (engRegion === 'BLANK REGION' && !options.includes('BLANK DIVISION')) options.unshift('BLANK DIVISION');
                     setEngDivisions(options);
                 })
                 .catch(console.error);
@@ -85,7 +85,7 @@ const SuperUserSelector = () => {
                 .then(res => res.json())
                 .then(data => {
                     const options = data || [];
-                    if (lguRegion === 'Blank Region' && !options.includes('Blank Province')) options.unshift('Blank Province');
+                    if (lguRegion === 'BLANK REGION' && !options.includes('BLANK PROVINCE')) options.unshift('BLANK PROVINCE');
                     setLguProvinces(options);
                 })
                 .catch(console.error);
@@ -101,7 +101,7 @@ const SuperUserSelector = () => {
                 .then(res => res.json())
                 .then(data => {
                     const options = data || [];
-                    if (lguProvince === 'Blank Province' && !options.includes('Blank Municipality')) options.unshift('Blank Municipality');
+                    if (lguProvince === 'BLANK PROVINCE' && !options.includes('BLANK MUNICIPALITY')) options.unshift('BLANK MUNICIPALITY');
                     setLguMunicipalities(options);
                 })
                 .catch(console.error);

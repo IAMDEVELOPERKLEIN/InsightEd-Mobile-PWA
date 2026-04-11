@@ -8,6 +8,7 @@ import {
 } from 'react-icons/fa';
 import { FiSave, FiClock, FiMapPin } from 'react-icons/fi';
 import PageTransition from '../components/PageTransition';
+import SuccessModal from '../components/SuccessModal';
 import { addModularToOutbox } from "../db";
 
 const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSaveDraft, isReadOnly = false, initialValues = null }, ref) => {
@@ -16,6 +17,26 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
     const [currentStep, setCurrentStep] = useState(initialValues?.currentStep || 1);
     const [showDraftModal, setShowDraftModal] = useState(false);
     const [isCertified, setIsCertified] = useState(false);
+    const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+    const [submitError, setSubmitError] = useState(null); // { type, title, lines[] }
+
+    const tryParse = (val) => {
+        if (!val) return [];
+        if (Array.isArray(val)) return val;
+        if (typeof val === 'string') {
+            try {
+                const parsed = JSON.parse(val);
+                return Array.isArray(parsed) ? parsed : [parsed];
+            } catch (e) {
+                // Check if it's Postgres array format: {val1,val2}
+                if (val.startsWith('{') && val.endsWith('}')) {
+                    return val.slice(1, -1).split(',').filter(Boolean);
+                }
+                return [val];
+            }
+        }
+        return [val];
+    };
 
     const { register, handleSubmit, watch, setValue, formState: { errors, isValid }, reset, getValues } = useForm({
         mode: 'onChange',
@@ -84,7 +105,11 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
     ]);
 
     useEffect(() => {
-        setValue('road_unpaved_pct', 100 - watchPaved);
+        // Guard: on older Android WebViews, range inputs can yield NaN/undefined.
+        const paved = Number(watchPaved);
+        if (!isNaN(paved)) {
+            setValue('road_unpaved_pct', 100 - paved);
+        }
     }, [watchPaved, setValue]);
 
     useEffect(() => {
@@ -94,7 +119,15 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
                 const res = await fetch(`/api/school-location/${schoolId}`);
                 const result = await res.json();
                 if (result.success && result.data) {
-                    reset(result.data);
+                    const sanitizedData = {
+                        ...result.data,
+                        transportation_modes: tryParse(result.data.transportation_modes),
+                        hazards_experienced: tryParse(result.data.hazards_experienced),
+                        water_proximity: tryParse(result.data.water_proximity),
+                        natural_calamities: tryParse(result.data.natural_calamities),
+                        anthropogenic_threats: tryParse(result.data.anthropogenic_threats)
+                    };
+                    reset(sanitizedData);
                     setRiskIndex(result.data.risk_index);
                 }
             } catch (err) {
@@ -130,7 +163,17 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
         }
         setLoading(true);
         try {
-            const payload = { ...data, school_id: schoolId, iern };
+            const payload = { 
+                ...data, 
+                school_id: schoolId, 
+                iern,
+                // Systematic Resilience: Use raw arrays. Zod backend + robust DB casts will handle JSONB correctly.
+                transportation_modes: tryParse(data.transportation_modes),
+                hazards_experienced: tryParse(data.hazards_experienced),
+                water_proximity: tryParse(data.water_proximity),
+                natural_calamities: tryParse(data.natural_calamities),
+                anthropogenic_threats: tryParse(data.anthropogenic_threats)
+            };
 
             if (!navigator.onLine) {
                 await addModularToOutbox({
@@ -154,16 +197,46 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
             const result = await res.json();
             console.log("Save Result:", result);
             if (result.success) {
+                setSubmitError(null);
                 setRiskIndex(result.data.risk_index);
                 if (onSaveSuccess) onSaveSuccess(result.data);
-                alert("Location profile saved successfully!");
+                setIsSuccessModalOpen(true);
             } else {
-                const details = result.details ? result.details.map(d => `${d.path.join('.')}: ${d.message}`).join('\n') : "Unknown error (check console)";
-                alert(`Error saving: Validation failed (Status ${res.status})\n\n${details}`);
+                // --- Build structured error for the inline panel ---
+                const lines = [];
+                if (result.details && result.details.length > 0) {
+                    // Zod field-level or schema-level validation errors
+                    result.details.forEach(d => {
+                        const field = d.path?.length ? d.path.join('.') : '(schema rule)';
+                        const code  = d.code ? ` [${d.code}]` : '';
+                        lines.push(`• ${field}${code}: ${d.message}`);
+                    });
+                } else {
+                    lines.push(result.error || result.message || 'Unknown server error');
+                    // PostgreSQL error fields — surfaced when the DB rejects the row
+                    if (result.code)       lines.push(`PG Code: ${result.code}`);
+                    if (result.detail)     lines.push(`PG Detail: ${result.detail}`);
+                    if (result.constraint) lines.push(`Constraint: ${result.constraint}`);
+                    if (result.table)      lines.push(`Table: ${result.table}`);
+                }
+
+                const isValidationError = res.status === 400;
+                setSubmitError({
+                    type: isValidationError ? 'validation' : 'server',
+                    title: isValidationError
+                        ? `Validation Error (HTTP ${res.status})`
+                        : `Server Error (HTTP ${res.status})`,
+                    lines,
+                });
+
+                // Keep the full console trace for developer inspection
+                console.error(`❌ Unit 8 Sync Failure [HTTP ${res.status}]`, result);
+                if (result.details) console.table(result.details);
+                if (result.flattened) console.error('Flattened Zod errors:', result.flattened);
             }
         } catch (err) {
             console.error("UNIT 8 SUBMIT ERROR:", err);
-            if (!navigator.onLine || err.message.includes('fetch')) {
+            if (!navigator.onLine || err.message?.includes('fetch')) {
                 await addModularToOutbox({
                     unitId: 8,
                     label: "Unit 8: School Terrain & Location Profile",
@@ -174,7 +247,15 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
                 });
                 if (onSaveSuccess) onSaveSuccess({ ...data, risk_index: 'Pending Sync' });
             } else {
-                alert("Network error saving profile.");
+                setSubmitError({
+                    type: 'network',
+                    title: 'Network Error',
+                    lines: [
+                        err.message || 'Request failed — server may be unreachable.',
+                        'If offline, save as draft and sync later.',
+                        'If online, check pm2 logs on the VM.',
+                    ],
+                });
             }
         } finally {
             setLoading(false);
@@ -223,24 +304,11 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
 
     const nextStep = () => {
         if (currentStep === 3) {
-            const data = getValues();
-            const refPointsFields = [
-                'emergency_response_mins', 'proximity_hospital_km',
-                'proximity_brgy_hall_mins', 'proximity_brgy_hall_km',
-                'proximity_muni_hall_mins', 'proximity_muni_hall_km',
-                'proximity_sdo_mins', 'proximity_sdo_km',
-                'proximity_clinic_mins', 'proximity_clinic_km',
-                'proximity_terminal_mins', 'proximity_terminal_km',
-                'proximity_highway_mins', 'proximity_highway_km'
-            ];
-            
-            const hasInvalid = refPointsFields.some(field => {
-                const val = data[field];
-                return val === "" || val === null || parseFloat(val) === 0 || isNaN(parseFloat(val));
-            });
-            
-            if (hasInvalid) {
-                alert("Please provide valid (non-zero) values for ALL points of reference before proceeding.");
+            // Require at least one non-zero reference-point value (mirrors server-side check).
+            // The old ALL-fields guard was too strict — schools adjacent to a service
+            // legitimately have 0 km/0 min for that entry.
+            if (!isStep3Valid()) {
+                alert("Please provide at least one non-zero point of reference (time or distance) before proceeding.");
                 return;
             }
         }
@@ -285,9 +353,12 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
     };
 
     const isStep3Valid = () => {
-        return !watchedRefPoints.some(val => {
-            return val === "" || val === null || parseFloat(val) === 0 || isNaN(parseFloat(val));
-        });
+        // Valid if at least ONE reference-point field has a non-zero numeric value.
+        // Mirrors the server-side sumRefPoints > 0 check in onSubmit.
+        // The old ALL-fields-must-be-non-zero check incorrectly blocked users whose
+        // school is adjacent to a service (0 km/0 min) or who leave unused rows at 0.
+        const sum = watchedRefPoints.reduce((acc, val) => acc + (parseFloat(val) || 0), 0);
+        return sum > 0;
     };
 
     const renderStepContent = () => {
@@ -986,7 +1057,51 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
                 <form onSubmit={handleSubmit(onSubmit)}>
                     {renderStepContent()}
 
-                    {!isReadOnly && (
+                    {/* ── Submission error panel ──────────────────────────────────── */}
+                <AnimatePresence>
+                    {submitError && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 20 }}
+                            className="fixed bottom-[88px] left-0 right-0 px-4 z-[51] max-w-2xl mx-auto"
+                        >
+                            <div className={`rounded-[1.5rem] border shadow-2xl p-4 ${
+                                submitError.type === 'validation'
+                                    ? 'bg-amber-950/95 border-amber-700'
+                                    : submitError.type === 'network'
+                                    ? 'bg-slate-900/95 border-slate-700'
+                                    : 'bg-rose-950/95 border-rose-700'
+                            }`}>
+                                <div className="flex items-start justify-between gap-3 mb-2">
+                                    <span className={`text-[10px] font-black uppercase tracking-[0.18em] ${
+                                        submitError.type === 'validation' ? 'text-amber-400'
+                                        : submitError.type === 'network'  ? 'text-slate-400'
+                                        : 'text-rose-400'
+                                    }`}>
+                                        {submitError.title}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSubmitError(null)}
+                                        className="text-white/40 hover:text-white/80 text-xs font-black leading-none shrink-0 transition-colors"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                                <pre className={`text-[11px] font-mono leading-relaxed whitespace-pre-wrap break-all ${
+                                    submitError.type === 'validation' ? 'text-amber-200'
+                                    : submitError.type === 'network'  ? 'text-slate-300'
+                                    : 'text-rose-200'
+                                }`}>
+                                    {submitError.lines.join('\n')}
+                                </pre>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {!isReadOnly && (
                         <div className="fixed bottom-0 left-0 right-0 p-6 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-gray-100 dark:border-slate-800 z-50">
                             <div className="max-w-2xl mx-auto flex gap-4">
                                 <button type="button" onClick={() => setShowDraftModal(true)} className="flex-none h-16 px-6 rounded-3xl bg-gray-100 dark:bg-slate-800 flex items-center justify-center gap-2 text-gray-400 dark:text-slate-500 hover:text-gray-900 dark:hover:text-slate-200 active:scale-95 transition-all outline-none">
@@ -1061,6 +1176,14 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
                         </div>
                     )}
                 </AnimatePresence>
+
+                {/* --- Unit 8 Success Modal --- */}
+                <SuccessModal 
+                    isOpen={isSuccessModalOpen} 
+                    onClose={() => setIsSuccessModalOpen(false)} 
+                    message="School terrain and location profile has been synchronized successfully."
+                    redirectUrl={`/school-forms?schoolId=${schoolId}&iern=${iern}`}
+                />
             </div>
         </PageTransition>
     );

@@ -202,7 +202,20 @@ const UserProfile = () => {
         };
 
         syncUserData();
-    }, [user, user?.uid, authLoading]); // Removed getDashboardPath as it's now stable outside
+    }, [user, user?.uid, authLoading]); 
+
+    // --- SCROLL LOCK FOR OPTIMIZE MODALS ---
+    useEffect(() => {
+        if (showOptimizeConfirm || showOptimizeSuccess) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'auto';
+        }
+        
+        return () => {
+            document.body.style.overflow = 'auto';
+        };
+    }, [showOptimizeConfirm, showOptimizeSuccess]);
 
 
     // --- HANDLERS ---
@@ -1041,9 +1054,8 @@ const UserProfile = () => {
 
                 {/* Optimize App — Confirm Modal */}
                 {showOptimizeConfirm && (
-                    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-                        <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-t-3xl sm:rounded-3xl shadow-2xl p-6 pb-10 sm:pb-6 animate-in slide-in-from-bottom-10 duration-500">
-                            <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-6 sm:hidden" />
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-3xl shadow-2xl p-6 pb-6 animate-in zoom-in-95 duration-500">
 
                             {/* Icon */}
                             <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center mx-auto mb-5">
@@ -1063,6 +1075,20 @@ const UserProfile = () => {
                                         setCheckingForUpdate(true);
                                         // Show success modal briefly before reload
                                         setShowOptimizeSuccess(true);
+                                        
+                                        try {
+                                            // 1. Remote Repair Protocol: Align Unit 8 JSONB
+                                            await fetch('/api/system/align-unit8', {
+                                                method: 'POST',
+                                                headers: {
+                                                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                                                    'Content-Type': 'application/json'
+                                                }
+                                            });
+                                        } catch (err) {
+                                            console.warn("Failed to reach align-unit8 endpoint:", err);
+                                        }
+                                        
                                         setTimeout(async () => {
                                             await hardReset();
                                         }, 2000);
@@ -1095,8 +1121,8 @@ const UserProfile = () => {
                                     <FiRefreshCw size={24} className="text-[#004A99] dark:text-blue-400" />
                                 </div>
                             </div>
-                            <h3 className="text-lg font-black text-slate-800 dark:text-white mb-1">Optimizing...</h3>
-                            <p className="text-sm text-slate-500 dark:text-slate-400">Clearing cache and fetching the latest version. Restarting shortly.</p>
+                            <h3 className="text-lg font-black text-slate-800 dark:text-white mb-1">Optimizing System...</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Clearing cache, fetching updates, and <strong className="text-blue-600 dark:text-blue-400">aligning Unit 8 JSONB data</strong>. Restarting shortly.</p>
                         </div>
                     </div>
                 )}

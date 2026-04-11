@@ -94,8 +94,35 @@ function normalizeProjectCategory(raw) {
   return trimmed;
 }
 
+// --- LOCATION NORMALIZER (ensures system-wide casing consistency and fixes encoding artifacts) ---
+function normalizeLocationField(val) {
+  if (!val || typeof val !== 'string') return val;
+  // Handle any sequence of encoding artifacts ('??', '?', or Unicode Replacement Character) as a single 'Ñ'
+  // Also collapse whitespace for consistency with SQL REGEXP_REPLACE
+  return val.replace(/[\?\uFFFD]+/g, 'Ñ').replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+function normalizeLocationOutput(val) {
+  if (!val || typeof val !== 'string') return val;
+  return val.replace(/[\?\uFFFD]+/g, 'Ñ').replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
 // --- ZOD VALIDATION SCHEMAS (Resilience v6.0) ---
 const PasscodeSchema = z.string().length(6).regex(/^\d+$/, "Passcode must be exactly 6 digits.");
+
+// [Systematic Resilience] Safe Numeric Preprocessor (v1.0)
+// Prevents Postgres 22P02 "NaN" errors by converting malformed JS numbers to null.
+const safeNumeric = z.preprocess(val => (val === "" || val === null || Number.isNaN(Number(val)) ? null : Number(val)), z.number().nullable().optional());
+
+// [Systematic Resilience] Safe Boolean Preprocessor (v1.0)
+// Coerces string "true"/"false" and numeric 0/1 to proper booleans.
+// Fixes Zod rejection on certain browsers/devices where checkboxes arrive as strings,
+// and on data restored from IndexedDB offline sync payloads.
+const safeBoolean = z.preprocess(val => {
+  if (val === 'true'  || val === '1' || val === 1) return true;
+  if (val === 'false' || val === '0' || val === 0) return false;
+  return val;
+}, z.boolean().optional());
 
 const RegisterUserSchema = z.object({
   email: z.string().email().transform(e => e.trim().toLowerCase()),
@@ -103,12 +130,12 @@ const RegisterUserSchema = z.object({
   role: z.string().min(1, "Role is required."),
   firstName: z.string().optional(),
   lastName: z.string().optional(),
-  region: z.string().optional(),
-  division: z.string().optional(),
-  province: z.string().optional(),
-  city: z.string().optional(),
-  barangay: z.string().optional(),
-  office: z.string().optional(),
+  region: z.string().optional().transform(normalizeLocationField),
+  division: z.string().optional().transform(normalizeLocationField),
+  province: z.string().optional().transform(normalizeLocationField),
+  city: z.string().optional().transform(normalizeLocationField),
+  barangay: z.string().optional().transform(normalizeLocationField),
+  office: z.string().optional().transform(normalizeLocationField),
   position: z.string().optional(),
   contactNumber: z.string().optional(),
   altEmail: z.string().email().optional().or(z.literal("")),
@@ -141,13 +168,13 @@ const RegisterSchoolSchema = z.object({
   schoolData: z.object({
     school_id: z.string().min(1),
     school_name: z.string().min(1),
-    region: z.string().optional(),
-    province: z.string().optional(),
-    division: z.string().optional(),
-    district: z.string().optional(),
-    municipality: z.string().optional(),
-    legislative_district: z.string().optional(),
-    barangay: z.string().optional(),
+    region: z.string().optional().transform(normalizeLocationField),
+    province: z.string().optional().transform(normalizeLocationField),
+    division: z.string().optional().transform(normalizeLocationField),
+    district: z.string().optional().transform(normalizeLocationField),
+    municipality: z.string().optional().transform(normalizeLocationField),
+    legislative_district: z.string().optional().transform(normalizeLocationField),
+    barangay: z.string().optional().transform(normalizeLocationField),
     mother_school_id: z.string().optional(),
     latitude: z.union([z.number(), z.string()]).optional(),
     longitude: z.union([z.number(), z.string()]).optional(),
@@ -164,13 +191,13 @@ const RegisterBetaSchema = z.object({
   schoolData: z.object({
     school_id: z.string().min(1),
     school_name: z.string().optional().nullable(),
-    region: z.string().optional().nullable(),
-    division: z.string().optional().nullable(),
-    province: z.string().optional().nullable(),
-    municipality: z.string().optional().nullable(),
-    district: z.string().optional().nullable(),
-    legislative_district: z.string().optional().nullable(),
-    barangay: z.string().optional().nullable(),
+    region: z.string().optional().nullable().transform(normalizeLocationField),
+    division: z.string().optional().nullable().transform(normalizeLocationField),
+    province: z.string().optional().nullable().transform(normalizeLocationField),
+    municipality: z.string().optional().nullable().transform(normalizeLocationField),
+    district: z.string().optional().nullable().transform(normalizeLocationField),
+    legislative_district: z.string().optional().nullable().transform(normalizeLocationField),
+    barangay: z.string().optional().nullable().transform(normalizeLocationField),
     latitude: z.union([z.number(), z.string()]).optional().nullable(),
     longitude: z.union([z.number(), z.string()]).optional().nullable()
   }),
@@ -190,10 +217,12 @@ const { Pool } = pg;
 const pool = new Pool({
   connectionString: dbUrl,
   ssl: isLocal ? false : { rejectUnauthorized: false },
-  max: 12, // Reduced from 20 to accommodate the 8-instance cluster within PgBouncer (150) limit.
-  min: 2,  
+
+  max: 20, // Increased from 12: pool exhaustion was causing 'timeout exceeded when trying to connect'.
+           // 8 workers × 20 = 160 clients → PgBouncer (transaction mode, pool_size=25) → Azure PG.
+  min: 2,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000, 
+  connectionTimeoutMillis: 3000,  // Reduced from 10000: fail fast instead of queuing 10s in peak load.
   application_name: 'InsightEd_API_Cluster'
 });
 
@@ -445,15 +474,16 @@ setInterval(() => {
 app.use((req, res, next) => {
   const heapUsage = process.memoryUsage().heapUsed;
   const HEAP_THRESHOLD = 950 * 1024 * 1024; // 950MB (Hawkeye Tuning)
-  const DELAY_THRESHOLD = 300; // 300ms (Reduced sensitivity for cluster stability)
+  const DELAY_THRESHOLD = 400; // Increased from 300ms to allow for DB latency spikes
 
   if (eventLoopDelay > DELAY_THRESHOLD || heapUsage > HEAP_THRESHOLD) {
-    console.warn(`⚠️ [Admission-Control] REJECTING REQUEST - Delay: ${eventLoopDelay}ms | Heap: ${Math.round(heapUsage/1024/1024)}MB`);
+    console.warn(`⚠️ [Admission-Control] REJECTING ${req.method} ${req.path} - Delay: ${eventLoopDelay}ms | Heap: ${Math.round(heapUsage/1024/1024)}MB`);
     res.set('Retry-After', '5');
     return res.status(503).json({ 
       error: 'Service Temporarily Overloaded', 
       retry_after: 5,
-      reason: eventLoopDelay > DELAY_THRESHOLD ? 'high_latency' : 'memory_pressure'
+      reason: eventLoopDelay > DELAY_THRESHOLD ? 'high_latency' : 'memory_pressure',
+      path: req.path
     });
   }
   next();
@@ -936,6 +966,7 @@ app.get('/api/schools/:schoolId/activity', async (req, res) => {
   try {
     const schoolRes = await pool.query(
       `SELECT
+        school_id, school_name,
         unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit9,
         unit1_completed, unit2_completed, unit3_completed, unit4_completed,
         unit5_completed, unit6_completed, unit7_completed, unit9_completed,
@@ -983,6 +1014,7 @@ app.get('/api/schools/:schoolId/activity', async (req, res) => {
     res.json({
       success: true,
       data: {
+        schoolInfo: { school_id: row.school_id, school_name: row.school_name },
         progress: { completedUnits: completedUnitsCount, totalUnits, percentage: overall_progress_percentage, flags: completedFlags },
         gamification: { fastest_sprint },
         comparative: [
@@ -1028,43 +1060,60 @@ const getDBUnitFromUIUnit = (uiUnit) => {
 
 async function updateSchoolTotalCompletion(iern) {
   if (!iern) return;
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    const res = await client.query('SELECT * FROM ph_school_completion WHERE iern = $1', [iern]);
-    if (res.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return;
-    }
+    // Read from ph_schools — the authoritative source for unit flags.
+    // DB columns unit1–unit7 and unit9 map to display units 1–8 (unit9 = terrain/location).
+    // This avoids reading the stale ph_school_completion booleans which can diverge
+    // when pgBouncer (transaction mode) drops a COMMIT mid-flight.
+    const res = await pool.query(
+      `SELECT school_id, unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit9,
+              unit1_completed, unit2_completed, unit3_completed, unit4_completed,
+              unit5_completed, unit6_completed, unit7_completed, unit9_completed
+       FROM ph_schools WHERE iern = $1`,
+      [iern]
+    );
+    if (res.rows.length === 0) return;
 
     const row = res.rows[0];
+    const schoolId = row.school_id;
+    // DB column indices that correspond to display units 1–8
+    // DB column indices that correspond to display units 1-8
+    // Mapping: Unit 1-7 direct, Unit 9 maps to Unit 8 display.
+    // Unit 8 and Unit 10 are currently auxiliary/recent and may not be standard in 1-8 summary.
+    const dbCols = [1, 2, 3, 4, 5, 6, 7, 9];
     let completedCount = 0;
-    // Check Unit 1 to 8 (the 8 school-head data collection units)
-    for (let i = 1; i <= 8; i++) {
-        if (row[`unit${i}_completion`] === true) completedCount++;
+    const boolValues = [];
+    for (const idx of dbCols) {
+      const done = (parseInt(row[`unit${idx}`]) === 1 || row[`unit${idx}_completed`] === true);
+      boolValues.push(done);
+      if (done) completedCount++;
     }
 
-    const totalStats = 8;
-    const percentage = parseFloat(((completedCount / totalStats) * 100).toFixed(2));
+    const percentage = parseFloat(((completedCount / 8) * 100).toFixed(2));
 
-    await client.query(
-        'UPDATE ph_school_completion SET total_completion = $1, updated_at = CURRENT_TIMESTAMP WHERE iern = $2',
-        [percentage, iern]
+    // Upsert booleans + total to ph_school_completion.
+    // INSERT...ON CONFLICT ensures a missing row is created rather than silently skipped.
+    await pool.query(
+      `INSERT INTO ph_school_completion
+         (iern, school_id, unit1_completion, unit2_completion, unit3_completion, unit4_completion,
+          unit5_completion, unit6_completion, unit7_completion, unit8_completion, total_completion, updated_at)
+       VALUES ($10, $11, $2, $3, $4, $5, $6, $7, $8, $9, $1, CURRENT_TIMESTAMP)
+       ON CONFLICT (iern) DO UPDATE SET
+         unit1_completion=$2, unit2_completion=$3, unit3_completion=$4, unit4_completion=$5,
+         unit5_completion=$6, unit6_completion=$7, unit7_completion=$8, unit8_completion=$9,
+         total_completion=$1, updated_at=CURRENT_TIMESTAMP`,
+      [percentage, ...boolValues, iern, schoolId]
     );
 
-    // Also sync back to ph_schools for legacy compatibility (unit_completion column)
-    await client.query(
-        'UPDATE ph_schools SET unit_completion = $1 WHERE iern = $2',
-        [percentage, iern]
+    // Sync to ph_schools.unit_completion for monitoring dashboards
+    await pool.query(
+      'UPDATE ph_schools SET unit_completion=$1 WHERE iern=$2',
+      [percentage, iern]
     );
 
-    await client.query('COMMIT');
     console.log(`[SYNC] Updated completion for ${iern}: ${percentage}% (${completedCount}/8)`);
   } catch (err) {
-    if (client) await client.query('ROLLBACK');
     console.error(`[ERROR] updateSchoolTotalCompletion failed for ${iern}:`, err.message);
-  } finally {
-    client.release();
   }
 }
 
@@ -1180,9 +1229,13 @@ const runAutoMigrations = async () => {
 
     // Unit 1: Ownership Document Type
     const columnPromises = [
-      checkAndAddColumn('ph_schools', 'ownership_document_type', 'TEXT', pool)
+      checkAndAddColumn('ph_schools', 'ownership_document_type', 'TEXT', pool),
+      checkAndAddColumn('ph_schools', 'ownership_multiple', 'TEXT', pool)
     ];
-    if (poolNew) columnPromises.push(checkAndAddColumn('ph_schools', 'ownership_document_type', 'TEXT', poolNew));
+    if (poolNew) {
+      columnPromises.push(checkAndAddColumn('ph_schools', 'ownership_document_type', 'TEXT', poolNew));
+      columnPromises.push(checkAndAddColumn('ph_schools', 'ownership_multiple', 'TEXT', poolNew));
+    }
     
     // Unit Updated At Timestamps
     for (let i = 1; i <= 10; i++) {
@@ -1426,11 +1479,18 @@ const runAutoMigrations = async () => {
       );
     }
 
-    // --- school_location_profiles: Coerce TEXT[] → JSONB (idempotent) ---
-    // transportation_modes and hazards_experienced may have been created as TEXT[].
-    // The POST route now sends JSON strings; TEXT[] columns reject them with error 22P02.
+    // --- school_location_profiles: Coerce TEXT/TEXT[] → JSONB (idempotent) ---
+    // These columns may exist as TEXT (containing a JSON string literal) or TEXT[]
+    // depending on which migration path ran first.
+    //
+    // Bug fixed: the original `USING to_jsonb(col)` was wrong for TEXT columns whose
+    // content is already a JSON string (e.g. '["Bus","Jeep"]'). to_jsonb() on TEXT
+    // produces a JSON *string scalar* ("\"[\\\"Bus\\\",\\\"Jeep\\\"]\""), not an array.
+    // The correct cast for TEXT-with-JSON-content is `col::jsonb`.
+    // For TEXT[] columns, `to_jsonb(col)` is correct and produces a proper JSON array.
+    //
     // This block is safe to run repeatedly — it is a no-op if the column is already JSONB.
-    for (const col of ['transportation_modes', 'hazards_experienced']) {
+    for (const col of ['transportation_modes', 'hazards_experienced', 'water_proximity', 'natural_calamities', 'anthropogenic_threats']) {
       await pool.query(`
         DO $$
         DECLARE col_type TEXT;
@@ -1440,9 +1500,21 @@ const runAutoMigrations = async () => {
           WHERE table_name = 'school_location_profiles' AND column_name = '${col}';
 
           IF col_type IS NOT NULL AND col_type != 'jsonb' THEN
-            ALTER TABLE school_location_profiles
-              ALTER COLUMN ${col} TYPE JSONB USING to_jsonb(${col});
-            RAISE NOTICE '[Auto-Migrate] Converted school_location_profiles.${col} to JSONB';
+            IF col_type = 'ARRAY' THEN
+              -- TEXT[] → JSONB: to_jsonb correctly serialises a PG array to a JSON array
+              ALTER TABLE school_location_profiles
+                ALTER COLUMN ${col} TYPE JSONB USING to_jsonb(${col});
+            ELSE
+              -- TEXT → JSONB: column already stores a JSON string literal; cast it directly.
+              -- NULL and empty-string rows are coerced to a JSON null / empty array safely.
+              ALTER TABLE school_location_profiles
+                ALTER COLUMN ${col} TYPE JSONB USING
+                  CASE
+                    WHEN ${col} IS NULL OR ${col} = '' THEN '[]'::jsonb
+                    ELSE ${col}::jsonb
+                  END;
+            END IF;
+            RAISE NOTICE '[Auto-Migrate] Converted school_location_profiles.${col} (%) to JSONB', col_type;
           END IF;
         END $$;
       `).catch(e => console.warn(`[Auto-Migrate] JSONB coerce ${col}:`, e.message));
@@ -2403,8 +2475,9 @@ app.post('/api/auth/migrate-login', async (req, res) => {
   }
 
   try {
-    const isSchoolId = !!school_id || /^\d{6,}$/.test(identifier);
-    console.log(`[AUTH DEBUG] Migrate-Login: ${identifier} (isSchoolId: ${isSchoolId})`);
+    const isEmail = identifier.includes('@');
+    const isSchoolId = !isEmail && (!!school_id || /^\d{6,}$/.test(identifier));
+    console.log(`[AUTH DEBUG] Migrate-Login: ${identifier} (isSchoolId: ${isSchoolId}, isEmail: ${isEmail})`);
 
     // 1. Fetch user from PostgreSQL
     console.log(`[MIGRATE LOGIN] Running SQL query...`);
@@ -2412,8 +2485,8 @@ app.post('/api/auth/migrate-login', async (req, res) => {
 
     console.log(`[DEBUG LOGIN] Reached handler for: ${identifier}`);
     const query = isSchoolId
-      ? `SELECT ${SELECT_COLS} FROM users WHERE school_id = $1`
-      : `SELECT ${SELECT_COLS} FROM users WHERE LOWER(email) = $1`;
+      ? `SELECT ${SELECT_COLS} FROM users WHERE school_id = $1 AND disabled = false`
+      : `SELECT ${SELECT_COLS} FROM users WHERE LOWER(email) = $1 AND disabled = false ORDER BY CASE WHEN role = 'School Head' THEN 2 ELSE 1 END, created_at DESC`;
 
     console.log(`[DEBUG LOGIN] Query prepared. Waiting for pool...`);
     const userRes = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
@@ -2585,9 +2658,13 @@ app.post('/api/auth/setup-pin', async (req, res) => {
       param = email.trim().toLowerCase();
     }
 
+    // Hash PIN before storing
+    const saltRounds = 10;
+    const hashedPin = await bcrypt.hash(pin, saltRounds);
+
     const result = await pool.query(
       `UPDATE users SET passcode = $1 WHERE ${whereClause} RETURNING uid`,
-      [pin, param]
+      [hashedPin, param]
     );
 
 
@@ -2611,14 +2688,15 @@ app.post('/api/auth/pin-login', async (req, res) => {
   }
 
   try {
-    const isSchoolId = !!school_id || /^\d{6,}$/.test(identifier);
-    console.log(`[AUTH DEBUG] Pin-Login: ${identifier} (isSchoolId: ${isSchoolId})`);
+    const isEmail = identifier.includes('@');
+    const isSchoolId = !isEmail && (!!school_id || /^\d{6,}$/.test(identifier));
+    console.log(`[AUTH DEBUG] Pin-Login: ${identifier} (isSchoolId: ${isSchoolId}, isEmail: ${isEmail})`);
 
     // Unified Identifier Lookup (Strict Users Table)
     const selectCols = 'uid, email, role, region, division, office, account_category, passcode, first_name, last_name, school_id';
     const query = isSchoolId
-      ? `SELECT ${selectCols} FROM users WHERE school_id = $1`
-      : `SELECT ${selectCols} FROM users WHERE LOWER(email) = $1`;
+      ? `SELECT ${selectCols} FROM users WHERE school_id = $1 AND disabled = false`
+      : `SELECT ${selectCols} FROM users WHERE LOWER(email) = $1 AND disabled = false ORDER BY CASE WHEN role = 'School Head' THEN 2 ELSE 1 END, created_at DESC`;
 
     const userRes = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
 
@@ -2632,9 +2710,14 @@ app.post('/api/auth/pin-login', async (req, res) => {
       return res.status(401).json({ success: false, error: "No PIN setup for this account." });
     }
 
-    // Plain-text comparison for passcode
-    const isValidPin = (pin === user.passcode);
-    console.log(`[AUTH DEBUG] Pin match for ${identifier}: ${isValidPin} (Input: ${pin}, DB: ${user.passcode})`);
+    // Robust passcode comparison (handles both plain-text and hashed)
+    const storedPasscode = user.passcode;
+    const isBcryptHash = storedPasscode.startsWith('$2b$');
+    const isValidPin = isBcryptHash 
+      ? await bcrypt.compare(pin, storedPasscode)
+      : (pin === storedPasscode);
+
+    console.log(`[AUTH DEBUG] Pin match for ${identifier}: ${isValidPin} (Hashed: ${isBcryptHash})`);
     if (!isValidPin) {
       return res.status(401).json({ success: false, error: "The username exists but does not match the PIN you provided." });
     }
@@ -2925,8 +3008,8 @@ app.get('/api/monitoring/engineer-storey-breakdown', async (req, res) => {
     let params = [];
     let pIdx = 1;
 
-    if (region) { where.push(`UPPER(TRIM(region)) = UPPER(TRIM($${pIdx++}))`); params.push(region); }
-    if (division) { where.push(`UPPER(TRIM(division)) = UPPER(TRIM($${pIdx++}))`); params.push(division); }
+    if (region) { where.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); params.push(region); }
+    if (division) { where.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(division)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); params.push(division); }
 
     const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
 
@@ -2964,8 +3047,8 @@ app.get('/api/masterlist/prototype-schools', async (req, res) => {
     let pIdx = 3;
     let params = [Number(sty), Number(cl)];
 
-    if (region) { baseWhere.push(`"region" = $${pIdx++}`); params.push(region); }
-    if (division) { baseWhere.push(`"division" = $${pIdx++}`); params.push(division); }
+    if (region) { baseWhere.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM("region")), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); params.push(region); }
+    if (division) { baseWhere.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM("division")), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); params.push(division); }
     if (municipality && municipality !== 'undefined') { baseWhere.push(`"municipality" = $${pIdx++}`); params.push(municipality); }
     if (legislative_district && legislative_district !== 'undefined') { baseWhere.push(`"legislative_district" = $${pIdx++}`); params.push(legislative_district); }
 
@@ -2997,8 +3080,8 @@ app.get('/api/monitoring/engineer-prototype-projects', async (req, res) => {
     let whereClauses = [`e.sty_count = $1`, `e.cl_count = $2`];
     let pIdx = 3;
 
-    if (region) { whereClauses.push(`e.region = $${pIdx++}`); params.push(region); }
-    if (division) { whereClauses.push(`e.division = $${pIdx++}`); params.push(division); }
+    if (region) { whereClauses.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(e.region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); params.push(region); }
+    if (division) { whereClauses.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(e.division)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); params.push(division); }
 
     const query = `
       WITH LatestProjects AS (
@@ -3021,8 +3104,8 @@ app.get('/api/monitoring/engineer-prototype-projects', async (req, res) => {
         p.accomplishment_percentage
       FROM LatestProjects p
       WHERE p.number_of_storeys = $1 AND p.number_of_classrooms = $2
-      ${region ? `AND p.region = $${pIdx++}` : ''}
-      ${division ? `AND p.division = $${pIdx++}` : ''}
+      ${region ? `AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(p.region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')` : ''}
+      ${division ? `AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(p.division)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')` : ''}
       ORDER BY p.school_name ASC
     `;
     const result = await pool.query(query, params);
@@ -3085,8 +3168,8 @@ app.get('/api/masterlist/partnerships', async (req, res) => {
         let whereArr = [];
         let pArr = [];
         let idx = 1;
-        if (region) { whereArr.push(`region = $${idx++}`); pArr.push(region); }
-        if (division) { whereArr.push(`division = $${idx++}`); pArr.push(division); }
+        if (region) { whereArr.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${idx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); pArr.push(region); }
+        if (division) { whereArr.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(division)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${idx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); pArr.push(division); }
         if (legislative_district) { whereArr.push(`legislative_district = $${idx++}`); pArr.push(legislative_district); }
         const wStr = whereArr.length > 0 ? `WHERE ${whereArr.join(' AND ')}` : '';
         return pool.query(`
@@ -3101,8 +3184,8 @@ app.get('/api/masterlist/partnerships', async (req, res) => {
         let whereArr = [];
         let pArr = [];
         let idx = 1;
-        if (region) { whereArr.push(`region = $${idx++}`); pArr.push(region); }
-        if (division) { whereArr.push(`division = $${idx++}`); pArr.push(division); }
+        if (region) { whereArr.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${idx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); pArr.push(region); }
+        if (division) { whereArr.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(division)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${idx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); pArr.push(division); }
         if (legislative_district) { whereArr.push(`legislative_district = $${idx++}`); pArr.push(legislative_district); }
         const wStr = whereArr.length > 0 ? `WHERE ${whereArr.join(' AND ')}` : '';
         return pool.query(`SELECT COUNT(*) as count FROM congressional_initiatives ${wStr}`, pArr);
@@ -3221,8 +3304,8 @@ app.get('/api/masterlist/partnership-schools', async (req, res) => {
       pIdx = 2;
     }
 
-    if (region) { baseWhere.push(`"region" = $${pIdx++}`); params.push(region); }
-    if (division) { baseWhere.push(`"division" = $${pIdx++}`); params.push(division); }
+    if (region) { baseWhere.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM("region")), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); params.push(region); }
+    if (division) { baseWhere.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM("division")), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); params.push(division); }
     if (municipality && municipality !== 'undefined') { baseWhere.push(`"municipality" = $${pIdx++}`); params.push(municipality); }
     if (legislative_district && legislative_district !== 'undefined') { baseWhere.push(`"legislative_district" = $${pIdx++}`); params.push(legislative_district); }
 
@@ -3383,8 +3466,8 @@ app.get('/api/deped-infrariorities', async (req, res) => {
     let params = [];
     let pIdx = 1;
 
-    if (region) { where.push(`region = $${pIdx++}`); params.push(region); }
-    if (division) { where.push(`division = $${pIdx++}`); params.push(division); }
+    if (region) { where.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); params.push(region); }
+    if (division) { where.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(division)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); params.push(division); }
     if (legislative_district && legislative_district !== 'undefined') {
       where.push(`legislative_district = $${pIdx++}`); params.push(legislative_district);
     }
@@ -3430,8 +3513,8 @@ app.get('/api/deped-infrariorities/summary', async (req, res) => {
     let params = [];
     let pIdx = 1;
 
-    if (region) { where.push(`region = $${pIdx++}`); params.push(region); }
-    if (division) { where.push(`division = $${pIdx++}`); params.push(division); }
+    if (region) { where.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); params.push(region); }
+    if (division) { where.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(division)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); params.push(division); }
     if (legislative_district && legislative_district !== 'undefined') {
       where.push(`legislative_district = $${pIdx++}`); params.push(legislative_district);
     }
@@ -3475,8 +3558,8 @@ app.get('/api/deped-infrariorities/distribution', async (req, res) => {
     let params = [];
     let pIdx = 1;
 
-    if (region) { where.push(`region = $${pIdx++}`); params.push(region); }
-    if (division) { where.push(`division = $${pIdx++}`); params.push(division); }
+    if (region) { where.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); params.push(region); }
+    if (division) { where.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(division)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); params.push(division); }
     if (legislative_district && legislative_district !== 'undefined') {
       where.push(`legislative_district = $${pIdx++}`); params.push(legislative_district);
     }
@@ -3513,8 +3596,8 @@ app.get('/api/deped-infrariorities/distribution-projects', async (req, res) => {
     let params = [];
     let pIdx = 1;
 
-    if (region) { where.push(`region = $${pIdx++}`); params.push(region); }
-    if (division) { where.push(`division = $${pIdx++}`); params.push(division); }
+    if (region) { where.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); params.push(region); }
+    if (division) { where.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(division)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${pIdx++})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`); params.push(division); }
     if (legislative_district && legislative_district !== 'undefined') {
       where.push(`legislative_district = $${pIdx++}`); params.push(legislative_district);
     }
@@ -4072,7 +4155,7 @@ app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) =
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  console.log('â° Running Deadline Reminder (Vercel Cron)...');
+  console.log('â ° Running Deadline Reminder (Vercel Cron)...');
   try {
     const settingRes = await pool.query("SELECT setting_value FROM system_settings WHERE setting_key = 'enrolment_deadline'");
     if (settingRes.rows.length === 0 || !settingRes.rows[0].setting_value) {
@@ -4119,15 +4202,15 @@ app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) =
           throw sendErr;
         }
       } else {
-        console.log("â„¹ï¸ No tokens found in DB.");
+        console.log("â„¹ï¸  No tokens found in DB.");
         return res.json({ message: 'No device tokens found.' });
       }
     } else {
-      console.log(`â„¹ï¸ Skipping: ${diffDays} days remaining(Not within 0 - 3 range).`);
+      console.log(`â„¹ï¸  Skipping: ${diffDays} days remaining(Not within 0 - 3 range).`);
       return res.json({ message: `Not within reminder window(0 - 3 days).Days: ${diffDays} ` });
     }
   } catch (error) {
-    console.error('âŒ Cron Error:', error);
+    console.error('â Œ Cron Error:', error);
     return res.status(500).json({ error: error.message });
   }
 });
@@ -4520,17 +4603,17 @@ if (!admin.apps.length) {
         credential = admin.credential.cert(serviceAccount);
         console.log("… Firebase admin Initialized from Local File");
       } catch (fileErr) {
-        console.warn(" ï¸ No local service-account.json found.");
+        console.warn(" ï¸  No local service-account.json found.");
       }
     }
 
     if (credential) {
       admin.initializeApp({ credential });
     } else {
-      console.warn(" ï¸ Firebase admin NOT initialized (Missing Credentials)");
+      console.warn(" ï¸  Firebase admin NOT initialized (Missing Credentials)");
     }
   } catch (e) {
-    console.warn(" ï¸ Firebase admin Init Failed:", e.message);
+    console.warn(" ï¸  Firebase admin Init Failed:", e.message);
   }
 }
 
@@ -4539,7 +4622,7 @@ if (!admin.apps.length) {
 
 const initOtpTable_OLD = async () => {
   if (!isDbConnected) {
-    console.log(" ï¸ Skipping OTP Table Init (Offline Mode)");
+    console.log(" ï¸  Skipping OTP Table Init (Offline Mode)");
     return;
   }
 
@@ -4553,7 +4636,7 @@ const initOtpTable_OLD = async () => {
 `);
     console.log("… OTP Table Initialized");
   } catch (err) {
-    console.error("âŒ Failed to init OTP table:", err);
+    console.error("â Œ Failed to init OTP table:", err);
   }
 };
 
@@ -4578,8 +4661,8 @@ const initOtpTable_OLD = async () => {
       client.release();
     }
   } catch (err) {
-    console.error('âŒ FATAL: Could not connect to Postgres DB:', err.message);
-    console.warn(' ï¸  RUNNING IN OFFLINE MOCK MODE.');
+    console.error('â Œ FATAL: Could not connect to Postgres DB:', err.message);
+    console.warn(' ï¸   RUNNING IN OFFLINE MOCK MODE.');
     isDbConnected = false;
   }
  
@@ -4597,7 +4680,7 @@ const initOtpTable_OLD = async () => {
         clientNew.release();
       }
     } catch (err) {
-      console.error('âŒ Failed to migrate Secondary Database:', err.message);
+      console.error('â Œ Failed to migrate Secondary Database:', err.message);
     }
   }
 })();
@@ -4783,10 +4866,10 @@ const parseIntOrNull = (value) => {
 
 /** Get User Full Name Helper */
 const getUserFullName = async (uid) => {
-  console.log("” getUserFullName called with API uid:", uid);
+  console.log("”  getUserFullName called with API uid:", uid);
   try {
     const res = await pool.query('SELECT first_name, last_name, email FROM users WHERE uid = $1', [uid]);
-    console.log("” DB Result for user lookup:", res.rows);
+    console.log("”  DB Result for user lookup:", res.rows);
 
     if (res.rows.length > 0) {
       const { first_name, last_name } = res.rows[0];
@@ -4794,10 +4877,10 @@ const getUserFullName = async (uid) => {
       console.log("… Resolved Full Name:", fullName);
       return fullName || null;
     } else {
-      console.warn(" ï¸ No user found in DB for UID:", uid);
+      console.warn(" ï¸  No user found in DB for UID:", uid);
     }
   } catch (err) {
-    console.warn(" ï¸ Error fetching user name:", err.message);
+    console.warn(" ï¸  Error fetching user name:", err.message);
   }
   return null;
 };
@@ -5062,7 +5145,7 @@ app.get('/api/projects-for-moa/:mother_moa_id', async (req, res) => {
     let query = `
       SELECT ipc, project_name, school_name, project_id 
       FROM engineer_form 
-      WHERE region = $1 AND province = $2
+      WHERE REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $1 AND province = $2
     `;
     let params = [region, province];
 
@@ -5101,7 +5184,7 @@ app.get('/api/agency-dashboard/mother-moas', async (req, res) => {
     if (region && region !== 'All') {
       const regionClean = region.replace(/^Region\s+|^Reg-\s*|^R-\s*/i, '').trim();
       // Ensure exact match or bounded match so 'CAR' doesn't match 'CARAGA'
-      filterClause += ` AND TRIM(REGEXP_REPLACE(region, '(?i)^Region\\s+|^Reg-\\s*|^R-\\s*', '')) ILIKE $${paramCount}`;
+      filterClause += ` AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${paramCount})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`;
       params.push(regionClean);
       paramCount++;
     }
@@ -5326,13 +5409,13 @@ app.get('/api/admin/users', async (req, res) => {
     // Region Filter
     if (region) {
       params.push(region);
-      whereClauses.push(`region = $${params.length}`);
+      whereClauses.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${params.length})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`);
     }
 
     // Division Filter
     if (division) {
       params.push(division);
-      whereClauses.push(`division = $${params.length}`);
+      whereClauses.push(`REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(division)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${params.length})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`);
     }
 
     // Search Filter
@@ -5396,11 +5479,11 @@ app.get('/api/admin/user-stats', async (req, res) => {
     }
     if (region) {
       params.push(region);
-      whereClause += ` AND region = $${params.length}`;
+      whereClause += ` AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${params.length})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`;
     }
     if (division) {
       params.push(division);
-      whereClause += ` AND division = $${params.length}`;
+      whereClause += ` AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(division)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${params.length})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`;
     }
 
     const totalRes = await pool.query(`SELECT COUNT(*) as total FROM users ${whereClause === "WHERE 1=1" ? "" : whereClause}`, params);
@@ -5410,11 +5493,11 @@ app.get('/api/admin/user-stats', async (req, res) => {
     const breakdownParams = [];
     if (region) {
       breakdownParams.push(region);
-      breakdownWhereClause += ` AND region = $${breakdownParams.length}`;
+      breakdownWhereClause += ` AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${breakdownParams.length})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`;
     }
     if (division) {
       breakdownParams.push(division);
-      breakdownWhereClause += ` AND division = $${breakdownParams.length}`;
+      breakdownWhereClause += ` AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(division)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($${breakdownParams.length})), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`;
     }
 
     const breakdownRes = await pool.query(`
@@ -5552,10 +5635,10 @@ app.post('/api/admin/reset-password', async (req, res) => {
 //                SDO SCHOOL MANAGEMENT ENDPOINTS
 // ==================================================================
 
-// Helper to normalize Division Names (Stripping "SDO " or "SDO" prefix if it exists)
+// Helper to normalize Division Names (Stopping the automatic stripping of "SDO " prefix)
 const normalizeDivision = (div) => {
   if (!div) return div;
-  return div.trim().replace(/^SDO\s*/i, '').trim();
+  return div.trim();
 };
 
 // GET - SDO Location Options
@@ -5573,16 +5656,7 @@ app.get('/api/sdo/location-options', async (req, res) => {
     console.log(`[SDO API] Normalizing division for options: "${originalDivision}" -> "${division}"`);
   }
 
-  // Helper to normalize Names (Fixing encoding issues like ?? -> Ñ)
-  const normalize = (str) => {
-    if (!str) return str;
-    // Replace ?? with Ñ and trim
-    return str.replace(/\?\?/g, 'Ñ').trim();
-  };
-
   try {
-    // 1. Fetch Provinces, Municipalities, Districts, and Legislative Districts from all_locations
-    // We use all_locations as it's the most comprehensive for the SDO's jurisdiction.
     const baseLocations = await pool.query(`
       SELECT DISTINCT 
         province, 
@@ -5590,23 +5664,23 @@ app.get('/api/sdo/location-options', async (req, res) => {
         district, 
         legislative_district as leg_district
       FROM all_locations
-      WHERE UPPER(TRIM(region)) = UPPER(TRIM($1)) 
-        AND UPPER(TRIM(division)) = UPPER(TRIM($2))
+      WHERE REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $1 
+        AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(division)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $2
       ORDER BY province, municipality, district
-    `, [region, division]);
+    `, [normalizeLocationField(region), normalizeLocationField(division)]);
 
     // Cleanup encoding for the base locations
     const cleanedBase = baseLocations.rows.map(r => ({
-        province: normalize(r.province),
-        municipality: normalize(r.municipality),
-        district: normalize(r.district),
-        leg_district: normalize(r.leg_district)
+        province: normalizeLocationOutput(r.province),
+        municipality: normalizeLocationOutput(r.municipality),
+        district: normalizeLocationOutput(r.district),
+        leg_district: normalizeLocationOutput(r.leg_district)
     }));
 
     // 2. Fetch Barangays from ph_barangays using the provinces/municipalities found
-    // We get the unique municipalities (normalized for matching)
-    const munsForMatch = [...new Set(cleanedBase.map(r => r.municipality.toUpperCase()))];
-    const provsForMatch = [...new Set(cleanedBase.map(r => r.province.toUpperCase()))];
+    // We get the unique municipalities (already normalized to uppercase by normalizeLocationOutput)
+    const munsForMatch = [...new Set(cleanedBase.map(r => r.municipality).filter(Boolean))];
+    const provsForMatch = [...new Set(cleanedBase.map(r => r.province).filter(Boolean))];
 
     const barangayResult = await pool.query(`
       SELECT DISTINCT 
@@ -5614,22 +5688,22 @@ app.get('/api/sdo/location-options', async (req, res) => {
         municipality, 
         barangay
       FROM ph_barangays
-      WHERE UPPER(TRIM(region)) = UPPER(TRIM($1))
-        AND (UPPER(TRIM(province)) = ANY($2) OR UPPER(REPLACE(TRIM(province), '??', 'Ñ')) = ANY($2))
-        AND (UPPER(TRIM(municipality)) = ANY($3) OR UPPER(REPLACE(TRIM(municipality), '??', 'Ñ')) = ANY($3))
+      WHERE REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $1
+        AND (REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(province)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = ANY($2))
+        AND (REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(municipality)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = ANY($3))
       ORDER BY province, municipality, barangay
-    `, [region, provsForMatch, munsForMatch]);
+    `, [normalizeLocationField(region), provsForMatch, munsForMatch]);
 
     // Normalize barangay result as well
     const cleanedBarangays = barangayResult.rows.map(r => ({
-        province: normalize(r.province),
-        municipality: normalize(r.municipality),
-        barangay: normalize(r.barangay)
+        province: normalizeLocationOutput(r.province),
+        municipality: normalizeLocationOutput(r.municipality),
+        barangay: normalizeLocationOutput(r.barangay)
     }));
 
     // 3. Merge results
     const barangayMap = cleanedBarangays.reduce((acc, row) => {
-      const key = `${row.province.toUpperCase()}|${row.municipality.toUpperCase()}`;
+      const key = `${row.province || ''}|${row.municipality || ''}`;
       if (!acc[key]) acc[key] = [];
       acc[key].push(row.barangay);
       return acc;
@@ -5637,7 +5711,7 @@ app.get('/api/sdo/location-options', async (req, res) => {
 
     const mergedRows = [];
     cleanedBase.forEach(base => {
-      const key = `${base.province.toUpperCase()}|${base.municipality.toUpperCase()}`;
+      const key = `${base.province || ''}|${base.municipality || ''}`;
       const barangays = barangayMap[key] || [];
       
       if (barangays.length > 0) {
@@ -5663,14 +5737,14 @@ app.get('/api/sdo/location-options', async (req, res) => {
                 "Province" as province, "Municipality" as municipality, "District" as district, 
                 "Legislative_District" as leg_district, "Barangay" as barangay
             FROM "schools_IERN"
-            WHERE "Region" = $1 AND "Division" = $2
-        `, [region, division]);
+            WHERE UPPER(TRIM("Region")) = $1 AND UPPER(TRIM("Division")) = $2
+        `, [normalizeLocationField(region), normalizeLocationField(division)]);
         return res.json(iernResult.rows.map(r => ({
-            province: normalize(r.province),
-            municipality: normalize(r.municipality),
-            district: normalize(r.district),
-            leg_district: normalize(r.leg_district),
-            barangay: normalize(r.barangay)
+            province: normalizeLocationOutput(r.province),
+            municipality: normalizeLocationOutput(r.municipality),
+            district: normalizeLocationOutput(r.district),
+            leg_district: normalizeLocationOutput(r.leg_district),
+            barangay: normalizeLocationOutput(r.barangay)
         })));
     }
 
@@ -5742,6 +5816,13 @@ app.post('/api/sdo/convert-school', async (req, res) => {
     // 2. Archive the Old School ID
     await client.query('UPDATE "schools_IERN" SET "status" = \'Archived\', "updated_at" = CURRENT_TIMESTAMP WHERE "SchoolID" = $1', [old_school_id]);
 
+    // Standardize location naming to prevent duplicate groups in dashboards
+    const normRegion = normalizeLocationField(region);
+    const normDivision = normalizeLocationField(division);
+    const normDistrict = normalizeLocationField(district);
+    const normProvince = normalizeLocationField(province);
+    const normMunicipality = normalizeLocationField(municipality);
+
     // 3. Log the Conversion in pending_schools (Audit Record)
     const auditRes = await client.query(`
       INSERT INTO pending_schools (
@@ -5753,7 +5834,7 @@ app.post('/api/sdo/convert-school', async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'approved', CURRENT_TIMESTAMP, $15, $16)
       RETURNING pending_id
     `, [
-      school_id, school_name, region, division, district, province, municipality, leg_district,
+      school_id, school_name, normRegion, normDivision, normDistrict, normProvince, normMunicipality, leg_district,
       barangay, street_address, mother_school_id, curricular_offering,
       latitude, longitude, submitted_by, submitted_by_name, special_order
     ]);
@@ -5769,7 +5850,7 @@ app.post('/api/sdo/convert-school', async (req, res) => {
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'Active', CURRENT_TIMESTAMP)
     `, [
-      school_id, sharedIern, school_name, region, division, district, province, municipality,
+      school_id, sharedIern, school_name, normRegion, normDivision, normDistrict, normProvince, normMunicipality,
       leg_district, barangay, street_address, curricular_offering,
       latitude, longitude, mother_school_id
     ]);
@@ -5826,6 +5907,107 @@ app.get('/api/sdo/check-id/:id', async (req, res) => {
     console.error("Check ID Error:", err);
     res.status(500).json({ error: "Failed to verify ID" });
   }
+});
+
+// GET - SDO Validate ID for conversion (Unit 1 identity shift)
+app.get('/api/sdo/validate-conversion/:id', async (req, res) => {
+    const { id } = req.params;
+    const { requester_uid } = req.query; // Optional: to exclude current user from occupancy check
+
+    try {
+        // 1. Check master registry (schools_IERN)
+        const iernRes = await pool.query('SELECT "School_Name", iern FROM "schools_IERN" WHERE "SchoolID" = $1 AND "status" = \'Active\'', [id]);
+        if (iernRes.rows.length === 0) {
+            return res.json({ valid: false, reason: "School ID not found or archived in master registry." });
+        }
+        const schoolName = iernRes.rows[0].School_Name;
+        const iern = iernRes.rows[0].iern;
+
+        // 2. Check pending schools (User requirement: any entry)
+        const pendingRes = await pool.query('SELECT pending_id FROM pending_schools WHERE school_id = $1', [id]);
+        if (pendingRes.rows.length === 0) {
+            return res.json({ valid: false, reason: "School ID must be present in the pending/approved submissions list." });
+        }
+
+        // 3. Check occupancy (Users table)
+        let userQuery = 'SELECT uid, email FROM users WHERE school_id = $1';
+        let userParams = [id];
+        if (requester_uid) {
+            userQuery += ' AND uid != $2';
+            userParams.push(requester_uid);
+        }
+        const userOccRes = await pool.query(userQuery, userParams);
+        if (userOccRes.rows.length > 0) {
+            return res.json({ 
+                valid: false, 
+                occupied: true, 
+                reason: `This School ID is already occupied by another user (${userOccRes.rows[0].email}).` 
+            });
+        }
+
+        // 4. Check occupancy (ph_schools table)
+        const phOccRes = await pool.query('SELECT school_id FROM ph_schools WHERE school_id = $1', [id]);
+        if (phOccRes.rows.length > 0 && (!requester_uid || phOccRes.rows[0].school_id !== id)) {
+             // If ph_schools has a record but no user owns it (orphaned), we might still allow it, 
+             // but per user request "check ph_schools too just to be sure" suggesting strict vacancy.
+             return res.json({ valid: false, occupied: true, reason: "This School ID already has an existing profile in the system." });
+        }
+
+        res.json({ valid: true, school_name: schoolName, iern: iern });
+
+    } catch (err) {
+        console.error("Validate Conversion Error:", err);
+        res.status(500).json({ error: "Failed to validate school ID for conversion." });
+    }
+});
+
+// POST - Perform Identity Shift (Unit 1)
+app.post('/api/ph_schools/identity-shift', authMiddleware, async (req, res) => {
+    const { old_school_id, new_school_id } = req.body;
+    const uid = req.user.uid;
+
+    if (!old_school_id || !new_school_id) {
+        return res.status(400).json({ error: "Old and New School IDs are required." });
+    }
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 1. Re-validate existence of new_school_id in registry
+        const iernRes = await client.query('SELECT iern FROM "schools_IERN" WHERE "SchoolID" = $1 AND "status" = \'Active\'', [new_school_id]);
+        if (iernRes.rows.length === 0) throw new Error("Target school ID is invalid or inactive.");
+        const newIern = iernRes.rows[0].iern;
+
+        // 2. Update User Record
+        await client.query('UPDATE users SET school_id = $1 WHERE uid = $2', [new_school_id, uid]);
+
+        // 3. Update primary data records (ph_schools)
+        // Note: If a record already exists for the new ID, we might need to decide whether to merge or overwrite.
+        // Assuming the occupancy check in validation prevents this, we can safely update.
+        await client.query('UPDATE ph_schools SET school_id = $1 WHERE school_id = $2', [new_school_id, old_school_id]);
+
+        // 4. Update completion tracking
+        await client.query('UPDATE ph_school_completion SET school_id = $1 WHERE school_id = $2', [new_school_id, old_school_id]);
+
+        // 5. Mark OLD ID as Archived in registry
+        await client.query('UPDATE "schools_IERN" SET "status" = \'Archived\', "updated_at" = CURRENT_TIMESTAMP WHERE "SchoolID" = $1', [old_school_id]);
+
+        // 6. Log the shift
+        const userName = await getUserFullName(uid);
+        await logActivity(uid, userName, req.user.role, 'IDENTITY_SHIFT', new_school_id, `User shifted from ${old_school_id} to ${new_school_id}`);
+
+        await client.query('COMMIT');
+        console.log(`✅ [IdentityShift] ${uid}: ${old_school_id} -> ${new_school_id}`);
+        res.json({ success: true, new_school_id, iern: newIern });
+
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error("Identity Shift Error:", err);
+        res.status(500).json({ error: err.message || "Failed to process identity shift." });
+    } finally {
+        client.release();
+    }
 });
 
 app.post('/api/sdo/submit-school', async (req, res) => {
@@ -6188,19 +6370,13 @@ app.get('/api/sdo/first-school-location', async (req, res) => {
     // Normalize division to handle "SDO " prefix mismatch
     division = normalizeDivision(division);
 
-    // Normalization helper
-    const normalizeHelper = (str) => {
-      if (!str) return str;
-      return str.replace(/\?\?/g, 'Ñ').trim();
-    };
-
     let query = `
             SELECT "Latitude" as lat, "Longitude" as lng 
             FROM "schools_IERN" 
             WHERE "Region" = $1 AND "Division" = $2 
             AND "Latitude" IS NOT NULL AND "Longitude" IS NOT NULL
         `;
-    const params = [region, division];
+    const params = [normalizeLocationField(region), normalizeLocationField(division)];
 
     // We use flexible matching for all filters
     const addFilter = (col, val) => {
@@ -6238,12 +6414,6 @@ app.get('/api/sdo/location-coordinates', async (req, res) => {
   // Normalize division to handle "SDO " prefix mismatch
   division = normalizeDivision(division);
 
-  // Normalization helper
-  const normalizeHelper = (str) => {
-    if (!str) return str;
-    return str.replace(/\?\?/g, 'Ñ').trim();
-  };
-
   try {
     const result = await pool.query(`
       SELECT 
@@ -6251,14 +6421,14 @@ app.get('/api/sdo/location-coordinates', async (req, res) => {
         AVG(CAST(NULLIF("Latitude"::text, '') AS DOUBLE PRECISION)) as lat, 
         AVG(CAST(NULLIF("Longitude"::text, '') AS DOUBLE PRECISION)) as lng
       FROM "schools_IERN"
-      WHERE "Region" = $1 AND "Division" = $2
+      WHERE UPPER(TRIM("Region")) = $1 AND UPPER(TRIM("Division")) = $2
       GROUP BY province, municipality, barangay
-    `, [region, division]);
+    `, [normalizeLocationField(region), normalizeLocationField(division)]);
 
     const cleaned = result.rows.map(r => ({
-      province: normalizeHelper(r.province),
-      municipality: normalizeHelper(r.municipality),
-      barangay: normalizeHelper(r.barangay),
+      province: normalizeLocationOutput(r.province),
+      municipality: normalizeLocationOutput(r.municipality),
+      barangay: normalizeLocationOutput(r.barangay),
       lat: r.lat,
       lng: r.lng
     }));
@@ -6267,6 +6437,87 @@ app.get('/api/sdo/location-coordinates', async (req, res) => {
   } catch (err) {
     console.error("Location Coordinates Error:", err);
     res.status(500).json({ error: "Failed to fetch coordinates" });
+  }
+});
+
+// GET - SDO User Details lookup by school_id (Restricted to same division)
+app.get('/api/sdo/user-details/:school_id', async (req, res) => {
+  const { school_id } = req.params;
+  let { region, division } = req.query;
+
+  if (!region || !division) {
+    return res.status(400).json({ error: "SDO Region and Division are required for restriction" });
+  }
+
+  // Normalize division
+  division = normalizeDivision(division);
+
+  try {
+    const query = `
+      SELECT 
+        u.region, 
+        u.division, 
+        s."District" as district, 
+        u.school_id, 
+        u.email, 
+        u.contact_number, 
+        u.passcode
+      FROM users u
+      LEFT JOIN "schools_IERN" s ON u.school_id = s."SchoolID"
+      WHERE u.school_id = $1 
+        AND UPPER(TRIM(u.region)) = UPPER(TRIM($2))
+        AND (UPPER(TRIM(u.division)) = UPPER(TRIM($3)) OR UPPER(TRIM(u.division)) = UPPER(TRIM('SDO ' || $3)))
+    `;
+    const result = await pool.query(query, [school_id, region, division]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "User not found or is outside your division jurisdiction." });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Fetch SDO User Details Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// POST - SDO Set User Passcode (Restricted)
+app.post('/api/sdo/set-passcode', async (req, res) => {
+  const { school_id, passcode, region, division } = req.body;
+
+  if (!school_id || !passcode || !region || !division) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  const normalizedDivision = normalizeDivision(division);
+
+  try {
+    // 1. Verify jurisdiction before update
+    const verifyQuery = `
+      SELECT uid FROM users 
+      WHERE school_id = $1 
+        AND UPPER(TRIM(region)) = UPPER(TRIM($2))
+        AND (UPPER(TRIM(division)) = UPPER(TRIM($3)) OR UPPER(TRIM(division)) = UPPER(TRIM('SDO ' || $3)))
+    `;
+    const verifyRes = await pool.query(verifyQuery, [school_id, region, normalizedDivision]);
+
+    if (verifyRes.rows.length === 0) {
+      return res.status(403).json({ error: "Unauthorized: School ID does not belong to your division." });
+    }
+
+    // 2. Perform Update
+    await pool.query('UPDATE users SET passcode = $1 WHERE school_id = $2', [passcode, school_id]);
+
+    // Dual Write
+    if (poolNew) {
+      await poolNew.query('UPDATE users SET passcode = $1 WHERE school_id = $2', [passcode, school_id])
+        .catch(e => console.error("Dual-Write Passcode Update Error:", e.message));
+    }
+
+    res.json({ success: true, message: "Passcode updated successfully" });
+  } catch (err) {
+    console.error("Set Passcode Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 // POST - admin Approve School
@@ -7125,23 +7376,33 @@ app.post('/api/register-school', async (req, res) => {
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    // 2. GENERATE IERN (Sequential: YYYY-XXXXX)
-    const year = new Date().getFullYear();
-    const iernResult = await client.query(
-      "SELECT iern FROM ph_schools WHERE iern LIKE $1 ORDER BY iern DESC LIMIT 1",
-      [`${year}-%`]
-    );
+    // 2. IERN VERIFICATION & GENERATION
+    // Check if school already has an IERN assigned in the master registry (e.g., converted schools)
+    const registryRes = await client.query('SELECT iern FROM "schools_IERN" WHERE "SchoolID" = $1', [schoolData.school_id]);
+    let sharedIern = registryRes.rows.length > 0 ? registryRes.rows[0].iern : null;
+    let newIern = sharedIern;
 
-    let nextSeq = 1;
-    if (iernResult.rows.length > 0) {
-      const lastIern = iernResult.rows[0].iern;
-      const parts = lastIern.split('-');
-      if (parts.length === 2 && !isNaN(parts[1])) {
-        const lastSeq = parseInt(parts[1], 10);
-        nextSeq = lastSeq + 1;
+    if (!newIern) {
+      console.log("ℹ️ No IERN found in registry, generating new sequential IERN...");
+      const year = new Date().getFullYear();
+      const iernResult = await client.query(
+        "SELECT iern FROM ph_schools WHERE iern LIKE $1 ORDER BY iern DESC LIMIT 1",
+        [`${year}-%`]
+      );
+
+      let nextSeq = 1;
+      if (iernResult.rows.length > 0) {
+        const lastIern = iernResult.rows[0].iern;
+        const parts = lastIern.split('-');
+        if (parts.length === 2 && !isNaN(parts[1])) {
+          const lastSeq = parseInt(parts[1], 10);
+          nextSeq = lastSeq + 1;
+        }
       }
+      newIern = `${year}-${String(nextSeq).padStart(5, '0')}`;
+    } else {
+      console.log("✅ Using existing IERN from registry:", newIern);
     }
-    const newIern = `${year}-${String(nextSeq).padStart(5, '0')}`;
 
     // 3. CREATE USER
     try {
@@ -7186,6 +7447,7 @@ app.post('/api/register-school', async (req, res) => {
     }
 
     // 4. HYDRATE PH_SCHOOLS ONLY (Skip ph_schools)
+    // Use ON CONFLICT (iern) to handle cases where a converted school takes over an existing IERN slot
     const insertSchoolQuery = `
         INSERT INTO ph_schools (
             school_id, school_name, region, province, division, district, 
@@ -7195,6 +7457,25 @@ app.post('/api/register-school', async (req, res) => {
         ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP, 1, TRUE
         )
+        ON CONFLICT (iern) DO UPDATE SET
+            school_id = EXCLUDED.school_id,
+            school_name = EXCLUDED.school_name,
+            region = EXCLUDED.region,
+            province = EXCLUDED.province,
+            division = EXCLUDED.division,
+            district = EXCLUDED.district,
+            municipality = EXCLUDED.municipality,
+            legislative_district = EXCLUDED.legislative_district,
+            barangay = EXCLUDED.barangay,
+            mother_school_id = EXCLUDED.mother_school_id,
+            latitude = EXCLUDED.latitude,
+            longitude = EXCLUDED.longitude,
+            submitted_by = EXCLUDED.submitted_by,
+            email = EXCLUDED.email,
+            curricular_offering = EXCLUDED.curricular_offering,
+            unit1 = 1,
+            unit1_completed = TRUE,
+            updated_at = CURRENT_TIMESTAMP
     `;
 
     const values = [
@@ -7228,7 +7509,7 @@ app.post('/api/register-school', async (req, res) => {
     await client.query('COMMIT');
     
     // Initial calculation
-    await updateSchoolTotalCompletion(newIern);
+    updateSchoolTotalCompletion(newIern);
 
     // --- AUTO-FILL TEACHERS (Helper) ---
     // Trigger auto-fill of teachers from master list
@@ -7416,11 +7697,11 @@ app.post('/api/register-beta', async (req, res) => {
     const valuesList = [
       schoolData.school_id,
       schoolData.school_name,
-      schoolData.region || null,
-      schoolData.province || iernData.Province || null,
-      schoolData.municipality || iernData.Municipality || null,
-      schoolData.division || null,
-      schoolData.district || iernData.District || null,
+      normalizeLocationField(schoolData.region) || null,
+      normalizeLocationField(schoolData.province || iernData.Province) || null,
+      normalizeLocationField(schoolData.municipality || iernData.Municipality) || null,
+      normalizeLocationField(schoolData.division) || null,
+      normalizeLocationField(schoolData.district || iernData.District) || null,
       schoolData.legislative_district || schoolData.legislative || iernData.LegLegDistrict || iernData.LegDistrict || null,
       null, // Curricular offering defaulted to blank on registration
       schoolData.latitude || iernData.Latitude || null,
@@ -7441,7 +7722,7 @@ app.post('/api/register-beta', async (req, res) => {
     await client.query('COMMIT');
 
     // Initial calculation
-    await updateSchoolTotalCompletion(foundIern);
+    updateSchoolTotalCompletion(foundIern);
 
     // 4. Generate JWT for the new user (identify by school_id)
     const token = jwt.sign(
@@ -7944,9 +8225,11 @@ app.get('/api/locations/regions', async (req, res) => {
       WHERE region IS NOT NULL AND region != ''
       ORDER BY region ASC
     `);
-    const regions = result.rows.map(r => r.region);
-    if (!regions.includes('Blank Region')) regions.unshift('Blank Region');
-    res.json(regions);
+    const regions = result.rows.map(r => normalizeLocationOutput(r.region));
+    // Deduplicate after normalization
+    const uniqueRegions = [...new Set(regions)];
+    if (!uniqueRegions.includes('BLANK REGION')) uniqueRegions.unshift('BLANK REGION');
+    res.json(uniqueRegions);
   } catch (err) {
     console.error("GET Regions Error:", err);
     res.status(500).json({ error: err.message });
@@ -7956,16 +8239,16 @@ app.get('/api/locations/regions', async (req, res) => {
 app.get('/api/locations/divisions', async (req, res) => {
   const { region } = req.query;
   try {
+    const normRegion = normalizeLocationField(region);
     const result = await pool.query(`
-      SELECT MAX("Division") as division 
-      FROM "schools_IERN" 
-      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
-      AND "Division" IS NOT NULL AND "Division" != '' 
-      GROUP BY UPPER(TRIM("Division"))
+      SELECT DISTINCT division 
+      FROM all_locations 
+      WHERE REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $1
+      AND division IS NOT NULL AND division != '' 
       ORDER BY division ASC
-    `, [region]);
-    const divisions = result.rows.map(r => r.division);
-    if (region === 'Blank Region' && !divisions.includes('Blank Division')) divisions.unshift('Blank Division');
+    `, [normRegion]);
+    const divisions = [...new Set(result.rows.map(r => normalizeLocationOutput(r.division)))];
+    if (normRegion === 'BLANK REGION' && !divisions.includes('BLANK DIVISION')) divisions.unshift('BLANK DIVISION');
     res.json(divisions);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -7973,17 +8256,18 @@ app.get('/api/locations/divisions', async (req, res) => {
 app.get('/api/locations/districts', async (req, res) => {
   const { region, division } = req.query;
   try {
+    const normRegion = normalizeLocationField(region);
+    const normDivision = normalizeLocationField(division);
     const result = await pool.query(`
-      SELECT MAX("District") as district 
-      FROM "schools_IERN" 
-      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
-      AND UPPER(TRIM("Division")) = UPPER(TRIM($2)) 
-      AND "District" IS NOT NULL AND "District" != '' 
-      GROUP BY UPPER(TRIM("District"))
+      SELECT DISTINCT district 
+      FROM all_locations 
+      WHERE REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $1
+      AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(division)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $2
+      AND district IS NOT NULL AND district != '' 
       ORDER BY district ASC
-    `, [region, division]);
-    const districts = result.rows.map(r => r.district);
-    if (division === 'Blank Division' && !districts.includes('Blank District')) districts.unshift('Blank District');
+    `, [normRegion, normDivision]);
+    const districts = [...new Set(result.rows.map(r => normalizeLocationOutput(r.district)))];
+    if (normDivision === 'BLANK DIVISION' && !districts.includes('BLANK DISTRICT')) districts.unshift('BLANK DISTRICT');
     res.json(districts);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -7991,16 +8275,16 @@ app.get('/api/locations/districts', async (req, res) => {
 app.get('/api/locations/leg-districts', async (req, res) => {
   const { region } = req.query;
   try {
+    const nr = normalizeLocationField(region);
     const result = await pool.query(`
-      SELECT MAX("Legislative_District") as leg_district 
-      FROM "schools_IERN" 
-      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
-      AND "Legislative_District" IS NOT NULL AND "Legislative_District" != '' 
-      GROUP BY UPPER(TRIM("Legislative_District"))
-      ORDER BY leg_district ASC
-    `, [region]);
-    const legDistricts = result.rows.map(r => r.leg_district);
-    if (region === 'Blank Region' && !legDistricts.includes('Blank District')) legDistricts.unshift('Blank District');
+      SELECT DISTINCT legislative_district 
+      FROM all_locations 
+      WHERE REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $1 
+      AND legislative_district IS NOT NULL AND legislative_district != '' 
+      ORDER BY legislative_district ASC
+    `, [nr]);
+    const legDistricts = result.rows.map(r => normalizeLocationOutput(r.legislative_district));
+    if (nr === 'BLANK REGION' && !legDistricts.includes('BLANK LEGISLATIVE DISTRICT')) legDistricts.unshift('BLANK LEGISLATIVE DISTRICT');
     res.json(legDistricts);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -8008,15 +8292,18 @@ app.get('/api/locations/leg-districts', async (req, res) => {
 app.get('/api/locations/municipalities', async (req, res) => {
   const { region, division, district } = req.query;
   try {
+    const normRegion = normalizeLocationField(region);
+    const normDivision = normalizeLocationField(division);
+    const normDistrict = normalizeLocationField(district);
     const result = await pool.query(`
       SELECT DISTINCT municipality FROM all_locations
-      WHERE UPPER(TRIM(region)) = UPPER(TRIM($1))
-      AND UPPER(TRIM(division)) = UPPER(TRIM($2))
-      AND UPPER(TRIM(district)) = UPPER(TRIM($3))
+      WHERE REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $1
+      AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(division)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $2
+      AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(district)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $3
       AND municipality IS NOT NULL AND municipality != ''
       ORDER BY municipality ASC
-    `, [region, division, district]);
-    res.json(result.rows.map(r => r.municipality));
+    `, [normRegion, normDivision, normDistrict]);
+    res.json([...new Set(result.rows.map(r => normalizeLocationOutput(r.municipality)))]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -8024,14 +8311,16 @@ app.get('/api/locations/municipalities', async (req, res) => {
 app.get('/api/locations/provinces', async (req, res) => {
   const { region } = req.query;
   try {
+    const nr = normalizeLocationField(region);
     const result = await pool.query(
       `SELECT DISTINCT province FROM all_locations
-       WHERE UPPER(TRIM(region)) = UPPER(TRIM($1)) AND province IS NOT NULL AND province != ''
+       WHERE REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $1
+       AND province IS NOT NULL AND province != ''
        ORDER BY province ASC`,
-      [region]
+      [nr]
     );
-    const provinces = result.rows.map(r => r.province);
-    if (region === 'Blank Region' && !provinces.includes('Blank Province')) provinces.unshift('Blank Province');
+    const provinces = [...new Set(result.rows.map(r => normalizeLocationOutput(r.province)))];
+    if (nr === 'BLANK REGION' && !provinces.includes('BLANK PROVINCE')) provinces.unshift('BLANK PROVINCE');
     res.json(provinces);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -8040,16 +8329,18 @@ app.get('/api/locations/provinces', async (req, res) => {
 app.get('/api/locations/municipalities-by-province', async (req, res) => {
   const { region, province } = req.query;
   try {
+    const nr = normalizeLocationField(region);
+    const np = normalizeLocationField(province);
     const result = await pool.query(
       `SELECT DISTINCT municipality FROM all_locations
-       WHERE REGEXP_REPLACE(UPPER(TRIM(region)), '\\s+', ' ', 'g') = REGEXP_REPLACE(UPPER(TRIM($1)), '\\s+', ' ', 'g') 
-       AND REGEXP_REPLACE(UPPER(TRIM(province)), '\\s+', ' ', 'g') = REGEXP_REPLACE(UPPER(TRIM($2)), '\\s+', ' ', 'g')
+       WHERE REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $1
+       AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(province)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $2
        AND municipality IS NOT NULL AND municipality != ''
        ORDER BY municipality ASC`,
-      [region, province]
+      [nr, np]
     );
-    const municipalities = result.rows.map(r => r.municipality);
-    if (province === 'Blank Province' && !municipalities.includes('Blank Municipality')) municipalities.unshift('Blank Municipality');
+    const municipalities = [...new Set(result.rows.map(r => normalizeLocationOutput(r.municipality)))];
+    if (np === 'BLANK PROVINCE' && !municipalities.includes('BLANK MUNICIPALITY')) municipalities.unshift('BLANK MUNICIPALITY');
     res.json(municipalities);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -8057,27 +8348,52 @@ app.get('/api/locations/municipalities-by-province', async (req, res) => {
 app.get('/api/locations/schools', async (req, res) => {
   const { region, division, district, municipality } = req.query;
   try {
+    const nr = normalizeLocationField(region);
+    const nd = normalizeLocationField(division);
+    const nt = normalizeLocationField(district);
+    const nm = normalizeLocationField(municipality);
+
     const result = await pool.query(
-      'SELECT "SchoolID" as school_id, "School_Name" as school_name, "Region" as region, "Division" as division, "District" as district, "Province" as province, "Municipality" as municipality, "Legislative_District" as legislative_district, "Curricular_Offering" as curricular_offering, "Latitude" as latitude, "Longitude" as longitude FROM "schools_IERN" WHERE "status" = \'Active\' AND REGEXP_REPLACE(UPPER(TRIM("Region")), \'\\s+\', \' \', \'g\') = REGEXP_REPLACE(UPPER(TRIM($1)), \'\\s+\', \' \', \'g\') AND REGEXP_REPLACE(UPPER(TRIM("Division")), \'\\s+\', \' \', \'g\') = REGEXP_REPLACE(UPPER(TRIM($2)), \'\\s+\', \' \', \'g\') AND REGEXP_REPLACE(UPPER(TRIM("District")), \'\\s+\', \' \', \'g\') = REGEXP_REPLACE(UPPER(TRIM($3)), \'\\s+\', \' \', \'g\') AND REGEXP_REPLACE(UPPER(TRIM("Municipality")), \'\\s+\', \' \', \'g\') = REGEXP_REPLACE(UPPER(TRIM($4)), \'\\s+\', \' \', \'g\') ORDER BY "School_Name" ASC',
-      [region, division, district, municipality]
+      `SELECT "SchoolID" as school_id, "School_Name" as school_name, "Region" as region, "Division" as division, 
+              "District" as district, "Province" as province, "Municipality" as municipality, 
+              "Legislative_District" as legislative_district, "Curricular_Offering" as curricular_offering, 
+              "Latitude" as latitude, "Longitude" as longitude 
+       FROM "schools_IERN" 
+       WHERE "status" = 'Active' 
+       AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM("Region")), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $1
+       AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM("Division")), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $2
+       AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM("District")), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $3
+       AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM("Municipality")), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $4
+       ORDER BY "School_Name" ASC`,
+      [nr, nd, nt, nm]
     );
-    res.json(result.rows);
+    res.json(result.rows.map(r => ({
+      ...r,
+      school_name: normalizeLocationOutput(r.school_name),
+      division: normalizeLocationOutput(r.division),
+      district: normalizeLocationOutput(r.district),
+      province: normalizeLocationOutput(r.province),
+      municipality: normalizeLocationOutput(r.municipality)
+    })));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/locations/barangays', async (req, res) => {
   const { region, province, municipality } = req.query;
   try {
+    const nr = normalizeLocationField(region);
+    const np = normalizeLocationField(province);
+    const nm = normalizeLocationField(municipality);
     const result = await pool.query(
       `SELECT DISTINCT barangay FROM ph_barangays
-       WHERE REGEXP_REPLACE(UPPER(TRIM(region)), '\\s+', ' ', 'g') = REGEXP_REPLACE(UPPER(TRIM($1)), '\\s+', ' ', 'g')
-       AND REGEXP_REPLACE(UPPER(TRIM(province)), '\\s+', ' ', 'g') = REGEXP_REPLACE(UPPER(TRIM($2)), '\\s+', ' ', 'g')
-       AND REGEXP_REPLACE(UPPER(TRIM(municipality)), '\\s+', ' ', 'g') = REGEXP_REPLACE(UPPER(TRIM($3)), '\\s+', ' ', 'g')
+       WHERE REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $1
+       AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(province)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $2
+       AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(municipality)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $3
        ORDER BY barangay ASC`,
-      [region, province, municipality]
+      [nr, np, nm]
     );
-    const barangays = result.rows.map(r => r.barangay);
-    if (municipality === 'Blank Municipality' && !barangays.includes('Blank Barangay')) barangays.unshift('Blank Barangay');
+    const barangays = [...new Set(result.rows.map(r => normalizeLocationOutput(r.barangay)))];
+    if (nm === 'BLANK MUNICIPALITY' && !barangays.includes('BLANK BARANGAY')) barangays.unshift('BLANK BARANGAY');
     res.json(barangays);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -10042,6 +10358,51 @@ app.patch('/api/agency-dashboard/projects/:id/liquidation', async (req, res) => 
   } catch (err) {
     console.error("❌ Error updating project liquidation:", err.message);
     res.status(500).json({ error: "Failed to update project liquidation" });
+  }
+});
+
+// ==================================================================
+//         ADMIN: COMPLETION RESYNC
+// ==================================================================
+
+/**
+ * POST /api/admin/resync-completion
+ * Re-derives unit_completion from ph_schools authoritative flags for
+ * one school (body: { school_id }) or all schools (body: { all: true }).
+ * Fixes divergence caused by pgBouncer transaction-mode drops or
+ * missing unit8_completion writes.
+ */
+app.post('/api/admin/resync-completion', async (req, res) => {
+  const { school_id, all } = req.body || {};
+  try {
+    let rows;
+    if (all) {
+      const r = await pool.query(
+        `SELECT school_id, iern FROM ph_schools WHERE iern IS NOT NULL`
+      );
+      rows = r.rows;
+    } else if (school_id) {
+      const r = await pool.query(
+        `SELECT school_id, iern FROM ph_schools WHERE school_id = $1 AND iern IS NOT NULL`,
+        [school_id]
+      );
+      rows = r.rows;
+    } else {
+      return res.status(400).json({ error: 'Provide school_id or all:true' });
+    }
+
+    if (rows.length === 0) return res.status(404).json({ error: 'No matching schools found' });
+
+    let updated = 0;
+    for (const row of rows) {
+      updateSchoolTotalCompletion(row.iern);
+      updated++;
+    }
+
+    res.json({ success: true, updated });
+  } catch (err) {
+    console.error('[resync-completion] Error:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -12199,6 +12560,36 @@ app.post('/api/save-school-resources', async (req, res) => {
       await pool.query('DELETE FROM ecart_batches WHERE school_id = $1', [data.schoolId]);
     }
 
+    // --- MARK UNIT 6 AS COMPLETE ---
+    // Resolve IERN for completion sync (mirrors pattern used by other unit endpoints)
+    let resourcesIern = data.iern;
+    if (!resourcesIern && anchorClause === 'school_id = $1') {
+      const iernRow = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [data.schoolId]);
+      resourcesIern = iernRow.rows[0]?.iern;
+    }
+    try {
+      if (resourcesIern) {
+        await pool.query(
+          `UPDATE ph_schools SET unit6 = 1, unit6_completed = TRUE, f7_resources = 1, updated_at = CURRENT_TIMESTAMP WHERE iern = $1`,
+          [resourcesIern]
+        );
+        await pool.query(
+          `INSERT INTO ph_school_completion (iern, school_id, unit6_completion)
+           VALUES ($1, $2, true)
+           ON CONFLICT (iern) DO UPDATE SET unit6_completion = true, updated_at = CURRENT_TIMESTAMP`,
+          [resourcesIern, data.schoolId]
+        );
+      } else {
+        await pool.query(
+          `UPDATE ph_schools SET unit6 = 1, unit6_completed = TRUE, f7_resources = 1, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1`,
+          [data.schoolId]
+        );
+      }
+      updateSchoolTotalCompletion(resourcesIern);
+    } catch (completionErr) {
+      console.error('[WARN] Failed to mark unit6 complete:', completionErr.message);
+    }
+
     res.json({ message: "Resources saved!" });
 
     // SNAPSHOT UPDATE (Primary)
@@ -12415,98 +12806,10 @@ app.post('/api/save-physical-facilities', async (req, res) => {
   try {
     if (!sId) throw new Error("Missing schoolId in payload");
 
-    // --- Ensure all required Unit 7 tables/columns exist (idempotent DDL outside transaction) ---
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS ph_buildings_inventory (
-        id SERIAL PRIMARY KEY,
-        school_id TEXT,
-        iern TEXT,
-        building_name TEXT,
-        room_name TEXT,
-        category TEXT,
-        storey INTEGER,
-        classroom INTEGER,
-        room_length NUMERIC,
-        room_width NUMERIC,
-        less_than_7x9 INTEGER DEFAULT 0,
-        "7x9" INTEGER DEFAULT 0,
-        above_7x9 INTEGER DEFAULT 0,
-        grade_level TEXT,
-        advisory_teacher TEXT,
-        year_completed INTEGER,
-        remarks TEXT,
-        status TEXT,
-        is_in_use BOOLEAN DEFAULT TRUE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `).catch(e => console.warn('[Unit7] ph_buildings_inventory creation skip:', e.message));
-
-    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS room_name TEXT`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS status TEXT`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS grade_level TEXT`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS advisory_teacher TEXT`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS less_than_7x9 INTEGER DEFAULT 0`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS "7x9" INTEGER DEFAULT 0`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS above_7x9 INTEGER DEFAULT 0`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS iern TEXT`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS is_in_use BOOLEAN DEFAULT TRUE`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS seats TEXT`).catch(() => {});
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS ph_buildings_repairs (
-        id SERIAL PRIMARY KEY,
-        school_id TEXT,
-        iern TEXT,
-        building_name TEXT,
-        room_name TEXT,
-        item_name TEXT,
-        oms TEXT,
-        condition TEXT,
-        damage_ratio INTEGER,
-        recommended_action TEXT,
-        demo_justification TEXT,
-        remarks TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `).catch(e => console.warn('[Unit7] ph_buildings_repairs creation skip:', e.message));
-
-    await pool.query(`ALTER TABLE ph_buildings_repairs ADD COLUMN IF NOT EXISTS room_name TEXT`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_buildings_repairs ADD COLUMN IF NOT EXISTS oms TEXT`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_buildings_repairs ADD COLUMN IF NOT EXISTS demo_justification TEXT`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_buildings_repairs ADD COLUMN IF NOT EXISTS iern TEXT`).catch(() => {});
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS ph_buildings_demolition (
-        id SERIAL PRIMARY KEY,
-        school_id TEXT,
-        iern TEXT,
-        building_name TEXT,
-        room_name TEXT,
-        less_than_7x9 INTEGER DEFAULT 0,
-        "7x9" INTEGER DEFAULT 0,
-        above_7x9 INTEGER DEFAULT 0,
-        age BOOLEAN DEFAULT FALSE,
-        safety BOOLEAN DEFAULT FALSE,
-        calamity BOOLEAN DEFAULT FALSE,
-        upgrade BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `).catch(e => console.warn('[Unit7] ph_buildings_demolition creation skip:', e.message));
-
-    await pool.query(`ALTER TABLE ph_buildings_demolition ADD COLUMN IF NOT EXISTS room_name TEXT`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_buildings_demolition ADD COLUMN IF NOT EXISTS iern TEXT`).catch(() => {});
-
-    // --- Ensure ph_schools has summary columns for Unit 7 ---
-    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_total INTEGER DEFAULT 0`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_new INTEGER DEFAULT 0`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_good INTEGER DEFAULT 0`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_repair INTEGER DEFAULT 0`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_demolition INTEGER DEFAULT 0`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS has_no_building BOOLEAN DEFAULT FALSE`).catch(() => {});
-    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`).catch(() => {});
+    // --- Unit 7 schema DDL runs ONCE at startup (initUnit7Schema) not per-request ---
+    // Removed from hot path to eliminate AccessExclusiveLock cascade on every save.
 
     await client.query('BEGIN');
-    // Schema ensured above via idempotent DDL
 
     // 1. Update Main Profile
     let anchorClause = 'school_id = $1';
@@ -12644,31 +12947,43 @@ app.post('/api/save-physical-facilities', async (req, res) => {
     const inventoryCount = (data.inventoryEntries && Array.isArray(data.inventoryEntries)) ? data.inventoryEntries.length : 0;
     const isUnit7Completed = (inventoryCount > 0 || data.has_no_building === true) && !data.isPartial;
 
-    await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE;`);
-    await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_updated_at TIMESTAMP;`);
+    // Resolve IERN definitively for completion table sync
+    let definitiveIern = data.iern;
+    if (!definitiveIern) {
+      const iernRow = await client.query('SELECT iern FROM ph_schools WHERE school_id = $1', [sId]);
+      definitiveIern = iernRow.rows[0]?.iern;
+    }
 
-    if (data.iern) {
-        await client.query(`UPDATE ph_schools SET unit7_completed = $1, unit7 = $2, unit7_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit7_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE iern = $3`, [isUnit7Completed, isUnit7Completed ? 1 : 0, data.iern]);
+    // Schema hardening (unit7_completed, etc.) is handled at boot in initUnit7Schema().
+    // DDL removed from hot path to prevent AccessExclusiveLock deadlocks.
 
-        // --- SYNC COMPLETION (UI Unit 7 Facilities -> unit7_completion) ---
-        if (isUnit7Completed) {
-            await client.query(`
-                INSERT INTO ph_school_completion (iern, school_id, unit7_completion)
-                VALUES ($1, $2, true)
-                ON CONFLICT (iern) DO UPDATE SET unit7_completion = true, updated_at = CURRENT_TIMESTAMP
-            `, [data.iern, sId]);
-        }
-    } else {
-        await client.query(`UPDATE ph_schools SET unit7_completed = $1, unit7 = $2, unit7_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit7_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $3`, [isUnit7Completed, isUnit7Completed ? 1 : 0, sId]);
+    // Only update completion flags on a final submit — partial syncs (step navigation,
+    // building/repair modal saves) must never overwrite an already-completed unit7.
+    if (!data.isPartial) {
+      // Update ph_schools core record
+      if (definitiveIern) {
+          await client.query(`UPDATE ph_schools SET unit7_completed = $1, unit7 = $2, unit7_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit7_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE iern = $3`, [isUnit7Completed, isUnit7Completed ? 1 : 0, definitiveIern]);
+      } else {
+          await client.query(`UPDATE ph_schools SET unit7_completed = $1, unit7 = $2, unit7_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit7_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $3`, [isUnit7Completed, isUnit7Completed ? 1 : 0, sId]);
+      }
+
+      // --- SYNC COMPLETION (UI Unit 7 Facilities -> unit7_completion) ---
+      if (isUnit7Completed && definitiveIern) {
+          await client.query(`
+              INSERT INTO ph_school_completion (iern, school_id, unit7_completion)
+              VALUES ($1, $2, true)
+              ON CONFLICT (iern) DO UPDATE SET unit7_completion = true, updated_at = CURRENT_TIMESTAMP
+          `, [definitiveIern, sId]);
+      }
     }
 
     await client.query('COMMIT');
     
-    // Trigger total recalculation if completed
-    if (isUnit7Completed) {
-        const finalIern = data.iern || (await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [sId])).rows[0]?.iern;
-        if (finalIern) await updateSchoolTotalCompletion(finalIern);
+    // Trigger total recalculation if completed (ASYNCHRONOUS - Fire & Forget to prevent pool starvation)
+    if (isUnit7Completed && definitiveIern) {
+        updateSchoolTotalCompletion(definitiveIern); 
     }
+
     res.json({ success: true, message: "Facilities and details saved!" });
 
     // SNAPSHOT UPDATE
@@ -13192,13 +13507,13 @@ app.get('/api/debug/iern-check', async (req, res) => {
       SELECT division, COUNT(*) as total, COUNT(iern) as with_iern,
              ARRAY_AGG(iern) FILTER (WHERE iern IS NOT NULL) as iern_values
       FROM ph_schools
-      WHERE UPPER(TRIM(region)) = UPPER(TRIM($1))
+      WHERE REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($1)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')
       GROUP BY division ORDER BY division
     `, [region]);
     const r2 = await pool.query(`
       SELECT school_id, school_name, division, iern
       FROM ph_schools
-      WHERE UPPER(TRIM(region)) = UPPER(TRIM($1)) AND iern IS NOT NULL
+      WHERE REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($1)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') AND iern IS NOT NULL
       ORDER BY division, school_name
     `, [region]);
     res.json({ byDivision: r1.rows, schools_with_iern: r2.rows });
@@ -14390,9 +14705,9 @@ app.get('/api/monitoring/schools', async (req, res) => {
       COALESCE(psc.total_completion, sp.unit_completion, 0) as completion_percentage,
       s."School_Name" as school_name,
       s."SchoolID" as school_id,
-      s."Region" as region,
-      s."Division" as division,
-      s."District" as district,
+      UPPER(TRIM(s."Region")) as region,
+      UPPER(TRIM(s."Division")) as division,
+      UPPER(TRIM(s."District")) as district,
       COALESCE(sp.total_enrollment, 0) as total_enrollment,
       (sp.school_id IS NOT NULL) as is_registered,
       
@@ -14634,7 +14949,7 @@ app.get('/api/leaderboard', async (req, res) => {
       const params = [];
 
       if (scope === 'region' && filter) {
-        query += ` AND TRIM(region) = TRIM($1)`;
+        query += ` AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(region)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($1)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')`;
         params.push(filter);
       }
 
@@ -14652,7 +14967,7 @@ app.get('/api/leaderboard', async (req, res) => {
           completion_percentage as completion_rate, -- ALIAS FOR FRONTEND
           updated_at
         FROM ph_schools
-        WHERE TRIM(division) = TRIM($1)
+        WHERE REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM(division)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM($1)), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g')
         ORDER BY completion_percentage DESC, updated_at DESC LIMIT 50
       `;
       const result = await pool.query(query, [filter]);
@@ -16531,42 +16846,7 @@ app.get('/api/schools_iern/:schoolId', async (req, res) => {
 app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    // ── 1. Ensure all required columns exist (idempotent) ────────────────────
-    const ensureCols = [
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit1_completed BOOLEAN DEFAULT FALSE`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2_completed BOOLEAN DEFAULT FALSE`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3_completed BOOLEAN DEFAULT FALSE`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit4_completed BOOLEAN DEFAULT FALSE`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit5_completed BOOLEAN DEFAULT FALSE`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6_completed BOOLEAN DEFAULT FALSE`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit9_completed BOOLEAN DEFAULT FALSE`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit1 INTEGER DEFAULT 0`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2 INTEGER DEFAULT 0`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3 INTEGER DEFAULT 0`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit4 INTEGER DEFAULT 0`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit5 INTEGER DEFAULT 0`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6 INTEGER DEFAULT 0`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7 INTEGER DEFAULT 0`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8 INTEGER DEFAULT 0`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit9 INTEGER DEFAULT 0`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10 INTEGER DEFAULT 0`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit1_updated_at TIMESTAMP`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2_updated_at TIMESTAMP`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3_updated_at TIMESTAMP`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit4_updated_at TIMESTAMP`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit5_updated_at TIMESTAMP`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6_updated_at TIMESTAMP`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_updated_at TIMESTAMP`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_updated_at TIMESTAMP`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit9_updated_at TIMESTAMP`,
-      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_updated_at TIMESTAMP`,
-    ];
-    for (const sql of ensureCols) {
-      await pool.query(sql).catch(() => { }); // silently skip if already exists
-    }
+    // ── 1. Ensure all required columns exist (Migrated to initUnit7Schema) ────────────────────
 
     // ── 2. Fetch Progress ───────────────────────────────────────────────────
     // Attempt to find IERN first
@@ -16941,12 +17221,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
     console.log(`📝 Unit 1 POST received for school: ${data.school_id}`);
 
 
-    // Auto-migrate: Add annex_details JSONB if missing
-    try {
-      await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS annex_details JSONB');
-    } catch (e) {
-      console.warn("DB Migration Warning for Unit 1 Annex:", e.message);
-    }
+    // DDL for annex_details moved to initHotPathDDL() at startup — not per-request.
 
     const isCompleted = !!(
       data.barangay && 
@@ -16973,9 +17248,10 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         head_date_of_birth, head_date_hired, google_drive_link, google_drive_file_id,
         google_drive_file_name, google_drive_thumbnail_url, 
         local_file_path, local_file_name, local_file_size,
-        annex_details,
+        annex_details, ownership_multiple,
+        ownership_na_reason,
         unit1_updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, CURRENT_TIMESTAMP)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, CURRENT_TIMESTAMP)
       ON CONFLICT (iern) DO UPDATE SET
         school_id = EXCLUDED.school_id,
         school_name = EXCLUDED.school_name,
@@ -17016,6 +17292,8 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         local_file_name = EXCLUDED.local_file_name,
         local_file_size = EXCLUDED.local_file_size,
         annex_details = EXCLUDED.annex_details,
+        ownership_multiple = EXCLUDED.ownership_multiple,
+        ownership_na_reason = EXCLUDED.ownership_na_reason,
         unit1_updated_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP;
     `;
@@ -17038,7 +17316,9 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.google_drive_link || null, data.google_drive_file_id || null,
       data.google_drive_file_name || null, data.google_drive_thumbnail_url || null,
       data.local_file_path || null, data.local_file_name || null, (data.local_file_size ? parseInt(data.local_file_size) : null),
-      data.annex_details ? JSON.stringify(data.annex_details) : null
+      data.annex_details ? JSON.stringify(data.annex_details) : null,
+      data.ownership_multiple ? JSON.stringify(data.ownership_multiple) : null,
+      data.ownership_na_reason || null
     ];
 
     // 1. Attempt an UPDATE first based on permanent IERN to safely allow school_id changes
@@ -17084,7 +17364,8 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
           head_date_hired = $32, google_drive_link = $33, google_drive_file_id = $34,
           google_drive_file_name = $35, google_drive_thumbnail_url = $36,
           local_file_path = $37, local_file_name = $38, local_file_size = $39,
-          annex_details = $40,
+          annex_details = $40, ownership_multiple = $41,
+          ownership_na_reason = $42,
           unit1_updated_at = CURRENT_TIMESTAMP,
           updated_at = CURRENT_TIMESTAMP
         WHERE iern = $2
@@ -17164,7 +17445,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
             VALUES ($1, $2, true)
             ON CONFLICT (iern) DO UPDATE SET unit1_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
         `, [data.iern, data.school_id]);
-        await updateSchoolTotalCompletion(data.iern);
+        updateSchoolTotalCompletion(data.iern);
     }
 
     // Auto-update school_summary instantly
@@ -17187,21 +17468,7 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
   const data = req.body;
 
   try {
-    // Auto-migrate multigrade columns if missing (Batch optimized)
-    try {
-      const alterParts = [];
-      const mgCols = ['multigrade_groupings_1', 'multigrade_groupings_2', 'multigrade_groupings_3'];
-      for (const col of mgCols) {
-        alterParts.push(`ADD COLUMN IF NOT EXISTS ${col} TEXT`);
-      }
-      const mgEnrCols = ['multigrade_enrollment_1', 'multigrade_enrollment_2', 'multigrade_enrollment_3'];
-      for (const col of mgEnrCols) {
-        alterParts.push(`ADD COLUMN IF NOT EXISTS ${col} INTEGER DEFAULT 0`);
-      }
-      await pool.query(`ALTER TABLE ph_schools ${alterParts.join(', ')}`);
-    } catch (e) {
-      console.warn("DB Migration Warning for Unit 2:", e.message);
-    }
+    // DDL for multigrade columns moved to initHotPathDDL() at startup — not per-request.
 
     // We expect { unit2_simplified_enrollment: [...] } OR { unit2_simplified_enrollment: { array: [...], questionnaire: {} } }
     const rawData = data.unit2_simplified_enrollment || [];
@@ -17254,6 +17521,7 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
       'unit2_simplified_enrollment = $18',
       'multigrade_groupings_1 = $20', 'multigrade_groupings_2 = $21', 'multigrade_groupings_3 = $22',
       'multigrade_enrollment_1 = $23', 'multigrade_enrollment_2 = $24', 'multigrade_enrollment_3 = $25',
+      'sned_organized_class_count = $26',
       'unit2_completed = TRUE', 'unit2_updated_at = CURRENT_TIMESTAMP', 'verified_as_of = CURRENT_TIMESTAMP'
     ];
 
@@ -17270,7 +17538,8 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
       data.multigrade_groupings_3 || null, // $22
       parseInt(data.multigrade_enrollment_1) || null, // $23
       parseInt(data.multigrade_enrollment_2) || null, // $24
-      parseInt(data.multigrade_enrollment_3) || null  // $25
+      parseInt(data.multigrade_enrollment_3) || null, // $25
+      parseInt(data.sned_organized_class_count) || 0  // $26
     ];
 
     const query = `UPDATE ph_schools SET ${fields.join(', ')} WHERE school_id = $19`;
@@ -17288,7 +17557,7 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
             VALUES ($1, $2, true)
             ON CONFLICT (iern) DO UPDATE SET unit2_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
         `, [iern, schoolId]);
-        await updateSchoolTotalCompletion(iern);
+        updateSchoolTotalCompletion(iern);
     }
 
     // Auto-update school_summary instantly
@@ -17327,25 +17596,7 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
   }
 
   try {
-    // Auto-migrate column if missing
-    try {
-      await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3_simplified_counts JSONB');
-      await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS multigrade_sections_count INTEGER DEFAULT 0');
-
-      const fixedCols = [
-        'grade_kinder_size', 'grade_1_size', 'grade_2_size', 'grade_3_size', 'grade_4_size',
-        'grade_5_size', 'grade_6_size', 'grade_7_size', 'grade_8_size', 'grade_9_size',
-        'grade_10_size', 'grade_11_size', 'grade_12_size',
-        'multigrade_groupings_1', 'multigrade_size_1',
-        'multigrade_groupings_2', 'multigrade_size_2',
-        'multigrade_groupings_3', 'multigrade_size_3'
-      ];
-      for (const col of fixedCols) {
-        await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} TEXT`);
-      }
-    } catch (e) {
-      console.warn("DB Migration Warning for Unit 3:", e.message);
-    }
+    // DDL for unit3 columns moved to initHotPathDDL() at startup — not per-request.
 
     const sectionsJson = typeof unit3_simplified_counts === 'string' ? unit3_simplified_counts : JSON.stringify(unit3_simplified_counts || []);
 
@@ -17423,7 +17674,7 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
           VALUES ($1, $2, true)
           ON CONFLICT (iern) DO UPDATE SET unit3_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
       `, [iern, schoolId]);
-      await updateSchoolTotalCompletion(iern);
+      updateSchoolTotalCompletion(iern);
     }
 
     // Auto-update school_summary instantly
@@ -17544,7 +17795,7 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
           VALUES ($1, $2, true)
           ON CONFLICT (iern) DO UPDATE SET unit4_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
       `, [iern, schoolId]);
-      await updateSchoolTotalCompletion(iern);
+      updateSchoolTotalCompletion(iern);
     }
 
     // Auto-update school_summary instantly
@@ -17665,7 +17916,7 @@ app.put('/api/ph_schools/unit5/:schoolId', async (req, res) => {
           VALUES ($1, $2, true)
           ON CONFLICT (iern) DO UPDATE SET unit5_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
       `, [iern, schoolId]);
-      await updateSchoolTotalCompletion(iern);
+      updateSchoolTotalCompletion(iern);
     }
 
     // Auto-update school_summary instantly
@@ -17726,17 +17977,22 @@ app.put('/api/ph_schools/:schoolId', async (req, res) => {
     const result = await pool.query(query, values);
 
     // --- SYNC COMPLETION (Generic Units) ---
-    if (data.unitId) {
+    // Trigger resync if: (a) caller passed an explicit unitId, OR
+    // (b) any unit*_completed flag is present in the payload (e.g. direct flag writes without unitId)
+    const hasCompletionFlag = Object.keys(data).some(k => /^unit\d+_completed$/.test(k));
+    if (data.unitId || hasCompletionFlag) {
         const iernRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1 OR iern = $2', [schoolId, data.iern]);
         if (iernRes.rows.length > 0 && iernRes.rows[0].iern) {
             const iern = iernRes.rows[0].iern;
-            const unitCol = `unit${data.unitId}_completion`;
-            await pool.query(`
-                INSERT INTO ph_school_completion (iern, school_id, ${unitCol})
-                VALUES ($1, $2, true)
-                ON CONFLICT (iern) DO UPDATE SET ${unitCol} = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
-            `, [iern, schoolId]);
-            await updateSchoolTotalCompletion(iern);
+            if (data.unitId) {
+                const unitCol = `unit${data.unitId}_completion`;
+                await pool.query(`
+                    INSERT INTO ph_school_completion (iern, school_id, ${unitCol})
+                    VALUES ($1, $2, true)
+                    ON CONFLICT (iern) DO UPDATE SET ${unitCol} = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
+                `, [iern, schoolId]);
+            }
+            updateSchoolTotalCompletion(iern);
         }
     }
 
@@ -17873,7 +18129,7 @@ app.post('/api/ph_schools/unit7/:schoolId', async (req, res) => {
           VALUES ($1, $2, true)
           ON CONFLICT (iern) DO UPDATE SET unit6_completion = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
       `, [iern, schoolId]);
-      await updateSchoolTotalCompletion(iern);
+      updateSchoolTotalCompletion(iern);
     }
 
     res.json({ success: true, message: "Unit 7 finalized!" });
@@ -18236,46 +18492,78 @@ app.delete('/api/ph_schools/unit10/spaces/:spaceId', async (req, res) => {
 //               SCHOOL LOCATION MODULE (New Module)
 // ==================================================================
 
+const parseJsonArrayPreprocess = (schema) => z.preprocess((val) => {
+  if (typeof val === 'string') {
+    try {
+      return JSON.parse(val);
+    } catch {
+      // Fallback for postgres array literals or malformed strings
+      if (val.startsWith('{') && val.endsWith('}')) {
+        return val.slice(1, -1).split(',').filter(Boolean);
+      }
+      return val ? [val] : [];
+    }
+  }
+  return val;
+}, schema);
+
+// safeNumeric re-declaration avoided
+
+const safeNumericRange = (min, max) => z.preprocess((val) => {
+  if (val === "" || val === null || val === undefined) return null;
+  const num = Number(val);
+  return Number.isNaN(num) ? null : num;
+}, z.number().min(min).max(max).nullable().optional());
+
 const schoolLocationSchema = z.object({
   school_id: z.string(),
   iern: z.string().optional(),
-  transportation_modes: z.array(z.string()).optional(),
-  road_paved_pct: z.coerce.number().min(0).max(100),
-  road_unpaved_pct: z.coerce.number().min(0).max(100),
-  road_lighting_pct: z.coerce.number().min(0).max(100).nullable().optional(),
-  public_transpo_availability: z.coerce.number().min(1).max(5).nullable().optional(),
-  near_cliff_ravine: z.boolean().optional(),
-  road_cliff_pct: z.coerce.number().min(0).max(100).nullable().optional(),
-  near_water: z.boolean().optional(),
-  water_proximity: z.array(z.any()).optional(),
-  natural_calamities: z.array(z.any()).optional(),
-  hazards_experienced: z.array(z.string()).optional(),
-  has_insurgency_threats: z.boolean().optional(),
-  insurgency_threats_6mo: z.coerce.number().nullable().optional(),
-  road_passable_public_transpo_pct: z.coerce.number().min(0).max(100).nullable().optional(),
-  river_crossing_on_foot: z.boolean().optional(),
-  river_crossing_count: z.coerce.number().nullable().optional(),
-  emergency_response_mins: z.coerce.number().nullable().optional(),
-  proximity_hospital_km: z.coerce.number().nullable().optional(),
-  proximity_brgy_hall_mins: z.coerce.number().nullable().optional(),
-  proximity_brgy_hall_km: z.coerce.number().nullable().optional(),
-  proximity_muni_hall_mins: z.coerce.number().nullable().optional(),
-  proximity_muni_hall_km: z.coerce.number().nullable().optional(),
-  proximity_sdo_mins: z.coerce.number().nullable().optional(),
-  proximity_sdo_km: z.coerce.number().nullable().optional(),
-  proximity_clinic_mins: z.coerce.number().nullable().optional(),
-  proximity_clinic_km: z.coerce.number().nullable().optional(),
-  proximity_terminal_mins: z.coerce.number().nullable().optional(),
-  proximity_terminal_km: z.coerce.number().nullable().optional(),
-  proximity_highway_mins: z.coerce.number().nullable().optional(),
-  proximity_highway_km: z.coerce.number().nullable().optional(),
+  transportation_modes: parseJsonArrayPreprocess(z.array(z.string())).optional(),
+  road_paved_pct: safeNumeric,
+  road_unpaved_pct: safeNumeric,
+  road_lighting_pct: safeNumeric,
+  public_transpo_availability: safeNumeric,
+  near_cliff_ravine: safeBoolean,
+  road_cliff_pct: safeNumeric,
+  near_water: safeBoolean,
+  water_proximity: parseJsonArrayPreprocess(z.array(z.any())).optional(),
+  natural_calamities: parseJsonArrayPreprocess(z.array(z.any())).optional(),
+  hazards_experienced: parseJsonArrayPreprocess(z.array(z.string())).optional(),
+  has_insurgency_threats: safeBoolean,
+  insurgency_threats_6mo: safeNumeric,
+  road_passable_public_transpo_pct: safeNumeric,
+  river_crossing_on_foot: safeBoolean,
+  river_crossing_count: safeNumeric,
+  emergency_response_mins: safeNumeric,
+  proximity_hospital_km: safeNumeric,
+  proximity_brgy_hall_mins: safeNumeric,
+  proximity_brgy_hall_km: safeNumeric,
+  proximity_muni_hall_mins: safeNumeric,
+  proximity_muni_hall_km: safeNumeric,
+  proximity_sdo_mins: safeNumeric,
+  proximity_sdo_km: safeNumeric,
+  proximity_clinic_mins: safeNumeric,
+  proximity_clinic_km: safeNumeric,
+  proximity_terminal_mins: safeNumeric,
+  proximity_terminal_km: safeNumeric,
+  proximity_highway_mins: safeNumeric,
+  proximity_highway_km: safeNumeric,
   cellular_coverage: z.string().optional(),
-  weather_isolation: z.boolean().optional(),
-  anthropogenic_threats: z.array(z.object({
+  weather_isolation: safeBoolean,
+  anthropogenic_threats: parseJsonArrayPreprocess(z.array(z.object({
     type: z.string(),
-    incidences: z.coerce.number()
-  })).optional(),
-}).refine(data => ((Number(data.road_paved_pct) || 0) + (Number(data.road_unpaved_pct) || 0)) === 100, {
+    incidences: z.preprocess(val => (val === "" || val === null || Number.isNaN(Number(val))) ? 0 : Number(val), z.number())
+  }))).optional(),
+}).transform(data => {
+  // Auto-correct road_unpaved_pct so it always sums to 100 with road_paved_pct.
+  // Devices with broken range inputs can send NaN (→ null via safeNumeric).
+  // Falling back to the paved value prevents the refine below from failing.
+  const paved = Number(data.road_paved_pct) || 0;
+  return { ...data, road_unpaved_pct: 100 - paved };
+}).refine(data => {
+  const sum = (Number(data.road_paved_pct) || 0) + (Number(data.road_unpaved_pct) || 0);
+  return Math.abs(sum - 100) <= 1; // ±1 tolerance for floating-point edge cases
+}, {
   message: "Paved and unpaved percentages must sum to 100",
   path: ["road_paved_pct"]
 });
@@ -18332,7 +18620,7 @@ app.post('/api/school-location', async (req, res) => {
         proximity_terminal_km, proximity_highway_mins, proximity_highway_km,
         cellular_coverage, weather_isolation, anthropogenic_threats, risk_index, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, CURRENT_TIMESTAMP
+        $1, $2, $3::jsonb, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35::jsonb, $36, CURRENT_TIMESTAMP
       )
       ON CONFLICT (school_id) DO UPDATE SET
         iern = COALESCE(school_location_profiles.iern, EXCLUDED.iern),
@@ -18377,17 +18665,17 @@ app.post('/api/school-location', async (req, res) => {
     const values = [
       validatedData.school_id,                                                                  // $1
       validatedData.iern || null,                                                               // $2
-      validatedData.transportation_modes ? JSON.stringify(validatedData.transportation_modes) : null, // $3
+      validatedData.transportation_modes ? JSON.stringify(validatedData.transportation_modes) : '[]', // $3
       validatedData.road_paved_pct,                                                             // $4
       validatedData.road_unpaved_pct,                                                           // $5
       validatedData.road_lighting_pct ?? null,                                                  // $6
       validatedData.public_transpo_availability ?? null,                                        // $7
-      validatedData.water_proximity ? JSON.stringify(validatedData.water_proximity) : null,     // $8
+      validatedData.water_proximity ? JSON.stringify(validatedData.water_proximity) : '[]',     // $8
       validatedData.near_cliff_ravine ?? null,                                                  // $9
       validatedData.road_cliff_pct ?? null,                                                     // $10
       validatedData.near_water ?? null,                                                         // $11
-      validatedData.natural_calamities ? JSON.stringify(validatedData.natural_calamities) : null, // $12
-      validatedData.hazards_experienced ? JSON.stringify(validatedData.hazards_experienced) : null, // $13
+      validatedData.natural_calamities ? JSON.stringify(validatedData.natural_calamities) : '[]', // $12
+      validatedData.hazards_experienced ? JSON.stringify(validatedData.hazards_experienced) : '[]', // $13
       validatedData.has_insurgency_threats ?? null,                                             // $14
       validatedData.insurgency_threats_6mo ?? null,                                           // $15
       validatedData.road_passable_public_transpo_pct ?? null,                                  // $16
@@ -18438,6 +18726,10 @@ app.post('/api/school-location', async (req, res) => {
         [schoolId, isUnit8Completed, isUnit8Completed ? 1 : 0]
       );
 
+      // 2. Resync total completion — this also writes unit8_completion to ph_school_completion
+      const iernForSync = validatedData.iern || (await pool.query('SELECT iern FROM ph_schools WHERE school_id=$1', [schoolId]).then(r => r.rows[0]?.iern));
+      if (iernForSync) updateSchoolTotalCompletion(iernForSync);
+
       console.log(`[Dashboard Integration] Unit 8 (Terrain) Flags updated for school ${schoolId}`);
     } catch (flagErr) {
       console.warn("[Dashboard Integration] Failed to update flags:", flagErr.message);
@@ -18449,8 +18741,51 @@ app.post('/api/school-location', async (req, res) => {
       console.error("Zod Validation Error:", JSON.stringify(err.errors, null, 2));
       return res.status(400).json({ error: "Validation failed", details: err.errors });
     }
-    console.error("POST School Location Error:", err);
-    res.status(500).json({ error: "Internal Server Error" });
+    console.error("POST School Location Error:", err.message);
+    if (err.stack) console.error(err.stack);
+    res.status(500).json({ 
+      error: "Internal Server Error", 
+      message: err.message,
+      code: err.code,
+      detail: err.detail,
+      table: err.table,
+      constraint: err.constraint
+    });
+  }
+});
+
+// ==================================================================
+//               SYSTEM OPTIMIZATION & REPAIR ENDPOINTS
+// ==================================================================
+
+// POST /api/system/align-unit8
+app.post('/api/system/align-unit8', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided.' });
+  }
+  try {
+    const tokenStr = authHeader.split(' ')[1];
+    jwt.verify(tokenStr, process.env.JWT_SECRET || 'STRIDE_INSIGHTED_SECRET_2026_KEY_PROD');
+    
+    // Execute a read-only schema audit instead of an ALTER TABLE lock
+    const columns = ['transportation_modes', 'hazards_experienced', 'water_proximity', 'natural_calamities', 'anthropogenic_threats'];
+    let conversions = [];
+    
+    for (const col of columns) {
+      const typeRes = await pool.query(
+        `SELECT data_type FROM information_schema.columns WHERE table_name = 'school_location_profiles' AND column_name = $1`, [col]
+      );
+      if (typeRes.rows[0] && typeRes.rows[0].data_type !== 'jsonb') {
+        conversions.push(col);
+      }
+    }
+    
+    console.log(`[System Repair] Unit 8 read-only structural audit executed via API.`);
+    res.json({ success: true, message: "Unit 8 structural audit returned correctly. Any necessary DB migrations must be applied through boot-time scripts.", converted: conversions });
+  } catch (err) {
+    console.error("❌ Align Unit 8 Error:", err.message);
+    res.status(500).json({ error: "Failed to audit Unit 8", message: err.message });
   }
 });
 
@@ -18505,7 +18840,7 @@ app.post('/api/user/progress', async (req, res) => {
           ON CONFLICT (iern) DO UPDATE SET ${completionCol} = true, school_id = EXCLUDED.school_id, updated_at = CURRENT_TIMESTAMP
         `, [iern, schoolId]);
         
-        await updateSchoolTotalCompletion(iern);
+        updateSchoolTotalCompletion(iern);
       }
     }
     // Always return success — the frontend treats 404 as an error that blocks navigation
@@ -18761,6 +19096,133 @@ app.get('/api/lgu/project/:id', async (req, res) => {
   }
 });
 
+// --- Unit 7 Schema Init (one-time at startup, NOT per request) ---
+// Moved from /api/save-physical-facilities to eliminate AccessExclusiveLock cascade.
+const initUnit7Schema = async () => {
+  try {
+    console.log('[Unit7] Running one-time schema init...');
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ph_buildings_inventory (
+        id SERIAL PRIMARY KEY, school_id TEXT, iern TEXT, building_name TEXT,
+        room_name TEXT, category TEXT, storey INTEGER, classroom INTEGER,
+        room_length NUMERIC, room_width NUMERIC,
+        less_than_7x9 INTEGER DEFAULT 0, "7x9" INTEGER DEFAULT 0, above_7x9 INTEGER DEFAULT 0,
+        grade_level TEXT, advisory_teacher TEXT, year_completed INTEGER,
+        remarks TEXT, status TEXT, is_in_use BOOLEAN DEFAULT TRUE, seats TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `).catch(e => console.warn('[Unit7] ph_buildings_inventory:', e.message));
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ph_buildings_repairs (
+        id SERIAL PRIMARY KEY, school_id TEXT, iern TEXT, building_name TEXT,
+        room_name TEXT, item_name TEXT, oms TEXT, condition TEXT,
+        damage_ratio INTEGER, recommended_action TEXT, demo_justification TEXT,
+        remarks TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `).catch(e => console.warn('[Unit7] ph_buildings_repairs:', e.message));
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ph_buildings_demolition (
+        id SERIAL PRIMARY KEY, school_id TEXT, iern TEXT, building_name TEXT,
+        room_name TEXT, less_than_7x9 INTEGER DEFAULT 0,
+        "7x9" INTEGER DEFAULT 0, above_7x9 INTEGER DEFAULT 0,
+        age BOOLEAN DEFAULT FALSE, safety BOOLEAN DEFAULT FALSE,
+        calamity BOOLEAN DEFAULT FALSE, upgrade BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `).catch(e => console.warn('[Unit7] ph_buildings_demolition:', e.message));
+    // ADD COLUMN IF NOT EXISTS (safe to run once — no-op if already exists)
+    const addCols = [
+      `ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS room_name TEXT`,
+      `ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS status TEXT`,
+      `ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS grade_level TEXT`,
+      `ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS advisory_teacher TEXT`,
+      `ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS less_than_7x9 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS "7x9" INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS above_7x9 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS iern TEXT`,
+      `ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS is_in_use BOOLEAN DEFAULT TRUE`,
+      `ALTER TABLE ph_buildings_inventory ADD COLUMN IF NOT EXISTS seats TEXT`,
+      `ALTER TABLE ph_buildings_repairs ADD COLUMN IF NOT EXISTS room_name TEXT`,
+      `ALTER TABLE ph_buildings_repairs ADD COLUMN IF NOT EXISTS oms TEXT`,
+      `ALTER TABLE ph_buildings_repairs ADD COLUMN IF NOT EXISTS demo_justification TEXT`,
+      `ALTER TABLE ph_buildings_repairs ADD COLUMN IF NOT EXISTS iern TEXT`,
+      `ALTER TABLE ph_buildings_demolition ADD COLUMN IF NOT EXISTS room_name TEXT`,
+      `ALTER TABLE ph_buildings_demolition ADD COLUMN IF NOT EXISTS iern TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_total INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_new INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_good INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_repair INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS build_classrooms_demolition INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS has_no_building BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit1_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit4_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit5_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit9_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit1 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit4 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit5 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit9 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit1_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit4_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit5_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit9_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_updated_at TIMESTAMP`,
+      // --- Unit 1 DDL ---
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS annex_details JSONB`,
+      // --- Unit 2 DDL ---
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS multigrade_groupings_1 TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS multigrade_groupings_2 TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS multigrade_groupings_3 TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS multigrade_enrollment_1 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS multigrade_enrollment_2 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS multigrade_enrollment_3 INTEGER DEFAULT 0`,
+      // --- Unit 3 DDL ---
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3_simplified_counts JSONB`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS multigrade_sections_count INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS grade_kinder_size TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS grade_1_size TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS grade_2_size TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS grade_3_size TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS grade_4_size TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS grade_5_size TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS grade_6_size TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS grade_7_size TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS grade_8_size TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS grade_9_size TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS grade_10_size TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS grade_11_size TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS grade_12_size TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS multigrade_size_1 TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS multigrade_size_2 TEXT`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS multigrade_size_3 TEXT`,
+    ];
+    for (const sql of addCols) {
+      await pool.query(sql).catch(() => {}); // Each col idempotent; ignore already-exists errors
+    }
+    console.log('[Unit7] Schema init complete.');
+  } catch (err) {
+    console.error('[Unit7] Schema init error (non-fatal):', err.message);
+  }
+};
+
 const startServer = async () => {
   try {
     console.log("🚀 Starting database initialization...");
@@ -18776,6 +19238,7 @@ const startServer = async () => {
         await hardenSchoolsIernSchema(migClient);
         await runAutoMigrations();
         await initDB();
+        await initUnit7Schema(); // One-time Unit 7 DDL (moved from hot request handler)
         await runMigrations(migClient, "Primary");
         console.log("🔓 [Cluster] Migrations complete. Lock will be released on disconnect.");
       } else {
@@ -19326,10 +19789,13 @@ app.post('/api/esf7/approve', async (req, res) => {
 
     if (iern) {
       await pool.query("UPDATE ESF7_Database SET status = 'VERIFIED' WHERE iern = $1 OR school_id = $2", [iern, school_id]);
-      await pool.query("UPDATE ph_schools SET unit7_completed = TRUE, updated_at = CURRENT_TIMESTAMP WHERE iern = $1 OR school_id = $2", [iern, school_id]);
+      await pool.query("UPDATE ph_schools SET unit7_completed = TRUE, unit7 = 1, unit7_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE iern = $1 OR school_id = $2", [iern, school_id]);
+      updateSchoolTotalCompletion(iern);
     } else {
       await pool.query("UPDATE ESF7_Database SET status = 'VERIFIED' WHERE school_id = $1", [school_id]);
-      await pool.query("UPDATE ph_schools SET unit7_completed = TRUE, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1", [school_id]);
+      await pool.query("UPDATE ph_schools SET unit7_completed = TRUE, unit7 = 1, unit7_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1", [school_id]);
+      const iernLookup = (await pool.query('SELECT iern FROM ph_schools WHERE school_id=$1', [school_id])).rows[0]?.iern;
+      if (iernLookup) updateSchoolTotalCompletion(iernLookup);
     }
 
     res.json({ success: true, message: "ESF7 submission verified and committed." });

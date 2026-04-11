@@ -70,7 +70,8 @@ const SchoolProfile = ({ embedded }) => {
         region: '', province: '', municipality: '', barangay: '',
         division: '', district: '', legDistrict: '',
         motherSchoolId: '', isAnnex: 'No', latitude: '', longitude: '',
-        curricularOffering: '', iern: ''
+        curricularOffering: '', iern: '',
+        hasSnedSelfContained: false, sned_self_contained_count: 0
     });
 
     const [originalData, setOriginalData] = useState(null);
@@ -127,7 +128,9 @@ const SchoolProfile = ({ embedded }) => {
             longitude: dbData.longitude || '',
             // 👇 THE FIX: Normalize the value from DB/Cache
             curricularOffering: normalizeOffering(dbData.curricular_offering || cachedOffering) || '',
-            iern: dbData.iern || ''
+            iern: dbData.iern || '',
+            hasSnedSelfContained: dbData.hasSnedSelfContained || false,
+            sned_self_contained_count: dbData.sned_self_contained_count || 0
         };
     };
 
@@ -167,7 +170,10 @@ const SchoolProfile = ({ embedded }) => {
             .then(r => r.json())
             .then(data => {
                 const options = data || [];
-                if (!options.includes('Blank Region')) options.unshift('Blank Region');
+                if (!options.includes('BLANK REGION')) options.unshift('BLANK REGION');
+                if (formData.region && !options.some(opt => opt.toUpperCase() === formData.region.toUpperCase())) {
+                    options.push(formData.region.toUpperCase());
+                }
                 setRegionOptions(options);
             })
             .catch(() => {});
@@ -377,7 +383,10 @@ const SchoolProfile = ({ embedded }) => {
             .then(r => r.json())
             .then(data => {
                 const options = data || [];
-                if (formData.region === 'Blank Region' && !options.includes('Blank Province')) options.unshift('Blank Province');
+                if (formData.region === 'BLANK REGION' && !options.includes('BLANK PROVINCE')) options.unshift('BLANK PROVINCE');
+                if (formData.province && !options.some(opt => opt.toUpperCase() === formData.province.toUpperCase())) {
+                    options.push(formData.province.toUpperCase());
+                }
                 setProvinceOptions(options);
             })
             .catch(() => {});
@@ -386,7 +395,10 @@ const SchoolProfile = ({ embedded }) => {
                 .then(r => r.json())
                 .then(data => {
                     const options = data || [];
-                    if (formData.province === 'Blank Province' && !options.includes('Blank Municipality')) options.unshift('Blank Municipality');
+                    if (formData.province === 'BLANK PROVINCE' && !options.includes('BLANK MUNICIPALITY')) options.unshift('BLANK MUNICIPALITY');
+                    if (formData.municipality && !options.some(opt => opt.toUpperCase() === formData.municipality.toUpperCase())) {
+                        options.push(formData.municipality.toUpperCase());
+                    }
                     setCityOptions(options);
                 })
                 .catch(() => {});
@@ -395,7 +407,10 @@ const SchoolProfile = ({ embedded }) => {
                     .then(r => r.json())
                     .then(data => {
                         const options = data || [];
-                        if (formData.municipality === 'Blank Municipality' && !options.includes('Blank Barangay')) options.unshift('Blank Barangay');
+                        if (formData.municipality === 'BLANK MUNICIPALITY' && !options.includes('BLANK BARANGAY')) options.unshift('BLANK BARANGAY');
+                        if (formData.barangay && !options.some(opt => opt.toUpperCase() === formData.barangay.toUpperCase())) {
+                            options.push(formData.barangay.toUpperCase());
+                        }
                         setBarangayOptions(options);
                     })
                     .catch(() => {});
@@ -405,12 +420,18 @@ const SchoolProfile = ({ embedded }) => {
         // Populate Division/District (CSV)
         if (regionDivMap && regionDivMap[formData.region]) {
             const divisions = [...(regionDivMap[formData.region] || [])];
-            if (formData.region === 'Blank Region' && !divisions.includes('Blank Division')) divisions.unshift('Blank Division');
+            if (formData.region === 'BLANK REGION' && !divisions.includes('BLANK DIVISION')) divisions.unshift('BLANK DIVISION');
+            if (formData.division && !divisions.some(opt => opt.toUpperCase() === formData.division.toUpperCase())) {
+                divisions.push(formData.division.toUpperCase());
+            }
             setDivisionOptions(divisions);
 
             if (formData.division && divDistMap && divDistMap[formData.division]) {
                 const districts = [...(divDistMap[formData.division] || [])];
-                if (formData.division === 'Blank Division' && !districts.includes('Blank District')) districts.unshift('Blank District');
+                if (formData.division === 'BLANK DIVISION' && !districts.includes('BLANK DISTRICT')) districts.unshift('BLANK DISTRICT');
+                if (formData.district && !districts.some(opt => opt.toUpperCase() === formData.district.toUpperCase())) {
+                    districts.push(formData.district.toUpperCase());
+                }
                 setDistrictOptions(districts);
             }
         }
@@ -578,7 +599,7 @@ const SchoolProfile = ({ embedded }) => {
     const handleRegionChange = (e) => {
         const val = e.target.value;
         const divisions = [...(regionDivMap[val] || [])];
-        if (val === 'Blank Region' && !divisions.includes('Blank Division')) divisions.unshift('Blank Division');
+        if (val === 'BLANK REGION' && !divisions.includes('BLANK DIVISION')) divisions.unshift('BLANK DIVISION');
         setDivisionOptions(divisions);
         setFormData(prev => ({ ...prev, region: val, province: '', municipality: '', barangay: '', division: '', district: '' }));
         setCityOptions([]); setBarangayOptions([]); setDistrictOptions([]);
@@ -587,7 +608,7 @@ const SchoolProfile = ({ embedded }) => {
                 .then(r => r.json())
                 .then(data => {
                     const options = data || [];
-                    if (val === 'Blank Region' && !options.includes('Blank Province')) options.unshift('Blank Province');
+                    if (val === 'BLANK REGION' && !options.includes('BLANK PROVINCE')) options.unshift('BLANK PROVINCE');
                     setProvinceOptions(options);
                 })
                 .catch(() => setProvinceOptions([]));
@@ -605,7 +626,7 @@ const SchoolProfile = ({ embedded }) => {
                 .then(r => r.json())
                 .then(data => {
                     const options = data || [];
-                    if (val === 'Blank Province' && !options.includes('Blank Municipality')) options.unshift('Blank Municipality');
+                    if (val === 'BLANK PROVINCE' && !options.includes('BLANK MUNICIPALITY')) options.unshift('BLANK MUNICIPALITY');
                     setCityOptions(options);
                 })
                 .catch(() => setCityOptions([]));
@@ -622,7 +643,7 @@ const SchoolProfile = ({ embedded }) => {
                 .then(r => r.json())
                 .then(data => {
                     const options = data || [];
-                    if (val === 'Blank Municipality' && !options.includes('Blank Barangay')) options.unshift('Blank Barangay');
+                    if (val === 'BLANK MUNICIPALITY' && !options.includes('BLANK BARANGAY')) options.unshift('BLANK BARANGAY');
                     setBarangayOptions(options);
                 })
                 .catch(() => setBarangayOptions([]));
@@ -635,7 +656,7 @@ const SchoolProfile = ({ embedded }) => {
         const val = e.target.value;
         setFormData(prev => ({ ...prev, division: val, district: '' }));
         const districts = [...(divDistMap[val] || [])];
-        if (val === 'Blank Division' && !districts.includes('Blank District')) districts.unshift('Blank District');
+        if (val === 'BLANK DIVISION' && !districts.includes('BLANK DISTRICT')) districts.unshift('BLANK DISTRICT');
         setDistrictOptions(districts);
     };
 
@@ -849,6 +870,51 @@ const SchoolProfile = ({ embedded }) => {
                                                     onChange={handleChange}
                                                     className={inputClass}
                                                     placeholder="Enter Mother School ID"
+                                                    required
+                                                    disabled={isDummy}
+                                                />
+                                            </div>
+                                        )}
+
+                                        {/* SNED SELF-CONTAINED DECLARATION */}
+                                        <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 flex items-center justify-between">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Self-contained SNED Class?</label>
+                                                <p className="text-[10px] text-slate-400 font-medium">Does your school have classes for SNED learners?</p>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        name="hasSnedSelfContained"
+                                                        checked={formData.hasSnedSelfContained}
+                                                        onChange={(e) => setFormData(prev => ({
+                                                            ...prev,
+                                                            hasSnedSelfContained: e.target.checked,
+                                                            sned_self_contained_count: e.target.checked ? prev.sned_self_contained_count : 0
+                                                        }))}
+                                                        disabled={isDummy}
+                                                        className="sr-only peer"
+                                                    />
+                                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 dark:peer-focus:ring-emerald-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-emerald-600"></div>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        {formData.hasSnedSelfContained && (
+                                            <div className="p-4 bg-emerald-50/20 border-x border-b border-emerald-100/50 rounded-b-xl -mt-4 animate-in slide-in-from-top-2">
+                                                <label className={labelClass}>Total SNED Classes</label>
+                                                <input
+                                                    type="number"
+                                                    name="sned_self_contained_count"
+                                                    value={formData.sned_self_contained_count === 0 ? '' : formData.sned_self_contained_count}
+                                                    onChange={(e) => {
+                                                        const val = parseInt(e.target.value) || 0;
+                                                        setFormData(prev => ({ ...prev, sned_self_contained_count: val }));
+                                                    }}
+                                                    className={inputClass}
+                                                    placeholder="Enter number of classes"
+                                                    min="1"
                                                     required
                                                     disabled={isDummy}
                                                 />

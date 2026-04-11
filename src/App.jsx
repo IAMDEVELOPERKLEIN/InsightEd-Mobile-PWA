@@ -25,6 +25,7 @@ import HRDashboard from './modules/HRDashboard';
 import AdminDashboard from './modules/AdminDashboard';
 import MonitoringDashboard from './modules/MonitoringDashboard';
 import SchoolManagement from './modules/SchoolManagement';
+import UserManagement from './modules/UserManagement';
 import DummyDashboard from './modules/DummyDashboard';
 import SchoolJurisdictionList from './modules/SchoolJurisdictionList';
 import SchoolAuditView from './modules/SchoolAuditView';
@@ -257,6 +258,7 @@ const AnimatedRoutes = () => {
       <Route path="/efd-newcon-monitoring" element={<EFDNewconMonitoring />} />
       <Route path="/efd-mother-moa" element={<EFDMotherMoa />} />
       <Route path="/school-management" element={<SchoolManagement />} />
+      <Route path="/user-management" element={<ProtectedRoute allowedRoles={['School Division Office', 'Regional Office', 'Super User']}><UserManagement /></ProtectedRoute>} />
       <Route path="/jurisdiction-schools" element={<SchoolJurisdictionList />} />
       <Route path="/school-audit" element={<SchoolAuditView />} />
       <Route path="/esf7-review" element={<Navigate to="/esf7/review" replace />} />

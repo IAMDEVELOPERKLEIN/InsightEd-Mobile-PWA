@@ -24,23 +24,19 @@ def main():
             # Complex CTE to get stats per region
             query = """
             WITH legacy_counts AS (
-                SELECT "Region" as region_name, COUNT(*) as total_legacy
+                SELECT TRIM(UPPER("Region")) as region_name, COUNT(*) as total_legacy
                 FROM "schools_IERN"
                 WHERE "Region" IS NOT NULL 
-                  AND "Region" != '' 
-                  AND "Region" != 'Blank Region'
-                  AND "Region" != 'Blank'
-                GROUP BY "Region"
+                  AND TRIM(UPPER("Region")) NOT IN ('', 'BLANK', 'BLANK REGION')
+                GROUP BY TRIM(UPPER("Region"))
             ),
             migrated_counts AS (
-                SELECT legacy."Region" as region_name, COUNT(DISTINCT legacy.iern) as migrated_count
+                SELECT TRIM(UPPER(legacy."Region")) as region_name, COUNT(DISTINCT legacy.iern) as migrated_count
                 FROM "schools_IERN" legacy
                 JOIN ph_schools prod ON legacy.iern = prod.iern
                 WHERE legacy."Region" IS NOT NULL 
-                  AND legacy."Region" != '' 
-                  AND legacy."Region" != 'Blank Region'
-                  AND legacy."Region" != 'Blank'
-                GROUP BY legacy."Region"
+                  AND TRIM(UPPER(legacy."Region")) NOT IN ('', 'BLANK', 'BLANK REGION')
+                GROUP BY TRIM(UPPER(legacy."Region"))
             )
             SELECT 
                 l.region_name,

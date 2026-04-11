@@ -183,6 +183,8 @@ const SchoolResources = ({ embedded }) => {
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isLocked, setIsLocked] = useState(false);
+    // Track whether the user has manually unlocked — prevents API response from re-locking mid-edit
+    const userHasUnlocked = React.useRef(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [showOfflineModal, setShowOfflineModal] = useState(false);
@@ -448,7 +450,7 @@ const SchoolResources = ({ embedded }) => {
                     setOriginalData({ ...defaultFormData, ...parsed });
 
                     const hasCachedData = Object.keys(initialFields).some(k => parsed[k]);
-                    setIsLocked(hasCachedData);
+                    if (!userHasUnlocked.current) setIsLocked(hasCachedData);
                     setLoading(false);
                     loadedFromCache = true;
                     console.log("Loaded cached Resources (Instant Load)");
@@ -562,7 +564,7 @@ const SchoolResources = ({ embedded }) => {
 
                         setFormData(loaded);
                         setOriginalData(loaded);
-                        setIsLocked(Object.keys(initialFields).some(k => loaded[k]));
+                        if (!userHasUnlocked.current) setIsLocked(Object.keys(initialFields).some(k => loaded[k]));
                         localStorage.setItem(CACHE_KEY_RES, JSON.stringify(loaded));
 
                         const resolvedSchoolId = dbData.school_id || schoolIdParam || auditTargetId || localStorage.getItem('schoolId');
@@ -618,7 +620,7 @@ const SchoolResources = ({ embedded }) => {
                             const data = JSON.parse(cached);
                             setFormData(data);
                             setOriginalData(data);
-                            setIsLocked(Object.keys(initialFields).some(k => data[k]));
+                            if (!userHasUnlocked.current) setIsLocked(Object.keys(initialFields).some(k => data[k]));
                         } catch (e) { }
                     }
                 }
@@ -996,7 +998,7 @@ const SchoolResources = ({ embedded }) => {
                             <SelectField
                                 label="Water Source"
                                 name="res_water_source"
-                                options={["For Verification", "Natural Resources", "Piped line from Local Service Provider", "No Water Source"]}
+                                options={["For Verification", "Piped line + Natural Water Source", "Natural Resources", "Piped line from Local Service Provider", "No Water Source"]}
                                 formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly}
                             />
                         </div>
@@ -1450,7 +1452,7 @@ const SchoolResources = ({ embedded }) => {
                         {(viewOnly || isReadOnly) ? (
                             <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
                         ) : isLocked ? (
-                            <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
+                            <button onClick={() => { userHasUnlocked.current = true; setIsLocked(false); }} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
                                 🔓 Unlock to Edit Data
                             </button>
                         ) : (

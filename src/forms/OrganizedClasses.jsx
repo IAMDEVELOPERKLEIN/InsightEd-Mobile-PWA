@@ -74,7 +74,8 @@ const OrganizedClasses = ({ embedded }) => {
     const [formData, setFormData] = useState({
         kinder: 0, g1: 0, g2: 0, g3: 0, g4: 0, g5: 0, g6: 0,
         g7: 0, g8: 0, g9: 0, g10: 0,
-        g11: 0, g12: 0
+        g11: 0, g12: 0,
+        sned_class: 0
     });
 
     const [classSizeData, setClassSizeData] = useState({
@@ -120,7 +121,8 @@ const OrganizedClasses = ({ embedded }) => {
             const defaultFormData = {
                 kinder: 0, g1: 0, g2: 0, g3: 0, g4: 0, g5: 0, g6: 0,
                 g7: 0, g8: 0, g9: 0, g10: 0,
-                g11: 0, g12: 0
+                g11: 0, g12: 0,
+                sned_class: 0
             };
             const defaultClassSize = {
                 cntLessKinder: 0, cntWithinKinder: 0, cntAboveKinder: 0,
@@ -168,7 +170,8 @@ const OrganizedClasses = ({ embedded }) => {
                             g5: parsed.classes_grade_5 ?? parsed.grade_5 ?? 0, g6: parsed.classes_grade_6 ?? parsed.grade_6 ?? 0,
                             g7: parsed.classes_grade_7 ?? parsed.grade_7 ?? 0, g8: parsed.classes_grade_8 ?? parsed.grade_8 ?? 0,
                             g9: parsed.classes_grade_9 ?? parsed.grade_9 ?? 0, g10: parsed.classes_grade_10 ?? parsed.grade_10 ?? 0,
-                            g11: parsed.classes_grade_11 ?? parsed.grade_11 ?? 0, g12: parsed.classes_grade_12 ?? parsed.grade_12 ?? 0
+                            g11: parsed.classes_grade_11 ?? parsed.grade_11 ?? 0, g12: parsed.classes_grade_12 ?? parsed.grade_12 ?? 0,
+                            sned_class: parsed.classes_sned ?? parsed.sned_class ?? 0
                         };
                     }
 
@@ -250,7 +253,8 @@ const OrganizedClasses = ({ embedded }) => {
                             g5: dbData.classes_grade_5 ?? dbData.grade_5 ?? 0, g6: dbData.classes_grade_6 ?? dbData.grade_6 ?? 0,
                             g7: dbData.classes_grade_7 ?? dbData.grade_7 ?? 0, g8: dbData.classes_grade_8 ?? dbData.grade_8 ?? 0,
                             g9: dbData.classes_grade_9 ?? dbData.grade_9 ?? 0, g10: dbData.classes_grade_10 ?? dbData.grade_10 ?? 0,
-                            g11: dbData.classes_grade_11 ?? dbData.grade_11 ?? 0, g12: dbData.classes_grade_12 ?? dbData.grade_12 ?? 0
+                            g11: dbData.classes_grade_11 ?? dbData.grade_11 ?? 0, g12: dbData.classes_grade_12 ?? dbData.grade_12 ?? 0,
+                            sned_class: dbData.classes_sned ?? dbData.sned_class ?? 0
                         };
 
                         const newClassSize = {
@@ -339,7 +343,7 @@ const OrganizedClasses = ({ embedded }) => {
         return off.includes("senior") || off.includes("secondary") || off.includes("k-12") || isPermissive();
     };
     const getTotalClasses = () => Object.values(formData).reduce((a, b) => a + (parseInt(b) || 0), 0) + multigradeClasses.length;
-    const getElemTotal = () => (formData.kinder || 0) + (formData.g1 || 0) + (formData.g2 || 0) + (formData.g3 || 0) + (formData.g4 || 0) + (formData.g5 || 0) + (formData.g6 || 0) + multigradeClasses.length;
+    const getElemTotal = () => (formData.kinder || 0) + (formData.g1 || 0) + (formData.g2 || 0) + (formData.g3 || 0) + (formData.g4 || 0) + (formData.g5 || 0) + (formData.g6 || 0) + (formData.sned_class || 0) + multigradeClasses.length;
     const getJHSTotal = () => (formData.g7 || 0) + (formData.g8 || 0) + (formData.g9 || 0) + (formData.g10 || 0);
     const getSHSTotal = () => (formData.g11 || 0) + (formData.g12 || 0);
 
@@ -434,6 +438,7 @@ const OrganizedClasses = ({ embedded }) => {
             g4: showElem() ? formData.g4 : 0, g5: showElem() ? formData.g5 : 0, g6: showElem() ? formData.g6 : 0,
             g7: showJHS() ? formData.g7 : 0, g8: showJHS() ? formData.g8 : 0, g9: showJHS() ? formData.g9 : 0, g10: showJHS() ? formData.g10 : 0,
             g11: showSHS() ? formData.g11 : 0, g12: showSHS() ? formData.g12 : 0,
+            sned_class: formData.sned_class || 0,
             ...classSizeData,
             multigradeClasses: multigradeClasses
         };
@@ -572,6 +577,27 @@ const OrganizedClasses = ({ embedded }) => {
                                         />
                                     </div>
                                 ))}
+                            </div>
+                        </GridSection>
+                    )}
+
+                    {/* --- SPECIAL PROGRAMS --- */}
+                    {showElem() && (
+                        <GridSection label="Special Programs" icon={<FiLayers />} color="text-emerald-600 bg-emerald-500">
+                             <div className="grid grid-cols-2 gap-4 max-w-sm">
+                                <div className="text-center group">
+                                    <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-emerald-500 transition-colors w-full truncate">Self-contained SNED</label>
+                                    <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total Sections</p>
+                                    <input
+                                        type="text" inputMode="numeric" pattern="[0-9]*"
+                                        value={formData.sned_class}
+                                        onChange={(e) => handleChange('sned_class', e.target.value)}
+                                        disabled={isLocked || viewOnly || isDummy || isReadOnly}
+                                        className="w-full h-12 text-center font-bold text-emerald-900 bg-emerald-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm hover:border-emerald-200"
+                                        onFocus={() => formData.sned_class === 0 && handleChange('sned_class', '')}
+                                        onBlur={() => (formData.sned_class === '' || formData.sned_class === null) && handleChange('sned_class', 0)}
+                                    />
+                                </div>
                             </div>
                         </GridSection>
                     )}

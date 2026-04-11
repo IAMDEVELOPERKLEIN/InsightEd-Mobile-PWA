@@ -21,22 +21,21 @@ export const AuthProvider = ({ children }) => {
 
             console.log(`[AuthContext] Seeding Unit 1 baseline for ${schoolId}...`);
             
-            // PRIORITY 1: Fetch authoritative registry data from schools_IERN
-            const iernFetch = await fetch(`/api/schools_iern/${schoolId}`).catch(() => null);
+            // Fetch both in parallel: registry for authoritative profile fields,
+            // ph_schools for user-updated data (especially coordinates)
+            const [iernFetch, phFetch] = await Promise.all([
+                fetch(`/api/schools_iern/${schoolId}`).catch(() => null),
+                fetch(`/api/ph_schools/${schoolId}`).catch(() => null)
+            ]);
             let registryData = null;
             if (iernFetch?.ok) {
                 const iernRes = await iernFetch.json();
                 if (iernRes.exists) registryData = iernRes.data;
             }
-
-            // PRIORITY 2: Fallback to ph_schools master list if registry is missing
             let masterData = null;
-            if (!registryData) {
-                const masterRes = await fetch(`/api/ph_schools/${schoolId}`).catch(() => null);
-                if (masterRes?.ok) {
-                    const mJ = await masterRes.json();
-                    if (mJ.exists) masterData = mJ.data;
-                }
+            if (phFetch?.ok) {
+                const mJ = await phFetch.json();
+                if (mJ.exists) masterData = mJ.data;
             }
 
             const src = registryData || masterData;
@@ -52,8 +51,9 @@ export const AuthProvider = ({ children }) => {
                     division: (src.division || src.Division || src.Schools_Division_Office || src.SDO || "").trim(),
                     district: (src.district || src.District || src.Schools_District || "").trim(),
                     leg_district: (src.leg_district || src.Leg_District || src.Legislative_District || "").trim(),
-                    latitude: src.latitude || src.Latitude || src.lat || "",
-                    longitude: src.longitude || src.Longitude || src.long || "",
+                    // ph_schools coordinates take priority — they reflect user-updated values from registration/Unit 1
+                    latitude: masterData?.latitude || src.latitude || src.Latitude || src.lat || "",
+                    longitude: masterData?.longitude || src.longitude || src.Longitude || src.long || "",
                     iern: (src.iern || src.IERN || "").trim()
                 };
                 
