@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import SuccessModal from '../SuccessModal';
 import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, getModularOutbox } from '../../db';
 import { useAuth } from "../../context/AuthContext";
+import UnitRemarkAlert from "./UnitRemarkAlert";
 
 // --- Shared Styles ---
 const chunkyInput = "w-full p-4 mt-2 bg-gray-50 border-2 border-gray-200 rounded-2xl text-2xl font-black text-gray-700 focus:outline-none focus:border-indigo-500 focus:bg-indigo-50 transition-colors shadow-sm text-center";
@@ -1300,6 +1301,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             )}
 
             <main className="max-w-xl mx-auto px-4">
+                <UnitRemarkAlert unitId="u2" schoolId={targetSchoolId || user?.school_id || localStorage.getItem('schoolId')} />
                 {effectiveReadOnly ? (
                     <Unit2Summary />
                 ) : (

@@ -4,12 +4,12 @@ import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft, FiUnlock, FiInfo, Fi
 import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, deleteModularFromOutbox, saveSchoolToCache, getCachedSchool, getModularOutbox, migrateUnitDrafts } from "../../db";
 import { useAuth } from "../../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
+import UnitRemarkAlert from "./UnitRemarkAlert";
 import SuccessModal from "../SuccessModal";
 import LocationPickerMap from "../LocationPickerMap";
 import useReadOnly from "../../hooks/useReadOnly";
 import { normalizeOffering } from "../../utils/dataNormalization";
-import DocumentUpload from "./DocumentUpload";
-import { resolveAssetUrl, resolveDocUrl } from "../../utils/assetHelper";
+import { resolveDocUrl } from "../../utils/assetHelper";
 
 const TOTAL_STEPS = 7;
 
@@ -1068,6 +1068,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             </AnimatePresence>
 
             <main className="flex-1 relative overflow-y-auto px-6 pt-4 pb-32">
+                <UnitRemarkAlert unitId="u1" schoolId={targetSchoolId || user?.school_id || localStorage.getItem("schoolId")} />
                 <AnimatePresence mode="wait">
                     {isReviewMode ? (
                         <div key="review" className="max-w-md mx-auto pb-32 mt-4 space-y-8">

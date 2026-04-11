@@ -41,6 +41,9 @@ const SchoolHeadDashboard = () => {
         teachers: 0
     });
 
+    // Audit Remarks state
+    const [unitRemarks, setUnitRemarks] = useState([]);
+
     // --- SEARCH STATE ---
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
@@ -328,6 +331,19 @@ const SchoolHeadDashboard = () => {
                     const headRes = await fetch(`/api/school-head/${targetUid}`);
                     const headJson = await headRes.json();
                     if (headJson.exists) setHeadProfile(headJson.data);
+
+                    // Fetch Audit Remarks for this school
+                    if (profileJson.exists && profileJson.data.school_id) {
+                        try {
+                            const remarkRes = await fetch(`/api/audit/remarks/${profileJson.data.school_id}`);
+                            if (remarkRes.ok) {
+                                const remarkData = await remarkRes.json();
+                                setUnitRemarks(remarkData.data || []);
+                            }
+                        } catch (err) {
+                            console.error("Failed to fetch remarks:", err);
+                        }
+                    }
 
                 } catch (error) {
                     console.error("Dashboard Load Error:", error);
@@ -682,20 +698,26 @@ const SchoolHeadDashboard = () => {
                                 <button onClick={() => navigate('/school-forms')} className="text-[#004A99] dark:text-blue-400 text-xs font-semibold">View All</button>
                             </div>
                             <div className="grid grid-cols-4 gap-3">
-                                {SEARCHABLE_ITEMS.filter(item => !completedItems.includes(item.name)).map((item, index) => (
-                                    <button
-                                        key={index}
-                                        onClick={() => navigate(item.route)}
-                                        className="flex flex-col items-center gap-2 group relative z-20 cursor-pointer"
-                                    >
-                                        <div className={`w-14 h-14 rounded-2xl ${item.color} dark:bg-slate-800 dark:text-blue-400 flex items-center justify-center shadow-sm group-active:scale-95 transition-all border border-transparent dark:border-slate-700 group-hover:border-slate-200 dark:group-hover:border-slate-600`}>
-                                            <item.icon size={24} />
-                                        </div>
-                                        <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 text-center leading-tight max-w-[60px]">
-                                            {item.name}
-                                        </span>
-                                    </button>
-                                ))}
+                                {SEARCHABLE_ITEMS.filter(item => !completedItems.includes(item.name)).map((item, index) => {
+                                    const hasRemark = unitRemarks.some(r => r.unit_id === `u${item.unit}` && !r.is_resolved);
+                                    return (
+                                        <button
+                                            key={index}
+                                            onClick={() => navigate(item.route)}
+                                            className="flex flex-col items-center gap-2 group relative z-20 cursor-pointer"
+                                        >
+                                            <div className={`w-14 h-14 rounded-2xl ${item.color} dark:bg-slate-800 dark:text-blue-400 flex items-center justify-center shadow-sm group-active:scale-95 transition-all border border-transparent dark:border-slate-700 group-hover:border-slate-200 dark:group-hover:border-slate-600 relative`}>
+                                                <item.icon size={24} />
+                                                {hasRemark && (
+                                                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full border-2 border-white dark:border-slate-900 animate-pulse shadow-md"></span>
+                                                )}
+                                            </div>
+                                            <span className={`text-[10px] font-semibold text-center leading-tight max-w-[60px] ${hasRemark ? 'text-rose-600 dark:text-rose-400 font-black' : 'text-slate-600 dark:text-slate-400'}`}>
+                                                {item.name}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
 

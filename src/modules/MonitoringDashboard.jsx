@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FiSearch,
@@ -99,6 +100,7 @@ const TopStatCard = ({ title, value, icon: Icon, color, subtext, secondaryValue 
 // =================== MAIN COMPONENT ===================
 const MonitoringDashboard = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   // --- User context ---
   const userRole = user?.role || localStorage.getItem('userRole') || '';
@@ -298,6 +300,13 @@ const MonitoringDashboard = () => {
     setSelectedDistrict(name);
     setLevel('schools');
     setSearchTerm('');
+  };
+
+  const openAuditView = (schoolId, schoolName) => {
+    sessionStorage.setItem('targetSchoolId', schoolId);
+    sessionStorage.setItem('targetSchoolName', schoolName);
+    // Also set some navigation-specific context if needed
+    navigate('/school-audit');
   };
 
   const goBack = () => {
@@ -662,13 +671,14 @@ const MonitoringDashboard = () => {
 
                   {paginatedSchools.length === 0 ? (
                     <p className="text-center text-slate-400 py-20 font-medium text-sm">No schools found{searchTerm ? ' matching your search' : ''}.</p>
-                  ) : paginatedSchools.map((school, i) => (
+                    ) : paginatedSchools.map((school, i) => (
                     <motion.div
                       key={school.school_id}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.03 }}
-                      className="group grid grid-cols-[1fr_auto] md:grid-cols-[1fr_140px] gap-4 items-center px-6 py-5 border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors"
+                      onClick={() => openAuditView(school.school_id, school.school_name)}
+                      className="group grid grid-cols-[1fr_auto] md:grid-cols-[1fr_140px] gap-4 items-center px-6 py-5 border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors cursor-pointer"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center justify-between gap-2 overflow-hidden mb-1">

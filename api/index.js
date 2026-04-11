@@ -19335,7 +19335,7 @@ app.get('/api/notifications/:uid', authMiddleware, async (req, res) => {
 
   try {
     const result = await pool.query(
-      "SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50",
+      "SELECT * FROM notifications WHERE recipient_uid = $1 ORDER BY created_at DESC LIMIT 50",
       [uid]
     );
     res.json(result.rows);
@@ -19349,7 +19349,7 @@ app.put('/api/notifications/:id/read', authMiddleware, async (req, res) => {
   const { id } = req.params;
   try {
     await pool.query(
-      "UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2",
+      "UPDATE notifications SET is_read = TRUE WHERE id = $1 AND recipient_uid = $2",
       [id, req.user.uid]
     );
     res.json({ success: true });
@@ -19808,6 +19808,111 @@ app.post('/api/esf7/approve', async (req, res) => {
     res.json({ success: true, message: "ESF7 submission verified and committed." });
   } catch (err) {
     console.error("Approve ESF7 Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+
+// --- AUDIT FEEDBACK ENDPOINTS (New Table: audit_feedback_tasks) ---
+app.get('/api/audit/remarks/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT *, instruction as remark FROM audit_feedback_tasks WHERE school_id = $1 ORDER BY created_at DESC',
+      [schoolId]
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (err) {
+    console.error("GET audit remarks error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.post('/api/audit/remarks', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'School Division Office') {
+    return res.status(403).json({ error: "Access Denied. Only School Division Office can add remarks." });
+  }
+  const { school_id, unit_id, remark, auditor_uid, auditor_name } = req.body;
+  try {
+    const schoolRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1 LIMIT 1', [school_id]);
+    const iernValue = schoolRes.rows[0]?.iern || null;
+
+    const result = await pool.query(
+      'INSERT INTO audit_feedback_tasks (school_id, iern, unit_id, instruction, auditor_uid, auditor_name, status) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *, instruction as remark',
+      [school_id, iernValue, unit_id, remark, auditor_uid, auditor_name, 'flagged']
+    );
+
+    const taskRow = result.rows[0];
+
+    const userRes = await pool.query('SELECT uid FROM users WHERE school_id = $1 LIMIT 1', [school_id]);
+    const recipientUid = userRes.rows[0]?.uid;
+
+    if (recipientUid) {
+      await pool.query(
+        'INSERT INTO notifications (recipient_uid, sender_uid, sender_name, title, message, type) VALUES ($1, $2, $3, $4, $5, $6)',
+        [recipientUid, auditor_uid, auditor_name, `Audit Correction: ${unit_id.toUpperCase()}`, remark, 'correction']
+      );
+    }
+    res.json({ success: true, data: taskRow });
+  } catch (err) {
+    console.error("POST audit remark error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.put('/api/audit/remarks/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const { status, auditor_uid, auditor_name, note } = req.body; 
+  try {
+    const isResolved = status === 'verified';
+    
+    const result = await pool.query(
+      'UPDATE audit_feedback_tasks SET status = $1, is_resolved = $2, school_head_note = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4 RETURNING *, instruction as remark',
+      [status, isResolved, note || null, id]
+    );
+
+    if (result.rowCount === 0) return res.status(404).json({ error: "Record not found" });
+    const taskRow = result.rows[0];
+
+    try {
+      if (status === 'fixed' && taskRow.auditor_uid) {
+        const unitLabel = (taskRow.unit_id || 'Unit').toUpperCase();
+        await pool.query(
+          'INSERT INTO notifications (recipient_uid, title, message, type) VALUES ($1, $2, $3, $4)',
+          [taskRow.auditor_uid, 'Unit Correction Submitted', `School ${taskRow.school_id} has marked the remark for ${unitLabel} as FIXED.`, 'alert']
+        );
+      } else if (status === 'verified') {
+        const userRes = await pool.query('SELECT uid FROM users WHERE school_id = $1 LIMIT 1', [taskRow.school_id]);
+        const recipientUid = userRes.rows[0]?.uid;
+        if (recipientUid) {
+          const unitLabel = (taskRow.unit_id || 'Unit').toUpperCase();
+          await pool.query(
+            'INSERT INTO notifications (recipient_uid, sender_name, title, message, type) VALUES ($1, $2, $3, $4, $5)',
+            [recipientUid, auditor_name || 'Auditor', 'Correction Verified', `Your correction for ${unitLabel} has been verified.`, 'success']
+          );
+        }
+      }
+    } catch (notifErr) {
+      console.warn("Notification non-blocking failure:", notifErr.message);
+    }
+    
+    res.json({ success: true, data: taskRow });
+  } catch (err) {
+    console.error("UPDATE audit status error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.put('/api/audit/remarks/:id/resolve', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query(
+      'UPDATE audit_feedback_tasks SET is_resolved = TRUE, status = \'verified\', updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+      [id]
+    );
+    res.json({ success: true, message: "Task resolved." });
+  } catch (err) {
+    console.error("RESOLVE audit task error:", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });

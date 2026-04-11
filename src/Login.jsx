@@ -212,16 +212,9 @@ const Login = () => {
             }
 
 
-            // Only auto-redirect if no portal was chosen, OR if the current role is compatible with the chosen portal
-            if (!pathId || isRoleCompatible) {
-                const destPath = getDashboardPath(authUser.role, authUser.account_category);
-                navigate(destPath);
-            } else {
-                // If not compatible, we stay on login page to allow switching accounts/re-logging
-                console.warn(`[Login] Role Mismatch: User role '${authUser.role}' is not compatible with portal '${pathId}'`);
-                alert(`Your account role (${authUser.role}) is not authorized for this portal (${pathId?.replace('path_', '').toUpperCase()}). Please use the correct portal or contact support.`);
-                setLoading(false);
-            }
+            // Always redirect to the correct dashboard based on the user's role to prevent them from getting stuck
+            const destPath = getDashboardPath(authUser.role, authUser.account_category);
+            navigate(destPath);
         } else if (!authLoading) {
             setLoading(false);
         }

@@ -205,6 +205,32 @@ const runMigrations = async (client, dbLabel) => {
     await initUnit7Schema(client, dbLabel);
     await initUnit8Schema(client, dbLabel);
 
+    // --- 1. AUDIT FEEDBACK TASKS TABLE ---
+    try {
+        // Drop legacy table as requested
+        await client.query('DROP TABLE IF EXISTS audit_remarks CASCADE');
+        
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS audit_feedback_tasks (
+                id SERIAL PRIMARY KEY,
+                school_id TEXT NOT NULL,
+                iern TEXT,
+                unit_id TEXT NOT NULL,
+                instruction TEXT NOT NULL,
+                auditor_uid TEXT,
+                auditor_name TEXT,
+                status TEXT DEFAULT 'flagged', -- flagged, fixed, verified, reopened
+                school_head_note TEXT,
+                is_resolved BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        // console.log(`✅ [${dbLabel}] Audit Feedback Tasks Table Initialized`);
+    } catch (tableErr) {
+        console.error(`❌ [${dbLabel}] Failed to init audit_feedback_tasks table:`, tableErr.message);
+    }
+
     // --- 2. NOTIFICATIONS TABLE ---
     try {
         await client.query(`

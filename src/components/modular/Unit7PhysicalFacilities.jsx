@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import BottomNav from "../../modules/BottomNav";
 import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, getModularOutbox } from "../../db";
+import { useAuth } from "../../context/AuthContext";
+import UnitRemarkAlert from "./UnitRemarkAlert";
 import { MapContainer, TileLayer, Marker, Popup, Rectangle, Polygon, useMapEvents, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -1079,6 +1081,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 )}
 
                 <div className="max-w-md mx-auto mt-4 px-4 space-y-10">
+                    <UnitRemarkAlert unitId="u7" schoolId={targetSchoolId || localStorage.getItem('schoolId')} />
                     {/* Header */}
                     <div className="text-center mb-10">
                         <motion.div
@@ -1431,6 +1434,7 @@ export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 <SummaryDashboard />
             ) : (
                 <main className="flex-1 w-full max-w-3xl mx-auto p-4 lg:p-6 flex flex-col pt-8">
+                    <UnitRemarkAlert unitId="u7" schoolId={targetSchoolId || localStorage.getItem('schoolId')} />
 
                     {currentPage === 1 && (
                         <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>

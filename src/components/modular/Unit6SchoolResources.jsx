@@ -4,6 +4,8 @@ import { FiX, FiCheckCircle, FiChevronRight, FiCheck, FiArrowLeft, FiTrash2, FiP
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, getModularOutbox } from "../../db";
+import { useAuth } from "../../context/AuthContext";
+import UnitRemarkAlert from "./UnitRemarkAlert";
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const chunkyInput = "w-full p-4 mt-2 bg-gray-50 border-2 border-gray-200 rounded-2xl text-lg font-black text-gray-700 focus:outline-none focus:border-indigo-500 focus:bg-indigo-50 transition-colors shadow-sm text-center";
@@ -891,6 +893,7 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 )}
 
                 <div className="max-w-md mx-auto mt-4 px-4 space-y-10">
+                    <UnitRemarkAlert unitId="u6" schoolId={targetSchoolId || user?.school_id || localStorage.getItem('schoolId')} />
                     {/* Header */}
                     <div className="text-center mb-10">
                         <motion.div 
@@ -1176,6 +1179,9 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             </AnimatePresence>
 
             <main className="flex-1 overflow-x-hidden pb-32">
+                <div className="max-w-md mx-auto w-full px-4 mt-4">
+                    <UnitRemarkAlert unitId="u6" schoolId={targetSchoolId || user?.school_id || localStorage.getItem('schoolId')} />
+                </div>
                 <div className="max-w-md w-full mx-auto relative px-6 mt-8">
                     <AnimatePresence mode="wait">
                         

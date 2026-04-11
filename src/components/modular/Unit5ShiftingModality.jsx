@@ -4,6 +4,8 @@ import { FiX, FiArrowLeft, FiCheckCircle, FiEdit2, FiCheck, FiClock, FiAlertTria
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, getModularOutbox } from "../../db";
+import { useAuth } from "../../context/AuthContext";
+import UnitRemarkAlert from "./UnitRemarkAlert";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_CHAPTERS = 4; // 1: Gatekeeper, 2: Grade Loop, 3: ADM, 4: Review
@@ -488,6 +490,7 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 )}
 
                 <div className="max-w-md mx-auto pb-32 mt-4 px-4 space-y-8">
+                    <UnitRemarkAlert unitId="u5" schoolId={targetSchoolId || user?.school_id || localStorage.getItem('schoolId')} />
                     {/* Header */}
                     <div className="text-center mb-10">
                         <motion.div 
@@ -664,6 +667,7 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
 
             <main className="flex-1 overflow-visible pb-32">
                 <div className="max-w-md w-full mx-auto mt-6 px-4">
+                    <UnitRemarkAlert unitId="u5" schoolId={targetSchoolId || user?.school_id || localStorage.getItem('schoolId')} />
                     <AnimatePresence mode="wait">
 
                         {/* ────────────────────────────────────────────────────────

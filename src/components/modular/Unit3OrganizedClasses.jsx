@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, getModularOutbox } from "../../db";
 import { useAuth } from "../../context/AuthContext";
+import UnitRemarkAlert from "./UnitRemarkAlert";
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const chunkyInput = "w-full p-4 mt-2 bg-gray-50 border-2 border-slate-200 rounded-2xl text-xl font-black text-slate-700 text-center focus:outline-none focus:border-indigo-500 focus:bg-indigo-50 hover:border-slate-300 transition-colors shadow-sm disabled:opacity-50 disabled:bg-slate-100";
@@ -785,6 +786,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
 
     return (
         <div className="min-h-screen bg-gray-50 pb-32">
+            <UnitRemarkAlert unitId="u3" schoolId={targetSchoolId || user?.school_id || localStorage.getItem('schoolId')} />
             <AnimatePresence>
                 {showSuccess && <SuccessModal isOpen={showSuccess} onClose={() => setShowSuccess(false)} message="Section Counts updated." redirectUrl="/modular-dashboard" />}
             </AnimatePresence>

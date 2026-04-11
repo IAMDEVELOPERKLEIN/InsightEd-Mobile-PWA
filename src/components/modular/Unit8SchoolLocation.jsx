@@ -8,6 +8,7 @@ import SuccessModal from '../SuccessModal';
 import BottomNav from '../../modules/BottomNav';
 import { saveUnitDraft, getUnitDraft, clearUnitDraft, getModularOutbox } from "../../db";
 import { useAuth } from "../../context/AuthContext";
+import UnitRemarkAlert from "./UnitRemarkAlert";
 
 const Unit8SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const navigate = useNavigate();
@@ -180,7 +181,8 @@ const Unit8SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         const riskBg = data.risk_index > 7 ? 'bg-rose-50' : data.risk_index > 4 ? 'bg-amber-50' : 'bg-emerald-50';
 
         return (
-            <div className="space-y-10 pb-40">
+            <div className="space-y-10 pb-40 px-4">
+                <UnitRemarkAlert unitId="u8" schoolId={schoolId} />
                 {/* SHA Header Section */}
                 <div className="text-center">
                     <div className={`w-24 h-24 mx-auto mb-6 rounded-[2.5rem] flex flex-col items-center justify-center shadow-xl ${riskBg}`}>
@@ -467,7 +469,8 @@ const Unit8SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 )}
             </AnimatePresence>
 
-            <main className="max-w-md mx-auto pt-6">
+            <main className="max-w-md mx-auto pt-6 px-4">
+                <UnitRemarkAlert unitId="u8" schoolId={schoolId} />
                 {!loading ? (
                     isReadOnly ? (
                         <SummaryDashboard />

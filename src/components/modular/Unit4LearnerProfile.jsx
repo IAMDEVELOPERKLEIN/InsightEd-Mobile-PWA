@@ -4,6 +4,8 @@ import { FiX, FiCheckCircle, FiEdit2, FiUsers, FiChevronRight, FiChevronLeft, Fi
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, getModularOutbox } from "../../db";
+import { useAuth } from "../../context/AuthContext";
+import UnitRemarkAlert from "./UnitRemarkAlert";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_CHAPTERS = 5; // 1: Gatekeeper, 2: Demo Loop, 3: Move Loop, 4: Health Check, 5: Review & Submit
@@ -616,6 +618,7 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 )}
 
                 <div className="max-w-md mx-auto pb-32 mt-4 px-4 space-y-8">
+                    <UnitRemarkAlert unitId="u4" schoolId={targetSchoolId || user?.school_id || localStorage.getItem('schoolId')} />
                     {/* Header */}
                     <div className="text-center mb-10">
                         <motion.div 
@@ -835,6 +838,9 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     // ══════════════════════════════════════════════════════════════════════
     return (
         <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-slate-50 to-gray-100 flex flex-col font-sans text-slate-800">
+            <div className="max-w-md mx-auto w-full px-4">
+                <UnitRemarkAlert unitId="u4" schoolId={targetSchoolId || user?.school_id || localStorage.getItem('schoolId')} />
+            </div>
             {/* Welcome Back Toast */}
             <AnimatePresence>
                 {showWelcomeBack && (
