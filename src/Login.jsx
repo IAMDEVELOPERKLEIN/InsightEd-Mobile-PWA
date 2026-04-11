@@ -218,6 +218,8 @@ const Login = () => {
                 navigate(destPath);
             } else {
                 // If not compatible, we stay on login page to allow switching accounts/re-logging
+                console.warn(`[Login] Role Mismatch: User role '${authUser.role}' is not compatible with portal '${pathId}'`);
+                alert(`Your account role (${authUser.role}) is not authorized for this portal (${pathId?.replace('path_', '').toUpperCase()}). Please use the correct portal or contact support.`);
                 setLoading(false);
             }
         } else if (!authLoading) {
@@ -291,8 +293,10 @@ const Login = () => {
             const endpoint = loginMode === 'passcode' ? '/api/auth/pin-login' : '/api/auth/migrate-login';
             
             // Robust identifier logic: If it's 6+ digits or toggled as SH, use school_id field
+            // FIX: If the identifier contains an '@', it's definitely an email, so we must NOT use the school_id field.
+            const isEmail = identifier.includes('@');
             const isNumericId = /^\d{6,}$/.test(identifier);
-            const useSchoolIdField = isSchoolHead || isNumericId;
+            const useSchoolIdField = (isSchoolHead || isNumericId) && !isEmail;
 
             const body = loginMode === 'passcode' 
                 ? { [useSchoolIdField ? 'school_id' : 'email']: identifier, pin: secret }
