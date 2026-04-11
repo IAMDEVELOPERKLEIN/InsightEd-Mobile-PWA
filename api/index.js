@@ -8359,7 +8359,7 @@ app.get('/api/locations/schools', async (req, res) => {
               "Legislative_District" as legislative_district, "Curricular_Offering" as curricular_offering, 
               "Latitude" as latitude, "Longitude" as longitude 
        FROM "schools_IERN" 
-       WHERE "status" = 'Active' 
+       WHERE UPPER("status") = 'ACTIVE' 
        AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM("Region")), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $1
        AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM("Division")), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $2
        AND REGEXP_REPLACE(REGEXP_REPLACE(UPPER(TRIM("District")), '(\\?|' || CHR(65533) || ')+', 'Ñ', 'g'), '\\s+', ' ', 'g') = $3
@@ -14068,7 +14068,7 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
       FROM "schools_IERN" s
       LEFT JOIN ph_schools sp ON s."SchoolID" = sp.school_id
       LEFT JOIN school_summary ss ON s."SchoolID" = ss.school_id
-      WHERE UPPER(TRIM(s."Region")) ~* ('^' || $1 || '($|[^a-zA-Z0-9])') AND s.status = 'Active'
+      WHERE UPPER(TRIM(s."Region")) ~* ('^' || $1 || '($|[^a-zA-Z0-9])') AND UPPER(s.status) = 'ACTIVE'
       GROUP BY UPPER(TRIM(s."Division"))
       ORDER BY UPPER(TRIM(s."Division"))
     `;
@@ -14641,7 +14641,7 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
       LEFT JOIN ph_schools sp ON s."SchoolID" = sp.school_id
       LEFT JOIN school_summary ss ON s."SchoolID" = ss.school_id
       WHERE UPPER(TRIM(s."Region")) ~* ('^' || $1 || '($|[^a-zA-Z0-9])') AND
-            UPPER(TRIM(s."Division")) = UPPER(TRIM($2)) AND s.status = 'Active'
+            UPPER(TRIM(s."Division")) = UPPER(TRIM($2)) AND UPPER(s.status) = 'ACTIVE'
       GROUP BY UPPER(TRIM(${groupCol}))
       ORDER BY UPPER(TRIM(${groupCol})) ASC
     `;
@@ -14675,7 +14675,7 @@ app.get('/api/monitoring/schools', async (req, res) => {
     const offset = (pageNum - 1) * limitNum;
 
     // Base WHERE using schools table (source of truth)
-    let whereClauses = ["s.status = 'Active'"];
+    let whereClauses = ["UPPER(s.status) = 'ACTIVE'"];
     let params = [];
     // removed: whereClauses.push(`s.iern IS NOT NULL`);
     if (region) {
@@ -14709,6 +14709,7 @@ app.get('/api/monitoring/schools', async (req, res) => {
       COALESCE(psc.total_completion, sp.unit_completion, 0) as completion_percentage,
       s."School_Name" as school_name,
       s."SchoolID" as school_id,
+      s.status as status,
       UPPER(TRIM(s."Region")) as region,
       UPPER(TRIM(s."Division")) as division,
       UPPER(TRIM(s."District")) as district,

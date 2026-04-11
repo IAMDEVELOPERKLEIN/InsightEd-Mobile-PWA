@@ -55,6 +55,7 @@ const expandVariants = {
 
 // ══════════════════════════════════════════════════════════════════════════════
 const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
+    const { user } = useAuth();
     const navigate = useNavigate();
 
     // ── Core state ──────────────────────────────────────────────────────────

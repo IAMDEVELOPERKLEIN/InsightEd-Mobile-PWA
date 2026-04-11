@@ -5,6 +5,7 @@ import { saveUnitDraft, getUnitDraft, clearUnitDraft, addModularToOutbox, delete
 import { useAuth } from "../../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import UnitRemarkAlert from "./UnitRemarkAlert";
+import DocumentUpload from "./DocumentUpload";
 import SuccessModal from "../SuccessModal";
 import LocationPickerMap from "../LocationPickerMap";
 import useReadOnly from "../../hooks/useReadOnly";

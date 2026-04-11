@@ -66,6 +66,7 @@ const WATER_SOURCES = [
 ];
 
 const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
+    const { user } = useAuth();
     const DEBUG_MODE = false; // Set to true for data integrity diagnostics
     const navigate = useNavigate();
 

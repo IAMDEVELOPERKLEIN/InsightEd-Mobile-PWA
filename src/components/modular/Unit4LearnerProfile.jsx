@@ -67,6 +67,7 @@ const slideVariants = {
 
 // ══════════════════════════════════════════════════════════════════════════
 const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
+    const { user } = useAuth();
     const navigate = useNavigate();
 
     // ── Core State ────────────────────────────────────────────────────────

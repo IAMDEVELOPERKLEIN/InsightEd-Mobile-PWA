@@ -132,6 +132,7 @@ const DEFAULT_BUILDING_TYPES = [
 ];
 
 export default function Unit7PhysicalFacilities({ targetSchoolId, isReadOnly: propReadOnly }) {
+    const { user } = useAuth();
     const navigate = useNavigate();
 
     // ── Global State ─────────────────────────────────────────────────────────
