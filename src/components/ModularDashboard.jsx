@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
-import { FiHome, FiUsers, FiGrid, FiBookOpen, FiArrowLeft, FiClock, FiShield, FiStar, FiAward, FiCheck, FiMapPin } from "react-icons/fi";
+import { FiHome, FiUsers, FiGrid, FiBookOpen, FiArrowLeft, FiClock, FiShield, FiStar, FiAward, FiCheck, FiMapPin, FiInfo, FiMail, FiX } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { getUnitDraft } from "../db";
 
@@ -88,6 +88,7 @@ const ModularDashboard = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [unitDrafts, setUnitDrafts] = useState({});
     const [unitTimestamps, setUnitTimestamps] = useState({});
+    const [showDevInfo, setShowDevInfo] = useState(false);
 
     useEffect(() => {
         const loadProgress = async () => {
@@ -251,9 +252,95 @@ const ModularDashboard = () => {
                         </p>
                     </div>
 
-                    <div className="w-10 h-10" />
+                    <button
+                        onClick={() => setShowDevInfo(true)}
+                        className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-50 text-[#004A99] hover:bg-blue-100 transition-colors shadow-sm"
+                        aria-label="Developer Info"
+                    >
+                        <FiInfo className="w-4 h-4" />
+                    </button>
                 </div>
             </header>
+
+            <AnimatePresence>
+                {showDevInfo && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm"
+                        onClick={() => setShowDevInfo(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 20, opacity: 0 }}
+                            animate={{ scale: 1, y: 0, opacity: 1 }}
+                            exit={{ scale: 0.9, y: 20, opacity: 0 }}
+                            className="w-full max-w-sm bg-white rounded-[2.5rem] shadow-2xl overflow-hidden relative"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="absolute top-4 right-4">
+                                <button 
+                                    onClick={() => setShowDevInfo(false)}
+                                    className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+                                >
+                                    <FiX className="w-4 h-4" />
+                                </button>
+                            </div>
+
+                            <div className="p-8">
+                                <div className="flex flex-col items-center mb-8">
+                                    <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mb-4 shadow-inner">
+                                        <FiUsers className="w-8 h-8 text-[#004A99]" />
+                                    </div>
+                                    <h2 className="text-xl font-black text-slate-800 tracking-tight">Meet the Team</h2>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Developers</p>
+                                </div>
+
+                                <div className="space-y-4 mb-8">
+                                    {[
+                                        { name: "Mr. Sebastian Cheng", role: "Project Lead" },
+                                        { name: "Ms. Clea Monique Sacriz", role: "Software Developer" },
+                                        { name: "Mr. Klein Catapang", role: "Software Developer" }
+                                    ].map((dev, i) => (
+                                        <motion.div 
+                                            key={i}
+                                            initial={{ x: -10, opacity: 0 }}
+                                            animate={{ x: 0, opacity: 1 }}
+                                            transition={{ delay: 0.1 + i * 0.1 }}
+                                            className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100"
+                                        >
+                                            <div className="w-10 h-10 rounded-full bg-[#004A99] text-white flex items-center justify-center font-black text-xs shadow-md">
+                                                {dev.name.split(' ').pop().charAt(0)}
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-black text-slate-800">{dev.name}</p>
+                                                <p className="text-[10px] font-bold text-[#004A99] uppercase tracking-wider">{dev.role}</p>
+                                            </div>
+                                        </motion.div>
+                                    ))}
+                                </div>
+
+                                <div className="border-t border-slate-100 pt-6">
+                                    <a 
+                                        href="mailto:support.stride@deped.gov.ph"
+                                        className="flex flex-col items-center gap-2 group"
+                                    >
+                                        <div className="flex items-center gap-2 bg-slate-50 hover:bg-blue-50 transition-colors px-4 py-3 rounded-2xl border border-slate-100 w-full justify-center group-hover:border-blue-200">
+                                            <FiMail className="w-4 h-4 text-blue-500" />
+                                            <span className="text-xs font-black text-slate-700 tracking-tight">support.stride@deped.gov.ph</span>
+                                        </div>
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Contact Support</p>
+                                    </a>
+                                </div>
+                            </div>
+
+                            <div className="bg-[#004A99] py-3 text-center">
+                                <p className="text-[10px] font-bold text-white/60 uppercase tracking-widest">Powered by STRIDE • 2024</p>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <div className="flex flex-col mt-10 w-full max-w-md relative px-4">
                 <div className="absolute top-8 bottom-12 left-8 w-[2px] border-l-2 border-dashed border-slate-200 z-0" />
